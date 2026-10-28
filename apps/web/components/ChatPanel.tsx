@@ -12,6 +12,11 @@ interface ChatPanelProps {
   slug?: string;
   /** Swaps the active microphone. Absent for viewers who cannot publish. */
   onSwitchDevice?: (kind: 'audio' | 'video', deviceId: string) => void;
+  onToggleMic?: () => void;
+  onToggleCam?: () => void;
+  onShareScreen?: () => void;
+  onLeave?: () => void;
+  canPublish?: boolean;
 }
 
 function timeAgo(ts: number) {
@@ -24,7 +29,17 @@ function timeAgo(ts: number) {
 /** Which secondary sheet the action grid has opened, if any. */
 type Sheet = 'leaderboard' | 'notes' | 'devices' | 'support' | null;
 
-export function ChatPanel({ socket, disabled, slug, onSwitchDevice }: ChatPanelProps) {
+export function ChatPanel({
+  socket,
+  disabled,
+  slug,
+  onSwitchDevice,
+  onToggleMic,
+  onToggleCam,
+  onShareScreen,
+  onLeave,
+  canPublish,
+}: ChatPanelProps) {
   const messages = useRoomStore((s) => s.messages);
   const selfUserId = useRoomStore((s) => s.userId);
   const role = useRoomStore((s) => s.role);
@@ -39,6 +54,11 @@ export function ChatPanel({ socket, disabled, slug, onSwitchDevice }: ChatPanelP
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const isStaffRole = role === 'HOST' || role === 'ADMIN' || role === 'MODERATOR';
+  const micOn = useRoomStore((s) => s.micOn);
+  const camOn = useRoomStore((s) => s.camOn);
+  const screenSharing = useRoomStore((s) => s.screenSharing);
+  const isApprovedSpeaker = useRoomStore((s) => s.isApprovedSpeaker);
+  const canUseMedia = isStaffRole || isApprovedSpeaker || Boolean(canPublish);
 
   const handRaised = useMemo(
     () => Boolean(selfUserId && hands.some((h) => h.userId === selfUserId)),
@@ -94,7 +114,7 @@ export function ChatPanel({ socket, disabled, slug, onSwitchDevice }: ChatPanelP
 
   return (
     <div className="relative flex h-full flex-col">
-      <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
+      <div className="hidden lg:flex items-center justify-between border-b border-white/10 px-4 py-3 shrink-0">
         <h3 className="text-sm font-semibold text-white">Live chat</h3>
         <span className="chip py-0.5 text-[10px]">{messages.length}</span>
       </div>
@@ -166,10 +186,14 @@ export function ChatPanel({ socket, disabled, slug, onSwitchDevice }: ChatPanelP
                 {msg.name.slice(0, 2).toUpperCase()}
               </div>
 
-              <div className={`min-w-0 max-w-[80%] ${mine ? 'items-end text-right' : ''}`}>
-                <div className={`flex items-center gap-1.5 ${mine ? 'justify-end' : ''}`}>
+              <div className={`min-w-0 max-w-[85%] ${mine ? 'items-end text-right' : ''}`}>
+                <div className={`flex flex-wrap items-center gap-1 sm:gap-1.5 ${mine ? 'justify-end' : ''}`}>
                   <span className="truncate text-[11px] font-semibold text-slate-300">
                     {msg.name}
+                  </span>
+                  <span className="text-[10px] text-slate-500">to Everyone</span>
+                  <span className="text-[10px] text-slate-500">
+                    ({new Date(msg.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})
                   </span>
                   {isStaff && (
                     <span className="rounded bg-brand-500/70 px-1 py-px text-[8px] font-bold uppercase text-white">
@@ -181,7 +205,6 @@ export function ChatPanel({ socket, disabled, slug, onSwitchDevice }: ChatPanelP
                       Enrolled
                     </span>
                   )}
-                  <span className="text-[10px] text-slate-600">{timeAgo(msg.ts)}</span>
                   {canModerate && (
                     <button
                       onClick={() => remove(msg.id)}
@@ -232,6 +255,30 @@ export function ChatPanel({ socket, disabled, slug, onSwitchDevice }: ChatPanelP
           </div>
 
           <div className="grid grid-cols-3 gap-2">
+            {canUseMedia && onToggleMic && (
+              <ActionTile
+                label={micOn ? 'Mute' : 'Unmute'}
+                icon={micOn ? '🎙️' : '🔇'}
+                active={micOn}
+                onClick={onToggleMic}
+              />
+            )}
+            {canUseMedia && onToggleCam && (
+              <ActionTile
+                label={camOn ? 'Stop Video' : 'Start Video'}
+                icon={camOn ? '📹' : '🚫'}
+                active={camOn}
+                onClick={onToggleCam}
+              />
+            )}
+            {canUseMedia && onShareScreen && (
+              <ActionTile
+                label={screenSharing ? 'Stop Share' : 'Share Screen'}
+                icon="🖥️"
+                active={screenSharing}
+                onClick={onShareScreen}
+              />
+            )}
             <ActionTile
               label="Leader Board"
               icon="🏆"
@@ -253,6 +300,14 @@ export function ChatPanel({ socket, disabled, slug, onSwitchDevice }: ChatPanelP
             />
             <ActionTile label="Audio Device" icon="🔊" onClick={() => setSheet('devices')} />
             <ActionTile label="Support" icon="🎧" onClick={() => setSheet('support')} />
+            {onLeave && (
+              <ActionTile
+                label="Leave Room"
+                icon="🚪"
+                danger
+                onClick={onLeave}
+              />
+            )}
           </div>
         </div>
       )}
@@ -269,10 +324,19 @@ export function ChatPanel({ socket, disabled, slug, onSwitchDevice }: ChatPanelP
 
       <form onSubmit={send} className="border-t border-white/10 p-3">
         {error && <p className="mb-2 break-all text-[11px] text-red-400">{error}</p>}
+        <div className="mb-2 flex items-center gap-1.5 text-[11px] text-slate-400">
+          <span>Send message to:</span>
+          <span className="inline-flex items-center gap-1 font-semibold text-slate-200">
+            Everyone
+            <svg viewBox="0 0 24 24" className="h-3 w-3 text-slate-400" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="m6 9 6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </span>
+        </div>
         <div className="flex items-center gap-2">
           <input
             className="input py-2 text-[13px]"
-            placeholder={disabled ? 'Chat is disabled' : 'Send a message…'}
+            placeholder={disabled ? 'Chat is disabled' : 'Enter a message…'}
             value={text}
             onChange={(e) => setText(e.target.value)}
             disabled={disabled || sending}
@@ -316,19 +380,24 @@ function ActionTile({
   icon,
   onClick,
   active,
+  danger,
 }: {
   label: string;
-  icon: string;
+  icon: string | React.ReactNode;
   onClick: () => void;
   active?: boolean;
+  danger?: boolean;
 }) {
   return (
     <button
+      type="button"
       onClick={onClick}
       className={`flex flex-col items-center justify-center gap-1.5 rounded-xl border px-1 py-3 text-center transition ${
-        active
-          ? 'border-accent-500/50 bg-accent-500/15 text-accent-300'
-          : 'border-white/10 bg-white/[0.04] text-slate-300 hover:border-white/25 hover:bg-white/[0.08] hover:text-white'
+        danger
+          ? 'border-red-500/30 bg-red-500/10 text-red-400 hover:border-red-500/50 hover:bg-red-500/20'
+          : active
+            ? 'border-accent-500/50 bg-accent-500/15 text-accent-300'
+            : 'border-white/10 bg-white/[0.04] text-slate-300 hover:border-white/25 hover:bg-white/[0.08] hover:text-white'
       }`}
     >
       <span className="text-lg leading-none">{icon}</span>
@@ -356,6 +425,10 @@ function ChatSheet({
   quizResults: ReturnType<typeof useRoomStore.getState>['quizResults'];
   slug?: string;
   onSwitchDevice?: (kind: 'audio' | 'video', deviceId: string) => void;
+  onToggleMic?: () => void;
+  onToggleCam?: () => void;
+  onShareScreen?: () => void;
+  canPublish?: boolean;
 }) {
   const { microphones, refresh } = useMediaDevices();
   const [note, setNote] = useState('');

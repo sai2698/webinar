@@ -24,6 +24,7 @@ import { WatermarkOverlay } from '@/components/WatermarkOverlay';
 import { Logo } from '@/components/Logo';
 import { endpoints } from '@/lib/api';
 import { roomToken } from '@/lib/session';
+import { useFullscreen } from '@/lib/useRoomUi';
 
 type Tab = 'chat' | 'people' | 'qa' | 'polls';
 
@@ -34,17 +35,11 @@ export default function RoomPage() {
 
   const [token, setToken] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
-  // Set when the visitor arrived on a shared link and we still need a name and
-  // mobile before the socket may connect.
   const [gateToken, setGateToken] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>('chat');
-  // On a phone the sidebar is a full-screen overlay, so opening it by default
-  // would hide the video entirely — start closed there and open on desktop.
-  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
-  // The stage element is what goes fullscreen — not the whole page, so the
-  // chat sidebar and control bar stay out of the presentation.
   const stageRef = useRef<HTMLDivElement | null>(null);
+  const { isFullscreen, toggle: toggleFullscreen } = useFullscreen(stageRef);
 
   const store = useRoomStore;
   const connected = useRoomStore((s) => s.connected);
@@ -74,15 +69,6 @@ export default function RoomPage() {
 
   const isStaff = role === 'HOST' || role === 'ADMIN' || role === 'MODERATOR';
 
-  /**
-   * Which sidebar tabs this viewer may open.
-   *
-   * Staff always get all four — they need the roster, the question queue and
-   * the poll list to run the room. The audience only gets what the host turned
-   * on when creating the webinar, and all three default to off: a broadcast
-   * should not hand every viewer the attendee list, and an empty Q&A queue or
-   * poll list reads as a broken feature rather than an unused one.
-   */
   const showPeopleTab = useRoomStore((s) => s.showPeopleTab);
   const showQaTab = useRoomStore((s) => s.showQaTab);
   const showPollsTab = useRoomStore((s) => s.showPollsTab);
@@ -90,14 +76,6 @@ export default function RoomPage() {
   const canSeeQa = isStaff || showQaTab;
   const canSeePolls = isStaff || showPollsTab;
 
-  /**
-   * The tab actually rendered.
-   *
-   * The snapshot arrives after the first paint, so `tab` can point at a tab
-   * that turns out to be hidden — a participant who reloads while on Q&A would
-   * otherwise land on a blank panel with no way back. Falling back to chat
-   * keeps the sidebar always showing something.
-   */
   const activeTab: Tab =
     (tab === 'people' && !canSeePeople) ||
     (tab === 'qa' && !canSeeQa) ||
@@ -105,46 +83,15 @@ export default function RoomPage() {
       ? 'chat'
       : tab;
 
-  /**
-   * Whether this viewer may publish media at all.
-   *
-   * Subscribed rather than read from `getState()` so the chat's device picker
-   * and the control bar agree the moment a host approves a speaker — a
-   * participant who has not been approved has no microphone to switch, and
-   * offering one would be a dead control.
-   */
   const isApprovedSpeaker = useRoomStore((s) => s.isApprovedSpeaker);
   const canPublish = role !== 'PARTICIPANT' || isApprovedSpeaker;
 
-  /**
-   * Participants may join before the host opens the session. Until then the
-   * stage shows a waiting screen instead of an empty video grid — an empty
-   * grid with a spinner reads as a broken page, not as "not started yet".
-   * Staff always see the real room so they can get ready.
-   */
   const waiting = !isStaff && startedAt === null;
-
-  /**
-   * The badge describes the session, not the viewer.
-   *
-   * Staff see the real room while it is still closed, so keying the badge off
-   * `waiting` would show them a red pulsing LIVE over a session nobody has
-   * opened yet — and they are the one person who can tell it is not true.
-   */
   const notStarted = startedAt === null;
 
   useEffect(() => {
-    // A join link from a confirmation or reminder email carries the token in
-    // the query string, because the recipient may be on a device that has
-    // never seen this site. Adopt it into localStorage so a refresh — or a
-    // later visit without the query string — still works, then strip it from
-    // the address bar so the token does not linger in history or get pasted
-    // into a chat by accident.
     const fromQuery = new URLSearchParams(window.location.search).get('token');
     if (fromQuery) {
-      // A shared link always goes through the gate: the recipient may be on a
-      // device that has never seen this site, and we want a name and mobile on
-      // file before they enter the room.
       window.history.replaceState(null, '', window.location.pathname);
       setGateToken(fromQuery);
       return;
@@ -190,17 +137,22 @@ export default function RoomPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, token]);
 
-  /**
-   * The scheduled start time, for the waiting-room countdown.
-   *
-   * It is not in `RoomSnapshot` — the snapshot describes the live session, and
-   * the schedule is a property of the webinar, not of the room. Fetching it
-   * here keeps the socket contract unchanged and costs one request that the
-   * participant's browser would make anyway.
-   *
-   * A failure is swallowed: a missing countdown is a cosmetic loss, and the
-   * waiting room still says the host will begin shortly.
-   */
+  useEffect(() => {
+    const origOverflow = document.body.style.overflow;
+    const origOverscroll = document.body.style.overscrollBehavior;
+    document.body.style.overflow = 'hidden';
+    document.body.style.overscrollBehavior = 'none';
+    document.documentElement.style.overflow = 'hidden';
+    document.documentElement.style.overscrollBehavior = 'none';
+
+    return () => {
+      document.body.style.overflow = origOverflow;
+      document.body.style.overscrollBehavior = origOverscroll;
+      document.documentElement.style.overflow = '';
+      document.documentElement.style.overscrollBehavior = '';
+    };
+  }, []);
+
   const [startsAt, setStartsAt] = useState<string | null>(null);
   useEffect(() => {
     if (!slug) return;
@@ -217,14 +169,6 @@ export default function RoomPage() {
       cancelled = true;
     };
   }, [slug]);
-
-  // The sidebar is a permanent column from `lg` up and an overlay below it.
-  // Match the initial state to the viewport so a desktop visitor still lands
-  // on chat, and a phone visitor lands on the video.
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    setSidebarOpen(window.matchMedia('(min-width: 1024px)').matches);
-  }, []);
 
   function leave() {
     store.getState().reset();
@@ -259,8 +203,6 @@ export default function RoomPage() {
   }
 
   if (error && !connected) {
-    // A pending registration is not a failure — it is a queue. Showing the
-    // generic error card here would read like a bug and invite a support call.
     if (/awaiting host approval|not approved/i.test(error)) {
       return <PendingApproval slug={slug} title={webinarTitle ?? undefined} />;
     }
@@ -306,21 +248,32 @@ export default function RoomPage() {
   }
 
   return (
-    <main className="flex h-screen flex-col overflow-hidden bg-ink-950">
+    <main className="fixed inset-0 flex h-[100dvh] max-h-[100dvh] w-full flex-col overflow-hidden overscroll-none bg-ink-950 select-none">
       {/* ── top bar ─────────────────────────────────────── */}
-      <header className="flex shrink-0 items-center justify-between gap-3 border-b border-white/10 bg-ink-900/60 px-4 py-2.5 backdrop-blur-xl">
-        <div className="flex min-w-0 items-center gap-3">
-          <Logo href="/" />
-          <div className="hidden h-5 w-px bg-white/10 sm:block" />
-          <div className="hidden min-w-0 sm:block">
-            <p className="truncate text-xs font-medium text-slate-300">{title || 'Live room'}</p>
+      <header className="flex shrink-0 items-center justify-between gap-2 border-b border-white/10 bg-ink-900/80 px-3 py-2 sm:px-4 sm:py-2.5 backdrop-blur-xl">
+        <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+          {/* Red leave button matching mobile sample image */}
+          <button
+            onClick={leave}
+            title="Leave room"
+            aria-label="Leave room"
+            className="grid h-8 w-8 place-items-center rounded-xl bg-red-500/20 text-red-400 hover:bg-red-500/30 active:scale-95 transition"
+          >
+            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.2">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+          <div className="hidden sm:block">
+            <Logo href="/" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-xs sm:text-sm font-semibold text-slate-200">
+              {webinarTitle || title || 'Live webinar'}
+            </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          {/* The badge has to tell the truth: a session nobody has opened is
-              not live, and a red pulsing LIVE chip would contradict the
-              waiting screen in front of a participant. */}
+        <div className="flex items-center gap-1.5 sm:gap-2">
           {notStarted ? (
             <span className="chip border-white/15 bg-white/5 py-1 text-[10px] text-slate-400">
               <span className="h-1.5 w-1.5 rounded-full bg-slate-500" />
@@ -344,9 +297,6 @@ export default function RoomPage() {
               REC
             </span>
           )}
-          {/* The host can hide the headcount from the audience. Staff still get
-              the number — they need it to run the room — so this is a per-role
-              hide, not a suppressed value. */}
           {(showLiveUsersCount || isStaff) && (
             <span className="chip py-1 text-[10px]">
               <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2">
@@ -357,35 +307,35 @@ export default function RoomPage() {
             </span>
           )}
           {isStaff && <HostPanel socket={socket} />}
-          <button
-            onClick={() => setSidebarOpen((v) => !v)}
-            className="btn-ghost px-2.5 py-1.5 text-xs lg:hidden"
-            aria-label="Toggle sidebar"
-          >
-            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M4 6h16M4 12h16M4 18h16" strokeLinecap="round" />
-            </svg>
-          </button>
         </div>
       </header>
 
       {/* ── body ────────────────────────────────────────── */}
-      {/* `relative` anchors the mobile sidebar overlay to the room body rather
-          than the viewport, so it never covers the header. */}
-      <div className="relative flex min-h-0 flex-1">
-        {/* stage */}
-        <div className="flex min-w-0 flex-1 flex-col">
-          {/* `relative` is what the offer card anchors to. It has to be the
-              stage rather than the page: a viewport-fixed card ignores the
-              sidebar and covers the control bar on a phone. */}
-          <div className="relative min-h-0 flex-1 p-3" ref={stageRef}>
-            {waiting ? <WaitingRoom title={webinarTitle ?? ''} startsAt={startsAt} /> : <VideoGrid />}
+      <div className="relative flex min-h-0 flex-1 flex-col lg:flex-row overflow-hidden">
+        {/* Stage column: on mobile it hugs the video (shrink-0), on desktop it takes flex-1 */}
+        <div className="flex w-full shrink-0 flex-col overflow-hidden lg:min-w-0 lg:flex-1 lg:h-full">
+          <div
+            className={`relative overflow-hidden ${
+              isFullscreen
+                ? 'fixed inset-0 z-50 h-screen w-screen bg-black p-0'
+                : 'w-full p-2 pb-0 sm:p-3 sm:pb-0 lg:pb-3 lg:h-auto lg:flex-1'
+            }`}
+            ref={stageRef}
+          >
+            {waiting ? (
+              <div className="aspect-video w-full max-h-[39vh] sm:max-h-[44vh]">
+                <WaitingRoom title={webinarTitle ?? ''} startsAt={startsAt} />
+              </div>
+            ) : (
+              <VideoGrid onToggleFullscreen={toggleFullscreen} />
+            )}
             <WatermarkOverlay />
             <EnrollmentBanner />
             <CtaOverlay />
           </div>
 
-          <div className="shrink-0 px-3 pb-3">
+          {/* Desktop Controls */}
+          <div className="hidden lg:block shrink-0 px-3 pb-3 pt-1">
             <ControlsBar
               socket={socket}
               onToggleMic={toggleMic}
@@ -408,99 +358,89 @@ export default function RoomPage() {
           </div>
         </div>
 
-        {/* sidebar */}
-        {/* Below `lg` this is a full-screen overlay over the stage; from `lg`
-            up it is a permanent column. The breakpoint matches the header
-            toggle (`lg:hidden`) and the initial-state effect. */}
-        <aside
-          className={`shrink-0 border-l border-white/10 bg-ink-900 backdrop-blur-xl transition-all duration-300 lg:bg-ink-900/50 ${
-            sidebarOpen ? 'w-full lg:w-[340px]' : 'w-0 overflow-hidden'
-          } ${sidebarOpen ? 'absolute inset-0 z-30 lg:static' : ''}`}
-        >
-          <div className="flex h-full flex-col">
-            <div className="flex shrink-0 items-stretch border-b border-white/10">
+
+        {/* Chat / Interaction column: Bottom on mobile, Right sidebar on desktop */}
+        <aside className="flex flex-1 lg:flex-none lg:w-[340px] shrink-0 flex-col border-t lg:border-t-0 lg:border-l border-white/10 bg-ink-950/70 lg:bg-ink-900/50 min-h-0 overflow-hidden">
+          {(canSeePeople || canSeeQa || canSeePolls) && (
+          <div className="flex shrink-0 items-stretch border-b border-white/10 bg-ink-900/60">
+            <button
+              onClick={() => setTab('chat')}
+              className={`flex-1 px-4 py-2 text-xs font-semibold transition ${
+                activeTab === 'chat'
+                  ? 'border-b-2 border-brand-400 text-white'
+                  : 'text-slate-500 hover:text-slate-300'
+              }`}
+            >
+              Chat
+            </button>
+            {canSeePeople && (
               <button
-                onClick={() => setTab('chat')}
-                className={`flex-1 px-4 py-2.5 text-xs font-semibold transition ${
-                  activeTab === 'chat'
+                onClick={() => setTab('people')}
+                className={`flex-1 px-4 py-2 text-xs font-semibold transition ${
+                  activeTab === 'people'
                     ? 'border-b-2 border-brand-400 text-white'
                     : 'text-slate-500 hover:text-slate-300'
                 }`}
               >
-                Chat
+                People
+                {hands.length > 0 && (
+                  <span className="ml-1.5 rounded-full bg-accent-500/25 px-1.5 py-px text-[9px] font-bold text-accent-400">
+                    {hands.length}
+                  </span>
+                )}
               </button>
-              {canSeePeople && (
-                <button
-                  onClick={() => setTab('people')}
-                  className={`flex-1 px-4 py-2.5 text-xs font-semibold transition ${
-                    activeTab === 'people'
-                      ? 'border-b-2 border-brand-400 text-white'
-                      : 'text-slate-500 hover:text-slate-300'
-                  }`}
-                >
-                  People
-                  {hands.length > 0 && (
-                    <span className="ml-1.5 rounded-full bg-accent-500/25 px-1.5 py-px text-[9px] font-bold text-accent-400">
-                      {hands.length}
-                    </span>
-                  )}
-                </button>
-              )}
-              {canSeeQa && (
-                <button
-                  onClick={() => setTab('qa')}
-                  className={`flex-1 px-3 py-2.5 text-xs font-semibold transition ${
-                    activeTab === 'qa'
-                      ? 'border-b-2 border-brand-400 text-white'
-                      : 'text-slate-500 hover:text-slate-300'
-                  }`}
-                >
-                  Q&amp;A
-                  {openQuestions > 0 && (
-                    <span className="ml-1.5 rounded-full bg-brand-500/25 px-1.5 py-px text-[9px] font-bold text-brand-300">
-                      {openQuestions}
-                    </span>
-                  )}
-                </button>
-              )}
-              {canSeePolls && (
-                <button
-                  onClick={() => setTab('polls')}
-                  className={`flex-1 px-3 py-2.5 text-xs font-semibold transition ${
-                    activeTab === 'polls'
-                      ? 'border-b-2 border-brand-400 text-white'
-                      : 'text-slate-500 hover:text-slate-300'
-                  }`}
-                >
-                  Polls
-                </button>
-              )}
+            )}
+            {canSeeQa && (
               <button
-                onClick={() => setSidebarOpen(false)}
-                className="shrink-0 px-3 text-slate-500 transition hover:text-white lg:hidden"
-                aria-label="Close sidebar"
+                onClick={() => setTab('qa')}
+                className={`flex-1 px-3 py-2 text-xs font-semibold transition ${
+                  activeTab === 'qa'
+                    ? 'border-b-2 border-brand-400 text-white'
+                    : 'text-slate-500 hover:text-slate-300'
+                }`}
               >
-                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" />
-                </svg>
+                Q&amp;A
+                {openQuestions > 0 && (
+                  <span className="ml-1.5 rounded-full bg-brand-500/25 px-1.5 py-px text-[9px] font-bold text-brand-300">
+                    {openQuestions}
+                  </span>
+                )}
               </button>
-            </div>
+            )}
+            {canSeePolls && (
+              <button
+                onClick={() => setTab('polls')}
+                className={`flex-1 px-3 py-2 text-xs font-semibold transition ${
+                  activeTab === 'polls'
+                    ? 'border-b-2 border-brand-400 text-white'
+                    : 'text-slate-500 hover:text-slate-300'
+                }`}
+              >
+                Polls
+              </button>
+            )}
+          </div>
+          )}
 
-            <div className="min-h-0 flex-1">
-              {activeTab === 'chat' ? (
-                <ChatPanel
-                  socket={socket}
-                  slug={slug}
-                  onSwitchDevice={canPublish ? switchDevice : undefined}
-                />
-              ) : activeTab === 'people' ? (
-                <ParticipantList socket={socket} />
-              ) : activeTab === 'qa' ? (
-                <QaPanel socket={socket} />
-              ) : (
-                <PollsPanel socket={socket} />
-              )}
-            </div>
+          <div className="min-h-0 flex-1 flex flex-col overflow-hidden">
+            {activeTab === 'chat' ? (
+              <ChatPanel
+                socket={socket}
+                slug={slug}
+                onSwitchDevice={canPublish ? switchDevice : undefined}
+                onToggleMic={toggleMic}
+                onToggleCam={toggleCam}
+                onShareScreen={toggleScreenShare}
+                onLeave={leave}
+                canPublish={canPublish}
+              />
+            ) : activeTab === 'people' ? (
+              <ParticipantList socket={socket} />
+            ) : activeTab === 'qa' ? (
+              <QaPanel socket={socket} />
+            ) : (
+              <PollsPanel socket={socket} />
+            )}
           </div>
         </aside>
       </div>
@@ -508,9 +448,6 @@ export default function RoomPage() {
       <QuizModal socket={socket} />
       <PollModal socket={socket} />
 
-      {/* A host asked this participant to turn something on. Accepting runs the
-          same toggle the control bar uses, so the result is identical to the
-          participant pressing the button themselves. */}
       <MediaRequestPrompt
         onAccept={(kind) => {
           if (kind === 'mic') void toggleMic(true);

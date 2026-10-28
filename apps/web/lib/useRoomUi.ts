@@ -2,22 +2,88 @@
 
 import { useCallback, useEffect, useState } from 'react';
 
+async function lockLandscape() {
+  try {
+    if (typeof screen !== 'undefined' && screen.orientation && 'lock' in screen.orientation) {
+      await (screen.orientation as any).lock('landscape').catch(() => {});
+    } else if (typeof screen !== 'undefined' && 'lockOrientation' in screen) {
+      (screen as any).lockOrientation('landscape');
+    }
+  } catch {
+    // Orientation lock may fail if unsupported or browser blocks it without user gesture
+  }
+}
+
+async function unlockOrPortrait() {
+  try {
+    if (typeof screen !== 'undefined' && screen.orientation) {
+      if ('unlock' in screen.orientation) {
+        screen.orientation.unlock();
+      }
+      if ('lock' in screen.orientation) {
+        await (screen.orientation as any).lock('portrait').catch(() => {});
+      }
+    } else if (typeof screen !== 'undefined' && 'unlockOrientation' in screen) {
+      (screen as any).unlockOrientation();
+    }
+  } catch {
+    // Ignore
+  }
+}
+
+/**
+ * Returns whether the room stage is currently in fullscreen mode.
+ */
+export function useIsFullscreen(): boolean {
+  const [isFs, setIsFs] = useState(false);
+  useEffect(() => {
+    function check() {
+      setIsFs(
+        Boolean(
+          document.fullscreenElement ||
+          (document as any).webkitFullscreenElement ||
+          (document as any).mozFullScreenElement
+        )
+      );
+    }
+    check();
+    document.addEventListener('fullscreenchange', check);
+    document.addEventListener('webkitfullscreenchange', check);
+    return () => {
+      document.removeEventListener('fullscreenchange', check);
+      document.removeEventListener('webkitfullscreenchange', check);
+    };
+  }, []);
+  return isFs;
+}
+
 /**
  * Fullscreen for the room stage.
  *
- * Uses the standard Fullscreen API with the `webkit` fallback that Safari
- * still needs. The element is passed in rather than looked up by id so the
- * caller controls exactly what goes fullscreen (the stage, not the chat).
+ * Uses the standard Fullscreen API with webkit fallback and handles
+ * locking to landscape mode on mobile, and restoring portrait mode on exit.
  */
 export function useFullscreen(target: React.RefObject<HTMLElement | null>) {
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   useEffect(() => {
-    function onChange() {
-      setIsFullscreen(Boolean(document.fullscreenElement));
+    async function onChange() {
+      const active = Boolean(
+        document.fullscreenElement ||
+        (document as any).webkitFullscreenElement ||
+        (document as any).mozFullScreenElement
+      );
+      setIsFullscreen(active);
+      if (!active) {
+        await unlockOrPortrait();
+      }
     }
     document.addEventListener('fullscreenchange', onChange);
-    return () => document.removeEventListener('fullscreenchange', onChange);
+    document.addEventListener('webkitfullscreenchange', onChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', onChange);
+      document.removeEventListener('webkitfullscreenchange', onChange);
+    };
   }, []);
 
   const toggle = useCallback(async () => {
@@ -25,14 +91,25 @@ export function useFullscreen(target: React.RefObject<HTMLElement | null>) {
     if (!el) return;
 
     try {
-      if (document.fullscreenElement) {
-        await document.exitFullscreen();
+      const isCurrentlyFs = Boolean(
+        document.fullscreenElement ||
+        (document as any).webkitFullscreenElement ||
+        (document as any).mozFullScreenElement
+      );
+
+      if (isCurrentlyFs) {
+        if (document.exitFullscreen) await document.exitFullscreen();
+        else if ((document as any).webkitExitFullscreen) await (document as any).webkitExitFullscreen();
+        else if ((document as any).mozCancelFullScreen) await (document as any).mozCancelFullScreen();
+        await unlockOrPortrait();
       } else {
-        await el.requestFullscreen();
+        if (el.requestFullscreen) await el.requestFullscreen();
+        else if ((el as any).webkitRequestFullscreen) await (el as any).webkitRequestFullscreen();
+        else if ((el as any).mozRequestFullScreen) await (el as any).mozRequestFullScreen();
+        await lockLandscape();
       }
     } catch {
-      // Some browsers refuse fullscreen without a direct user gesture, and
-      // iOS Safari does not support it on arbitrary elements at all.
+      // Some browsers refuse fullscreen without a direct user gesture
     }
   }, [target]);
 
@@ -105,8 +182,6 @@ export function useInView(
     const el = target.current;
     if (!el) return;
 
-    // Without IntersectionObserver (very old browsers, some test harnesses)
-    // fall back to rendering everything rather than rendering nothing.
     if (typeof IntersectionObserver === 'undefined') {
       setInView(true);
       return;
@@ -126,19 +201,6 @@ export function useInView(
 
     observer.observe(el);
 
-    /**
-     * Fail open.
-     *
-     * The observer's first callback is asynchronous and, in a page that is
-     * never actually painted (a background tab, a headless harness, a
-     * prerender), it may never arrive at all. A tile that waits forever for a
-     * verdict renders a permanent placeholder — the viewer sees an empty box
-     * and concludes the call is broken. Showing a video that turns out to be
-     * off-screen costs a little bandwidth; showing nothing costs the meeting.
-     *
-     * Only applies if the observer has stayed silent: a real "off screen"
-     * verdict must still be honoured, or the whole point of the hook is lost.
-     */
     const failOpen = setTimeout(() => {
       if (!reported) setInView(true);
     }, 1500);

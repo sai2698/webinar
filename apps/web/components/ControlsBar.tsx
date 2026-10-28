@@ -20,6 +20,8 @@ interface ControlsBarProps {
   onSwitchDevice?: (kind: 'audio' | 'video', deviceId: string) => void;
   /** Element that should go fullscreen — the stage, not the whole page. */
   stageRef?: React.RefObject<HTMLElement | null>;
+  compact?: boolean;
+  className?: string;
   /* media effects */
   onSetBackground?: (mode: BackgroundMode, image?: BackgroundImage | null) => void;
   onUploadBackground?: (file: File) => Promise<string | null>;
@@ -37,6 +39,7 @@ function IconButton({
   label,
   onClick,
   disabled,
+  compact,
   children,
 }: {
   active?: boolean;
@@ -44,6 +47,7 @@ function IconButton({
   label: string;
   onClick: () => void;
   disabled?: boolean;
+  compact?: boolean;
   children: React.ReactNode;
 }) {
   return (
@@ -53,7 +57,7 @@ function IconButton({
       disabled={disabled}
       title={label}
       aria-label={label}
-      className={`group relative grid h-11 w-11 place-items-center rounded-full border transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-40 ${
+      className={`group relative grid ${compact ? 'h-8 w-8 sm:h-9 sm:w-9' : 'h-11 w-11'} place-items-center rounded-full border transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-40 ${
         danger
           ? 'border-red-500/40 bg-red-500/90 text-white hover:bg-red-500'
           : active
@@ -79,6 +83,8 @@ export function ControlsBar({
   handRaised,
   onSwitchDevice,
   stageRef,
+  compact,
+  className,
   onSetBackground,
   onUploadBackground,
   onSetNoiseSuppression,
@@ -151,8 +157,12 @@ export function ControlsBar({
   }
 
   return (
-    <div className="relative flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-ink-850/80 px-3 py-2.5 backdrop-blur-xl">
-      <IconButton
+    <div
+      className={`relative flex items-center justify-center gap-1.5 sm:gap-2 rounded-2xl border border-white/10 bg-ink-850/80 ${
+        compact ? 'px-2 py-1.5' : 'px-3 py-2.5'
+      } backdrop-blur-xl ${className ?? ''}`}
+    >
+      <IconButton compact={compact}
         label={micOn ? 'Mute' : 'Unmute'}
         active={micOn}
         onClick={onToggleMic}
@@ -172,7 +182,7 @@ export function ControlsBar({
         )}
       </IconButton>
 
-      <IconButton
+      <IconButton compact={compact}
         label={camOn ? 'Stop video' : 'Start video'}
         active={camOn}
         onClick={onToggleCam}
@@ -193,7 +203,7 @@ export function ControlsBar({
       </IconButton>
 
       {canUseMedia && (
-        <IconButton
+        <IconButton compact={compact}
           label={screenSharing ? 'Stop sharing' : 'Share screen'}
           active={screenSharing}
           onClick={onShareScreen}
@@ -206,7 +216,7 @@ export function ControlsBar({
       )}
 
       {!isStaff && (
-        <IconButton
+        <IconButton compact={compact}
           label={handRaised ? 'Lower hand' : 'Raise hand'}
           active={handRaised}
           onClick={toggleHand}
@@ -229,7 +239,7 @@ export function ControlsBar({
 
       <div className="mx-1 h-6 w-px bg-white/10" />
 
-      <IconButton
+      <IconButton compact={compact}
         label={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
         active={isFullscreen}
         onClick={() => void toggleFullscreen()}
@@ -247,7 +257,7 @@ export function ControlsBar({
 
       {canUseMedia && onSwitchDevice && (
         <div className="relative" ref={settingsRef}>
-          <IconButton
+          <IconButton compact={compact}
             label="Devices"
             active={settingsOpen}
             onClick={openSettings}
@@ -307,7 +317,7 @@ export function ControlsBar({
       )}
 
       {canConfigureMedia && (
-        <IconButton
+        <IconButton compact={compact}
           label="Media settings"
           active={mediaOpen || backgroundMode !== 'off'}
           onClick={() => setMediaOpen((v) => !v)}
@@ -318,7 +328,7 @@ export function ControlsBar({
         </IconButton>
       )}
 
-      <IconButton label="Leave" danger onClick={onLeave}>
+      <IconButton compact={compact} label="Leave" danger onClick={onLeave}>
         <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.9">
           <path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3" strokeLinecap="round" />
           <path d="M10 8l-4 4 4 4M6 12h9" strokeLinecap="round" strokeLinejoin="round" />
