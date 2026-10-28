@@ -4,7 +4,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
 import { Server as SocketServer } from 'socket.io';
-import { env, allowedOrigins } from './config/env.js';
+import { env, allowedOrigins, isAllowedOrigin } from './config/env.js';
 import { iceServers } from './config/mediasoup.js';
 import { logger } from './utils/logger.js';
 import { errorHandler, notFoundHandler } from './middleware/error.js';
@@ -58,7 +58,10 @@ app.set('trust proxy', 1);
 app.use(helmet({ crossOriginResourcePolicy: false }));
 app.use(
   cors({
-    origin: allowedOrigins,
+    origin: (origin, callback) =>
+      isAllowedOrigin(origin)
+        ? callback(null, true)
+        : callback(new Error(`Origin ${origin} not allowed by CORS`)),
     credentials: true,
   })
 );
@@ -134,7 +137,13 @@ app.use(errorHandler);
 const server = http.createServer(app);
 
 const io = new SocketServer(server, {
-  cors: { origin: allowedOrigins, credentials: true },
+  cors: {
+    origin: (origin, callback) =>
+      isAllowedOrigin(origin)
+        ? callback(null, true)
+        : callback(new Error(`Origin ${origin} not allowed by CORS`)),
+    credentials: true,
+  },
   maxHttpBufferSize: 1e7,
   pingTimeout: 30_000,
   pingInterval: 15_000,

@@ -1,5 +1,25 @@
+import os from 'node:os';
 import type { RouterRtpCodecCapability, WorkerSettings } from 'mediasoup/types';
 import { env } from './env.js';
+
+function getAnnouncedIp(): string {
+  if (env.MEDIASOUP_ANNOUNCED_IP && env.MEDIASOUP_ANNOUNCED_IP !== '127.0.0.1') {
+    return env.MEDIASOUP_ANNOUNCED_IP;
+  }
+  if (env.NODE_ENV !== 'production') {
+    const interfaces = os.networkInterfaces();
+    for (const name of Object.keys(interfaces)) {
+      for (const iface of interfaces[name] || []) {
+        if (!iface.internal && iface.family === 'IPv4') {
+          return iface.address;
+        }
+      }
+    }
+  }
+  return env.MEDIASOUP_ANNOUNCED_IP || '127.0.0.1';
+}
+
+export const announcedIp = getAnnouncedIp();
 
 export const workerSettings: WorkerSettings = {
   rtcMinPort: env.RTC_MIN_PORT,
@@ -39,12 +59,12 @@ export const webRtcTransportOptions = {
     {
       protocol: 'udp' as const,
       ip: '0.0.0.0',
-      announcedAddress: env.MEDIASOUP_ANNOUNCED_IP,
+      announcedAddress: announcedIp,
     },
     {
       protocol: 'tcp' as const,
       ip: '0.0.0.0',
-      announcedAddress: env.MEDIASOUP_ANNOUNCED_IP,
+      announcedAddress: announcedIp,
     },
   ],
   enableUdp: true,

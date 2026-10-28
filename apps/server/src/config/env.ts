@@ -60,3 +60,27 @@ export const isProd = env.NODE_ENV === 'production';
 export const razorpayEnabled = Boolean(env.RZP_KEY_ID && env.RZP_KEY_SECRET);
 
 export const allowedOrigins = env.WEB_ORIGIN.split(',').map((s) => s.trim());
+
+export function isAllowedOrigin(origin: string | undefined): boolean {
+  if (!origin) return true;
+  if (allowedOrigins.includes(origin)) return true;
+  if (env.NODE_ENV !== 'production') {
+    try {
+      const url = new URL(origin);
+      const host = url.hostname;
+      if (
+        host === 'localhost' ||
+        host === '127.0.0.1' ||
+        /^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host) ||
+        /^192\.168\.\d{1,3}\.\d{1,3}$/.test(host) ||
+        /^172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3}$/.test(host)
+      ) {
+        return true;
+      }
+    } catch {
+      return false;
+    }
+  }
+  return false;
+}
+

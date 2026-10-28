@@ -1,8 +1,37 @@
 import type { RecordingDetail, RecordingSummary } from '@webinar/shared';
 import { getToken, notifyAdminUnauthorized, type SessionScope } from './session';
 
-export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
-export const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL ?? API_URL;
+function getBaseUrl(fallbackPort = 4000): string {
+  if (typeof window !== 'undefined') {
+    const configured = process.env.NEXT_PUBLIC_API_URL;
+    if (configured && !configured.includes('localhost') && !configured.includes('127.0.0.1')) {
+      return configured;
+    }
+    const { hostname, protocol } = window.location;
+    if (hostname && hostname !== 'localhost' && hostname !== '127.0.0.1') {
+      return `${protocol}//${hostname}:${fallbackPort}`;
+    }
+    return configured || `http://localhost:${fallbackPort}`;
+  }
+  return process.env.NEXT_PUBLIC_API_URL ?? `http://localhost:${fallbackPort}`;
+}
+
+export const getApiUrl = (): string => getBaseUrl(4000);
+
+export const getSocketUrl = (): string => {
+  if (typeof window !== 'undefined') {
+    const configured = process.env.NEXT_PUBLIC_SOCKET_URL;
+    if (configured && !configured.includes('localhost') && !configured.includes('127.0.0.1')) {
+      return configured;
+    }
+    return getBaseUrl(4000);
+  }
+  return process.env.NEXT_PUBLIC_SOCKET_URL ?? process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
+};
+
+export const API_URL = getApiUrl();
+export const SOCKET_URL = getSocketUrl();
+
 
 /**
  * The analytics ids a webinar can carry.
@@ -72,7 +101,7 @@ async function request<T>(
   init: RequestInit = {},
   scope: SessionScope = scopeForPath(path)
 ): Promise<T> {
-  const res = await fetch(`${API_URL}${path}`, {
+  const res = await fetch(`${getApiUrl()}${path}`, {
     ...init,
     headers: {
       'Content-Type': 'application/json',
@@ -554,7 +583,7 @@ export const endpoints = {
     api.post<{ ok: boolean }>(`/api/admin/${webinarId}/automation/reset`, {}),
   /** The export is a file download, so it is fetched directly rather than via `api`. */
   automationExportUrl: (webinarId: string) =>
-    `${API_URL}/api/admin/${webinarId}/automation/export`,
+    `${getApiUrl()}/api/admin/${webinarId}/automation/export`,
 
   /* recurring series */
   series: (webinarId: string) =>
@@ -598,5 +627,5 @@ export const endpoints = {
     ),
   /** CSV export is a file download, so it is fetched directly. */
   registrationsExportUrl: (webinarId: string) =>
-    `${API_URL}/api/admin/${webinarId}/registrations/export`,
+    `${getApiUrl()}/api/admin/${webinarId}/registrations/export`,
 };

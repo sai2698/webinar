@@ -2,7 +2,7 @@
 
 import { io, type Socket } from 'socket.io-client';
 import type { ClientToServerEvents, ServerToClientEvents } from '@webinar/shared';
-import { SOCKET_URL } from './api';
+import { SOCKET_URL, getSocketUrl } from './api';
 
 export type AppSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 
@@ -12,7 +12,7 @@ export function getSocket(token: string): AppSocket {
   if (socket?.connected) return socket;
 
   socket?.disconnect();
-  socket = io(SOCKET_URL, {
+  socket = io(getSocketUrl(), {
     auth: { token },
     transports: ['websocket'],
     reconnection: true,
