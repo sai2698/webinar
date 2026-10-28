@@ -260,7 +260,7 @@ export function ChatPanel({
                 label={micOn ? 'Mute' : 'Unmute'}
                 icon={micOn ? '🎙️' : '🔇'}
                 active={micOn}
-                onClick={onToggleMic}
+                onClick={() => onToggleMic?.()}
               />
             )}
             {canUseMedia && onToggleCam && (
@@ -268,7 +268,7 @@ export function ChatPanel({
                 label={camOn ? 'Stop Video' : 'Start Video'}
                 icon={camOn ? '📹' : '🚫'}
                 active={camOn}
-                onClick={onToggleCam}
+                onClick={() => onToggleCam?.()}
               />
             )}
             {canUseMedia && onShareScreen && (

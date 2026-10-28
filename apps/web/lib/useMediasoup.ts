@@ -1099,28 +1099,29 @@ export function useMediasoup({ slug, token, onJoined, onError }: UseMediasoupOpt
   );
 
   /* ── toggle helpers ────────────────────────────────────── */
-  const toggleMic = useCallback(async (force?: boolean) => {
+  const toggleMic = useCallback(async (force?: boolean | unknown) => {
+    const forced = typeof force === 'boolean' ? force : undefined;
     const state = store.getState();
     const local = state.localStream;
 
     if (!local) {
-      if (force === false) return;
+      if (forced === false) return;
       await startPublishing(true, false);
       return;
     }
 
     const audioTrack = local.getAudioTracks()[0];
     if (audioTrack && audioTrack.readyState === 'live') {
-      const next = force ?? !audioTrack.enabled;
-      audioTrack.enabled = next;
+      const next = forced !== undefined ? forced : !audioTrack.enabled;
+      audioTrack.enabled = Boolean(next);
       if (rawMicTrackRef.current && rawMicTrackRef.current.readyState === 'live') {
-        rawMicTrackRef.current.enabled = next;
+        rawMicTrackRef.current.enabled = Boolean(next);
       }
-      store.getState().set({ micOn: next });
+      store.getState().set({ micOn: Boolean(next) });
       return;
     }
 
-    if (force === false) return;
+    if (forced === false) return;
 
     // No live audio track yet — acquire and publish one.
     try {
@@ -1146,25 +1147,26 @@ export function useMediasoup({ slug, token, onJoined, onError }: UseMediasoupOpt
 
   toggleMicRef.current = toggleMic;
 
-  const toggleCam = useCallback(async (force?: boolean) => {
+  const toggleCam = useCallback(async (force?: boolean | unknown) => {
+    const forced = typeof force === 'boolean' ? force : undefined;
     const state = store.getState();
     const local = state.localStream;
 
     if (!local) {
-      if (force === false) return;
+      if (forced === false) return;
       await startPublishing(false, true);
       return;
     }
 
     const videoTrack = local.getVideoTracks()[0];
     if (videoTrack && videoTrack.readyState === 'live') {
-      const next = force ?? !videoTrack.enabled;
-      videoTrack.enabled = next;
-      store.getState().set({ camOn: next });
+      const next = forced !== undefined ? forced : !videoTrack.enabled;
+      videoTrack.enabled = Boolean(next);
+      store.getState().set({ camOn: Boolean(next) });
       return;
     }
 
-    if (force === false) return;
+    if (forced === false) return;
 
     try {
       const prefs = prefsRef.current ?? (await loadPreferences());
@@ -1204,10 +1206,12 @@ export function useMediasoup({ slug, token, onJoined, onError }: UseMediasoupOpt
    */
   useEffect(() => {
     return useRoomStore.subscribe((state, prev) => {
-      if (state.micOn === prev.micOn && state.camOn === prev.camOn) return;
+      const micOn = Boolean(state.micOn);
+      const camOn = Boolean(state.camOn);
+      if (micOn === Boolean(prev.micOn) && camOn === Boolean(prev.camOn)) return;
       socketRef.current?.emit(
         'mediaState',
-        { micOn: state.micOn, camOn: state.camOn },
+        { micOn, camOn },
         () => {}
       );
     });

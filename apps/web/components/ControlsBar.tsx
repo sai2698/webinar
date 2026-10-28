@@ -166,7 +166,7 @@ export function ControlsBar({
         label={micOn ? 'Mute' : 'Unmute'}
         active={micOn}
         danger={!micOn}
-        onClick={onToggleMic}
+        onClick={() => onToggleMic?.()}
         disabled={!canUseMedia}
       >
         {micOn ? (
@@ -187,7 +187,7 @@ export function ControlsBar({
         label={camOn ? 'Stop video' : 'Start video'}
         active={camOn}
         danger={!camOn}
-        onClick={onToggleCam}
+        onClick={() => onToggleCam?.()}
         disabled={!canUseMedia}
       >
         {camOn ? (
