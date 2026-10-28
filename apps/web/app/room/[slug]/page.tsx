@@ -11,6 +11,7 @@ import { ParticipantList } from '@/components/ParticipantList';
 import { ControlsBar } from '@/components/ControlsBar';
 import { QuizModal } from '@/components/QuizModal';
 import { PollModal } from '@/components/PollModal';
+import { AudioRenderer } from '@/components/AudioRenderer';
 import { PollsPanel } from '@/components/PollsPanel';
 import { QaPanel } from '@/components/QaPanel';
 import { CtaOverlay } from '@/components/CtaOverlay';
@@ -447,6 +448,7 @@ export default function RoomPage() {
 
       <QuizModal socket={socket} />
       <PollModal socket={socket} />
+      <AudioRenderer />
 
       <MediaRequestPrompt
         onAccept={(kind) => {
