@@ -103,7 +103,7 @@ export function ControlsBar({
   const backgroundMode = useRoomStore((s) => s.backgroundMode);
 
   const isStaff = role === 'HOST' || role === 'ADMIN' || role === 'MODERATOR';
-  const canUseMedia = isStaff || isApprovedSpeaker;
+  const canUseMedia = isStaff || isApprovedSpeaker || Boolean(canPublish);
   const canConfigureMedia =
     canUseMedia &&
     Boolean(
@@ -165,6 +165,7 @@ export function ControlsBar({
       <IconButton compact={compact}
         label={micOn ? 'Mute' : 'Unmute'}
         active={micOn}
+        danger={!micOn}
         onClick={onToggleMic}
         disabled={!canUseMedia}
       >
@@ -185,6 +186,7 @@ export function ControlsBar({
       <IconButton compact={compact}
         label={camOn ? 'Stop video' : 'Start video'}
         active={camOn}
+        danger={!camOn}
         onClick={onToggleCam}
         disabled={!canUseMedia}
       >

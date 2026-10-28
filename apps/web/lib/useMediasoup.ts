@@ -31,6 +31,46 @@ type Transport = MediasoupTypes.Transport;
 type Producer = MediasoupTypes.Producer;
 type Consumer = MediasoupTypes.Consumer;
 
+/**
+ * Safely clones an object to guarantee it contains no circular references,
+ * DOM nodes, or non-enumerable WebRTC prototypes that would crash
+ * socket.io-parser's `hasBinary` traversal.
+ */
+function safeClone<T>(obj: T): T { // safe serializer
+  if (obj === null || typeof obj !== 'object') return obj;
+  try {
+    const seen = new WeakSet();
+    const json = JSON.stringify(obj, (_key, value) => {
+      if (typeof value === 'object' && value !== null) {
+        if (seen.has(value)) return undefined;
+        seen.add(value);
+      }
+      return value;
+    });
+    return JSON.parse(json);
+  } catch {
+    const seen = new WeakSet();
+    function clone(val: any): any {
+      if (val === null || typeof val !== 'object') return val;
+      if (seen.has(val)) return undefined;
+      seen.add(val);
+      if (Array.isArray(val)) {
+        return val.map(clone).filter((v) => v !== undefined);
+      }
+      const copy: any = {};
+      for (const k of Object.keys(val)) {
+        try {
+          const v = clone(val[k]);
+          if (v !== undefined) copy[k] = v;
+        } catch {}
+      }
+      return copy;
+    }
+    return clone(obj);
+  }
+}
+
+
 interface UseMediasoupOptions {
   slug: string;
   token: string;
@@ -93,7 +133,7 @@ export function useMediasoup({ slug, token, onJoined, onError }: UseMediasoupOpt
 
       socket.emit(
         'consume',
-        { producerId, rtpCapabilities: device.rtpCapabilities },
+        { producerId, rtpCapabilities: safeClone(device.rtpCapabilities) },
         async (res) => {
           if (!res.ok) {
             console.warn('[consume] failed', res.error);
@@ -269,7 +309,7 @@ export function useMediasoup({ slug, token, onJoined, onError }: UseMediasoupOpt
                   transport.on('connect', ({ dtlsParameters }, callback, errback) => {
                     socket.emit(
                       'connectTransport',
-                      { transportId: transport.id, dtlsParameters },
+                      { transportId: transport.id, dtlsParameters: safeClone(dtlsParameters) },
                       (cres) => (cres.ok ? callback() : errback(new Error(cres.error)))
                     );
                   });
@@ -297,7 +337,7 @@ export function useMediasoup({ slug, token, onJoined, onError }: UseMediasoupOpt
                   transport.on('connect', ({ dtlsParameters }, callback, errback) => {
                     socket.emit(
                       'connectTransport',
-                      { transportId: transport.id, dtlsParameters },
+                      { transportId: transport.id, dtlsParameters: safeClone(dtlsParameters) },
                       (cres) => (cres.ok ? callback() : errback(new Error(cres.error)))
                     );
                   });
@@ -308,9 +348,9 @@ export function useMediasoup({ slug, token, onJoined, onError }: UseMediasoupOpt
                       {
                         transportId: transport.id,
                         kind,
-                        rtpParameters,
+                        rtpParameters: safeClone(rtpParameters),
                         source: (appData as { source?: MediaSource } | undefined)?.source,
-                        appData,
+                        appData: appData ? { kind: (appData as Record<string,unknown>).kind, source: (appData as Record<string,unknown>).source } : undefined,
                       },
                       (pres) => (pres.ok ? callback({ id: pres.data.producerId }) : errback(new Error(pres.error)))
                     );
@@ -1070,15 +1110,19 @@ export function useMediasoup({ slug, token, onJoined, onError }: UseMediasoupOpt
     }
 
     const audioTrack = local.getAudioTracks()[0];
-    if (audioTrack) {
-      audioTrack.enabled = force ?? !audioTrack.enabled;
-      store.getState().set({ micOn: audioTrack.enabled });
+    if (audioTrack && audioTrack.readyState === 'live') {
+      const next = force ?? !audioTrack.enabled;
+      audioTrack.enabled = next;
+      if (rawMicTrackRef.current && rawMicTrackRef.current.readyState === 'live') {
+        rawMicTrackRef.current.enabled = next;
+      }
+      store.getState().set({ micOn: next });
       return;
     }
 
     if (force === false) return;
 
-    // No audio track yet — add one.
+    // No live audio track yet — acquire and publish one.
     try {
       const prefs = prefsRef.current ?? (await loadPreferences());
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -1091,7 +1135,10 @@ export function useMediasoup({ slug, token, onJoined, onError }: UseMediasoupOpt
       const processed = await applyAudioProcessing(track, prefs);
       local.addTrack(processed);
       await publishTrack(processed, 'audio');
-      store.getState().set({ micOn: true });
+      store.getState().set({
+        localStream: new MediaStream(local.getTracks()),
+        micOn: true,
+      });
     } catch {
       onError?.('Microphone unavailable');
     }
@@ -1110,9 +1157,10 @@ export function useMediasoup({ slug, token, onJoined, onError }: UseMediasoupOpt
     }
 
     const videoTrack = local.getVideoTracks()[0];
-    if (videoTrack) {
-      videoTrack.enabled = force ?? !videoTrack.enabled;
-      store.getState().set({ camOn: videoTrack.enabled });
+    if (videoTrack && videoTrack.readyState === 'live') {
+      const next = force ?? !videoTrack.enabled;
+      videoTrack.enabled = next;
+      store.getState().set({ camOn: next });
       return;
     }
 
@@ -1133,10 +1181,11 @@ export function useMediasoup({ slug, token, onJoined, onError }: UseMediasoupOpt
       rawCameraTrackRef.current = track;
       local.addTrack(track);
       await publishTrack(track, 'video');
-      store.getState().set({ camOn: true });
+      store.getState().set({
+        localStream: new MediaStream(local.getTracks()),
+        camOn: true,
+      });
 
-      // A participant who had a background on expects it back when they turn
-      // the camera on again, not a bare frame.
       if (prefs.background.mode !== 'off') {
         await setBackground(prefs.background.mode, prefs.background.image);
       }

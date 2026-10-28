@@ -137,7 +137,7 @@ export function VideoGrid({ onToggleFullscreen }: VideoGridProps) {
           role: peer.role,
           stream: null,
           isLocal: false,
-          micOn: true,
+          micOn: Boolean(peer.micOn),
           camOn: false,
           paused: false,
           isScreen: false,
@@ -153,8 +153,8 @@ export function VideoGrid({ onToggleFullscreen }: VideoGridProps) {
           role: peer.role,
           stream: rs.stream,
           isLocal: false,
-          micOn: true,
-          camOn: true,
+          micOn: Boolean(peer.micOn),
+          camOn: peer.camOn ?? !rs.paused,
           paused: rs.paused,
           isScreen: rs.source === 'screen',
           producerId: rs.producerId,
@@ -174,7 +174,12 @@ export function VideoGrid({ onToggleFullscreen }: VideoGridProps) {
     return { tiles: list, screenTile: screen as (typeof list)[number] | null };
   }, [peers, self, remoteStreams, localStream, screenStream, selfPeerId, micOn, camOn]);
 
-  const showUserCountCard = (!showParticipantsToEachOther || viewerCount > tiles.length) && viewerCount > 0;
+  const role = useRoomStore((s) => s.role);
+  const isHostOrStaff = role === 'HOST' || role === 'ADMIN' || role === 'MODERATOR';
+  const showUserCountCard =
+    !isHostOrStaff &&
+    (!showParticipantsToEachOther || viewerCount > tiles.length) &&
+    viewerCount > 0;
 
   if (tiles.length === 0 && !screenTile) {
     return (
@@ -350,7 +355,7 @@ export function VideoGrid({ onToggleFullscreen }: VideoGridProps) {
               paused={tile.paused}
               producerId={tile.producerId}
               layer={0}
-              className="h-16 w-24 sm:h-20 sm:w-32 shrink-0 rounded-xl sm:rounded-2xl"
+              className="h-20 w-24 sm:h-24 sm:w-28 shrink-0 rounded-xl sm:rounded-2xl"
             />
           ))}
           {showUserCountCard && <UserCountCard count={viewerCount} />}
