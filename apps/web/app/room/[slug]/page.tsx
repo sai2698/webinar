@@ -23,6 +23,7 @@ import { PendingApproval } from '@/components/PendingApproval';
 import { WaitingRoom } from '@/components/WaitingRoom';
 import { WatermarkOverlay } from '@/components/WatermarkOverlay';
 import { Logo } from '@/components/Logo';
+import { ThemeToggle } from '@/components/ThemeToggle';
 import { endpoints } from '@/lib/api';
 import { roomToken } from '@/lib/session';
 import { useFullscreen } from '@/lib/useRoomUi';
@@ -322,6 +323,7 @@ export default function RoomPage() {
             </span>
           )}
           {isStaff && <HostPanel socket={socket} />}
+          <ThemeToggle />
         </div>
       </header>
 
@@ -382,8 +384,8 @@ export default function RoomPage() {
               onClick={() => setTab('chat')}
               className={`flex-1 px-4 py-2 text-xs font-semibold transition ${
                 activeTab === 'chat'
-                  ? 'border-b-2 border-brand-400 text-white'
-                  : 'text-slate-500 hover:text-slate-300'
+                  ? 'border-b-2 border-brand-400 text-brand-500 dark:text-white font-bold'
+                  : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
               }`}
             >
               Chat
@@ -393,8 +395,8 @@ export default function RoomPage() {
                 onClick={() => setTab('people')}
                 className={`flex-1 px-4 py-2 text-xs font-semibold transition ${
                   activeTab === 'people'
-                    ? 'border-b-2 border-brand-400 text-white'
-                    : 'text-slate-500 hover:text-slate-300'
+                    ? 'border-b-2 border-brand-400 text-brand-500 dark:text-white font-bold'
+                    : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
                 }`}
               >
                 People
@@ -410,8 +412,8 @@ export default function RoomPage() {
                 onClick={() => setTab('qa')}
                 className={`flex-1 px-3 py-2 text-xs font-semibold transition ${
                   activeTab === 'qa'
-                    ? 'border-b-2 border-brand-400 text-white'
-                    : 'text-slate-500 hover:text-slate-300'
+                    ? 'border-b-2 border-brand-400 text-brand-500 dark:text-white font-bold'
+                    : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
                 }`}
               >
                 Q&amp;A
@@ -427,8 +429,8 @@ export default function RoomPage() {
                 onClick={() => setTab('polls')}
                 className={`flex-1 px-3 py-2 text-xs font-semibold transition ${
                   activeTab === 'polls'
-                    ? 'border-b-2 border-brand-400 text-white'
-                    : 'text-slate-500 hover:text-slate-300'
+                    ? 'border-b-2 border-brand-400 text-brand-500 dark:text-white font-bold'
+                    : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
                 }`}
               >
                 Polls

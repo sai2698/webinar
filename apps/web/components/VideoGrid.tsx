@@ -12,16 +12,16 @@ interface VideoGridProps {
 function UserCountCard({ count, vertical = false }: { count: number; vertical?: boolean }) {
   return (
     <div
-      className={`flex shrink-0 flex-col items-center justify-center gap-1 rounded-xl sm:rounded-2xl border border-white/10 bg-ink-900/90 shadow-md backdrop-blur ${
+      className={`flex shrink-0 flex-col items-center justify-center gap-1 rounded-xl sm:rounded-2xl border border-slate-200 dark:border-white/10 bg-white dark:bg-ink-900/90 shadow-sm backdrop-blur ${
         vertical ? 'w-full py-4 aspect-video' : 'h-20 w-20 sm:h-24 sm:w-28'
       }`}
     >
-      <div className="grid h-6 w-6 place-items-center rounded-full bg-brand-500/20 text-brand-400">
+      <div className="grid h-6 w-6 place-items-center rounded-full bg-brand-500/15 dark:bg-brand-500/20 text-brand-600 dark:text-brand-400">
         <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="currentColor">
           <path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z" />
         </svg>
       </div>
-      <span className="rounded-full bg-brand-500/25 px-1.5 py-0.5 text-[10px] sm:text-[11px] font-bold text-brand-300">
+      <span className="rounded-full bg-brand-500/15 dark:bg-brand-500/25 px-1.5 py-0.5 text-[10px] sm:text-[11px] font-bold text-brand-600 dark:text-brand-300">
         +{count}
       </span>
     </div>
@@ -34,7 +34,7 @@ function FullscreenButton({ onClick, isFs }: { onClick?: () => void; isFs: boole
     <button
       type="button"
       onClick={onClick}
-      className="absolute bottom-3 right-3 z-20 flex items-center gap-1.5 rounded-lg border border-white/20 bg-black/70 px-2.5 py-1.5 text-[11px] font-semibold text-white shadow-xl backdrop-blur-md transition hover:bg-black/90 active:scale-95"
+      className="absolute bottom-3 right-3 z-20 flex items-center gap-1.5 rounded-lg border border-slate-200 dark:border-white/20 bg-white/90 dark:bg-black/70 text-slate-800 dark:text-white px-2.5 py-1.5 text-[11px] font-semibold shadow-lg backdrop-blur-md transition hover:bg-white dark:hover:bg-black/90 active:scale-95"
       aria-label={isFs ? 'Exit fullscreen' : 'Enter fullscreen'}
     >
       <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2.2">
@@ -71,6 +71,7 @@ export function VideoGrid({ onToggleFullscreen }: VideoGridProps) {
   const showParticipantsToEachOther = useRoomStore((s) => s.showParticipantsToEachOther);
   const role = useRoomStore((s) => s.role);
   const isHostOrStaff = role === 'HOST' || role === 'ADMIN' || role === 'MODERATOR';
+  const hands = useRoomStore((s) => s.hands);
   const isFullscreen = useIsFullscreen();
 
   const { tiles, screenTile } = useMemo(() => {
@@ -86,6 +87,7 @@ export function VideoGrid({ onToggleFullscreen }: VideoGridProps) {
       paused: boolean;
       isScreen: boolean;
       producerId?: string;
+      handRaised?: boolean;
     }[] = [];
 
     // ── 1. ACTIVE SCREEN SHARE DETECTION ──
@@ -144,6 +146,7 @@ export function VideoGrid({ onToggleFullscreen }: VideoGridProps) {
 
     for (const peer of everyone) {
       const isLocal = peer.peerId === selfPeerId;
+      const isHandRaised = hands.some((h) => h.userId === peer.userId);
 
       // ── PARTICIPANT PRIVACY / VISIBILITY RULE ──
       // When showParticipantsToEachOther is FALSE (Webinar mode):
@@ -168,6 +171,7 @@ export function VideoGrid({ onToggleFullscreen }: VideoGridProps) {
           camOn,
           paused: false,
           isScreen: false,
+          handRaised: isHandRaised,
         });
         continue;
       }
@@ -190,6 +194,7 @@ export function VideoGrid({ onToggleFullscreen }: VideoGridProps) {
           paused: camStreamEntry.paused,
           isScreen: false,
           producerId: camStreamEntry.producerId,
+          handRaised: isHandRaised,
         });
       } else {
         // Camera is off: show dummy tile with avatar and mic status
@@ -204,6 +209,7 @@ export function VideoGrid({ onToggleFullscreen }: VideoGridProps) {
           camOn: false,
           paused: false,
           isScreen: false,
+          handRaised: isHandRaised,
         });
       }
     }
@@ -211,7 +217,7 @@ export function VideoGrid({ onToggleFullscreen }: VideoGridProps) {
     const rank = (r: string) => (r === 'HOST' ? 0 : r === 'ADMIN' ? 1 : r === 'MODERATOR' ? 2 : 3);
     list.sort((a, b) => rank(a.role) - rank(b.role));
     return { tiles: list, screenTile: screen as (typeof list)[number] | null };
-  }, [peers, self, remoteStreams, localStream, screenStream, selfPeerId, micOn, camOn, role, isHostOrStaff, showParticipantsToEachOther]);
+  }, [peers, self, remoteStreams, localStream, screenStream, selfPeerId, micOn, camOn, role, isHostOrStaff, showParticipantsToEachOther, hands]);
 
   const showUserCountCard =
     !isHostOrStaff &&
@@ -220,10 +226,10 @@ export function VideoGrid({ onToggleFullscreen }: VideoGridProps) {
 
   if (tiles.length === 0 && !screenTile) {
     return (
-      <div className="grid h-full place-items-center rounded-2xl border border-white/10 bg-ink-900/60 p-4">
+      <div className="grid h-full place-items-center rounded-2xl border border-slate-200 dark:border-white/10 bg-white dark:bg-ink-900/60 p-4 shadow-sm">
         <div className="text-center">
-          <div className="mx-auto mb-3 h-8 w-8 animate-spin rounded-full border-2 border-white/10 border-t-brand-400" />
-          <p className="text-sm text-slate-400">Waiting for the host to start…</p>
+          <div className="mx-auto mb-3 h-8 w-8 animate-spin rounded-full border-2 border-slate-200 dark:border-white/10 border-t-brand-500" />
+          <p className="text-sm text-slate-500 dark:text-slate-400">Waiting for the host to start…</p>
           {showUserCountCard && (
             <div className="mt-4 flex justify-center">
               <UserCountCard count={viewerCount} />
@@ -234,52 +240,66 @@ export function VideoGrid({ onToggleFullscreen }: VideoGridProps) {
     );
   }
 
-  /* ── 1. PRESENTATION / SCREEN SHARE LAYOUT ── */
-  if (screenTile) {
-    // In Fullscreen mode: Left is screen share, Right is vertical filmstrip of videos
-    if (isFullscreen) {
-      return (
-        <div className="flex h-full w-full flex-row gap-2 bg-ink-950 p-2 overflow-hidden">
-          <div className="relative min-w-0 flex-1 h-full rounded-2xl overflow-hidden border border-white/10 bg-black">
+  /* ── 1. FULLSCREEN MODE (Presentation or Host Camera Layout) ── */
+  // When mobile (or desktop) user enters fullscreen:
+  // - If screen share is active: screen share on left, attendee/staff video + user count tile on right.
+  // - If host not sharing screen: host camera on left just like presentation, his/attendee's video + user count tile on right!
+  if (isFullscreen) {
+    const staffTiles = tiles.filter((t) => ['HOST', 'ADMIN', 'MODERATOR'].includes(t.role));
+    const mainStageTile = screenTile || staffTiles[0] || tiles[0];
+    const sideTiles = tiles.filter((t) => t.key !== mainStageTile?.key);
+
+    return (
+      <div className="flex h-full w-full flex-row gap-2 bg-slate-900 dark:bg-ink-950 p-2 overflow-hidden">
+        {/* Main Stage (Screen Share or Host Camera) */}
+        <div className="relative min-w-0 flex-1 h-full rounded-2xl overflow-hidden border border-slate-200 dark:border-white/10 bg-white dark:bg-black shadow-sm">
+          {mainStageTile && (
             <VideoTile
-              stream={screenTile.stream}
-              name={screenTile.name}
-              role={screenTile.role}
-              isLocal={screenTile.isLocal}
-              micOn={screenTile.micOn}
-              camOn={screenTile.camOn}
-              paused={screenTile.paused}
-              isScreen
+              stream={mainStageTile.stream}
+              name={mainStageTile.name}
+              role={mainStageTile.role}
+              isLocal={mainStageTile.isLocal}
+              micOn={mainStageTile.micOn}
+              camOn={mainStageTile.camOn}
+              paused={mainStageTile.paused}
+              isScreen={mainStageTile.isScreen}
+              producerId={mainStageTile.producerId}
+              handRaised={mainStageTile.handRaised}
+              layer={2}
               className="h-full w-full"
             />
-            <FullscreenButton onClick={onToggleFullscreen} isFs={true} />
-          </div>
-
-          {(tiles.length > 0 || showUserCountCard) && (
-            <div className="w-36 sm:w-48 shrink-0 flex flex-col gap-2 overflow-y-auto h-full pr-1">
-              {tiles.map((tile) => (
-                <VideoTile
-                  key={tile.key}
-                  stream={tile.stream}
-                  name={tile.name}
-                  role={tile.role}
-                  isLocal={tile.isLocal}
-                  micOn={tile.micOn}
-                  camOn={tile.camOn}
-                  paused={tile.paused}
-                  producerId={tile.producerId}
-                  layer={0}
-                  className="w-full aspect-video shrink-0 rounded-xl"
-                />
-              ))}
-              {showUserCountCard && <UserCountCard count={viewerCount} vertical />}
-            </div>
           )}
+          <FullscreenButton onClick={onToggleFullscreen} isFs={true} />
         </div>
-      );
-    }
 
-    // Normal mode: Videos strip at TOP, screen share below
+        {/* Right Vertical Filmstrip: attendee video & user count tile */}
+        {(sideTiles.length > 0 || showUserCountCard) && (
+          <div className="w-36 sm:w-48 shrink-0 flex flex-col gap-2 overflow-y-auto h-full pr-1">
+            {sideTiles.map((tile) => (
+              <VideoTile
+                key={tile.key}
+                stream={tile.stream}
+                name={tile.name}
+                role={tile.role}
+                isLocal={tile.isLocal}
+                micOn={tile.micOn}
+                camOn={tile.camOn}
+                paused={tile.paused}
+                producerId={tile.producerId}
+                handRaised={tile.handRaised}
+                layer={0}
+                className="w-full aspect-video shrink-0 rounded-xl"
+              />
+            ))}
+            {showUserCountCard && <UserCountCard count={viewerCount} vertical />}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  /* ── 2. PRESENTATION / SCREEN SHARE LAYOUT (Non-fullscreen normal mode) ── */
+  if (screenTile) {
     return (
       <div className="flex h-full flex-col gap-1.5 sm:gap-2 overflow-hidden">
         {(tiles.length > 0 || showUserCountCard) && (
@@ -295,6 +315,7 @@ export function VideoGrid({ onToggleFullscreen }: VideoGridProps) {
                 camOn={tile.camOn}
                 paused={tile.paused}
                 producerId={tile.producerId}
+                handRaised={tile.handRaised}
                 layer={0}
                 className="h-20 w-24 sm:h-24 sm:w-28 shrink-0 rounded-xl sm:rounded-2xl"
               />
@@ -303,7 +324,7 @@ export function VideoGrid({ onToggleFullscreen }: VideoGridProps) {
           </div>
         )}
 
-        <div className="relative min-h-0 flex-1 aspect-video w-full max-h-[39vh] sm:max-h-[44vh] lg:max-h-none lg:aspect-auto rounded-xl sm:rounded-2xl overflow-hidden border border-white/10 bg-black mx-auto">
+        <div className="relative min-h-0 flex-1 aspect-video w-full max-h-[39vh] sm:max-h-[44vh] lg:max-h-none lg:aspect-auto rounded-xl sm:rounded-2xl overflow-hidden border border-slate-200 dark:border-white/10 bg-white dark:bg-black shadow-sm mx-auto">
           <VideoTile
             stream={screenTile.stream}
             name={screenTile.name}
@@ -313,6 +334,7 @@ export function VideoGrid({ onToggleFullscreen }: VideoGridProps) {
             camOn={screenTile.camOn}
             paused={screenTile.paused}
             isScreen
+            handRaised={screenTile.handRaised}
             className="h-full w-full"
           />
           <FullscreenButton onClick={onToggleFullscreen} isFs={false} />
@@ -348,7 +370,7 @@ export function VideoGrid({ onToggleFullscreen }: VideoGridProps) {
           </div>
         )}
 
-        <div className="relative min-h-0 flex-1 aspect-video w-full max-h-[39vh] sm:max-h-[44vh] lg:max-h-none lg:aspect-auto rounded-xl sm:rounded-2xl overflow-hidden border border-white/10 bg-black mx-auto">
+        <div className="relative min-h-0 flex-1 aspect-video w-full max-h-[39vh] sm:max-h-[44vh] lg:max-h-none lg:aspect-auto rounded-xl sm:rounded-2xl overflow-hidden border border-slate-200 dark:border-white/10 bg-white dark:bg-black shadow-sm mx-auto">
           <VideoTile
             stream={spotlightTile.stream}
             name={spotlightTile.name}
@@ -398,6 +420,7 @@ export function VideoGrid({ onToggleFullscreen }: VideoGridProps) {
               camOn={tile.camOn}
               paused={tile.paused}
               producerId={tile.producerId}
+              handRaised={tile.handRaised}
               layer={tiles.length <= 4 ? 2 : 1}
               className="h-full w-full min-h-[140px] rounded-xl sm:rounded-2xl"
             />
@@ -435,6 +458,7 @@ export function VideoGrid({ onToggleFullscreen }: VideoGridProps) {
               camOn={tile.camOn}
               paused={tile.paused}
               producerId={tile.producerId}
+              handRaised={tile.handRaised}
               layer={0}
               className="h-20 w-24 sm:h-24 sm:w-28 shrink-0 rounded-xl sm:rounded-2xl"
             />
@@ -443,7 +467,7 @@ export function VideoGrid({ onToggleFullscreen }: VideoGridProps) {
         </div>
 
         {/* Main stage with Host or Moderator or Co-host video */}
-        <div className="relative min-h-0 flex-1 aspect-video w-full max-h-[39vh] sm:max-h-[44vh] lg:max-h-none lg:aspect-auto rounded-xl sm:rounded-2xl overflow-hidden border border-white/10 bg-black mx-auto">
+        <div className="relative min-h-0 flex-1 aspect-video w-full max-h-[39vh] sm:max-h-[44vh] lg:max-h-none lg:aspect-auto rounded-xl sm:rounded-2xl overflow-hidden border border-slate-200 dark:border-white/10 bg-white dark:bg-black shadow-sm mx-auto">
           {stageTiles.length === 1 ? (
             <VideoTile
               stream={stageTiles[0].stream}
@@ -454,6 +478,7 @@ export function VideoGrid({ onToggleFullscreen }: VideoGridProps) {
               camOn={stageTiles[0].camOn}
               paused={stageTiles[0].paused}
               producerId={stageTiles[0].producerId}
+              handRaised={stageTiles[0].handRaised}
               layer={2}
               className="h-full w-full"
             />
@@ -490,7 +515,7 @@ export function VideoGrid({ onToggleFullscreen }: VideoGridProps) {
           <UserCountCard count={viewerCount} />
         </div>
       )}
-      <div className="relative min-h-0 flex-1 aspect-video w-full max-h-[36vh] sm:max-h-[42vh] lg:max-h-none lg:aspect-auto rounded-xl sm:rounded-2xl overflow-hidden border border-white/10 bg-black mx-auto">
+      <div className="relative min-h-0 flex-1 aspect-video w-full max-h-[36vh] sm:max-h-[42vh] lg:max-h-none lg:aspect-auto rounded-xl sm:rounded-2xl overflow-hidden border border-slate-200 dark:border-white/10 bg-white dark:bg-black shadow-sm mx-auto">
         {tiles[0] && (
           <VideoTile
             key={tiles[0].key}
@@ -502,6 +527,7 @@ export function VideoGrid({ onToggleFullscreen }: VideoGridProps) {
             camOn={tiles[0].camOn}
             paused={tiles[0].paused}
             producerId={tiles[0].producerId}
+            handRaised={tiles[0].handRaised}
             layer={2}
             className="h-full w-full"
           />

@@ -40,6 +40,7 @@ function IconButton({
   onClick,
   disabled,
   compact,
+  className = '',
   children,
 }: {
   active?: boolean;
@@ -48,6 +49,7 @@ function IconButton({
   onClick: () => void;
   disabled?: boolean;
   compact?: boolean;
+  className?: string;
   children: React.ReactNode;
 }) {
   return (
@@ -61,9 +63,9 @@ function IconButton({
         danger
           ? 'border-red-500/40 bg-red-500/90 text-white hover:bg-red-500'
           : active
-            ? 'border-white/20 bg-white/15 text-white hover:bg-white/25'
-            : 'border-white/10 bg-white/[0.06] text-slate-400 hover:bg-white/[0.12] hover:text-white'
-      }`}
+            ? 'border-slate-300 dark:border-white/20 bg-slate-200 dark:bg-white/15 text-slate-900 dark:text-white hover:bg-slate-300 dark:hover:bg-white/25'
+            : 'border-slate-200 dark:border-white/10 bg-white dark:bg-white/[0.06] text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/[0.12] hover:text-slate-900 dark:hover:text-white shadow-sm'
+      } ${className}`}
     >
       {children}
       <span className="pointer-events-none absolute -top-9 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md bg-ink-800 px-2 py-1 text-[10px] font-medium text-slate-200 opacity-0 shadow-lg ring-1 ring-white/10 transition group-hover:opacity-100">
@@ -240,10 +242,17 @@ export function ControlsBar({
       {!isStaff && (
         <IconButton compact={compact}
           label={handRaised ? 'Lower hand' : 'Raise hand'}
-          active={handRaised}
+          active={false}
+          className={handRaised ? '!border-amber-400 !bg-amber-400/25 !text-amber-500 shadow-sm' : ''}
           onClick={toggleHand}
         >
-          <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
+          <svg
+            viewBox="0 0 24 24"
+            className={`h-5 w-5 transition-transform duration-200 ${handRaised ? 'scale-110' : ''}`}
+            fill={handRaised ? '#facc15' : 'none'}
+            stroke={handRaised ? '#b45309' : 'currentColor'}
+            strokeWidth="1.8"
+          >
             <path
               d="M8 11V5.5a1.5 1.5 0 0 1 3 0V11m0 0V4.5a1.5 1.5 0 0 1 3 0V11m0 0V6.5a1.5 1.5 0 0 1 3 0V14a6 6 0 0 1-6 6h-1a6 6 0 0 1-6-6v-2.5a1.5 1.5 0 0 1 3 0V13"
               strokeLinecap="round"

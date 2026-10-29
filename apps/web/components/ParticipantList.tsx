@@ -191,7 +191,14 @@ export function ParticipantList({ socket }: ParticipantListProps) {
               {peer.name}
               {isSelf && <span className="ml-1 text-slate-500">(you)</span>}
             </span>
-            {hand && <span className="text-[11px]">✋</span>}
+            {hand && (
+              <span className="flex items-center gap-1 rounded-full bg-amber-400/20 border border-amber-400/40 px-1.5 py-0.5 text-[10px] font-bold text-amber-700 dark:text-amber-300" title="Hand raised">
+                <svg viewBox="0 0 24 24" className="h-3 w-3 fill-amber-400 stroke-amber-600" strokeWidth="1.5">
+                  <path d="M8 11V5.5a1.5 1.5 0 0 1 3 0V11m0 0V4.5a1.5 1.5 0 0 1 3 0V11m0 0V6.5a1.5 1.5 0 0 1 3 0V14a6 6 0 0 1-6 6h-1a6 6 0 0 1-6-6v-2.5a1.5 1.5 0 0 1 3 0V13" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                <span>Raised</span>
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-slate-500">
             <span>
@@ -301,7 +308,7 @@ export function ParticipantList({ socket }: ParticipantListProps) {
   return (
     <div className="flex h-full flex-col relative">
       <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
-        <h3 className="text-sm font-semibold text-white">Participants</h3>
+        <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Participants</h3>
         <span className="chip py-0.5 text-[10px]">
           {query ? `${list.length}/${total}` : total}
         </span>
@@ -367,7 +374,7 @@ export function ParticipantList({ socket }: ParticipantListProps) {
             {/* Toggle 1: Allow audience mic */}
             <div className="flex items-center justify-between gap-2 pt-0.5">
               <div className="min-w-0 pr-2">
-                <p className="text-xs font-semibold text-white">Allow audience mic</p>
+                <p className="text-xs font-semibold text-slate-900 dark:text-white">Allow audience mic</p>
                 <p className="text-[10px] text-slate-400">
                   {allowMic ? 'Attendees can unmute their microphones' : 'Audience microphones are locked'}
                 </p>
@@ -398,7 +405,7 @@ export function ParticipantList({ socket }: ParticipantListProps) {
             {/* Toggle 2: Allow audience camera */}
             <div className="flex items-center justify-between gap-2 border-t border-white/5 pt-2">
               <div className="min-w-0 pr-2">
-                <p className="text-xs font-semibold text-white">Allow audience camera</p>
+                <p className="text-xs font-semibold text-slate-900 dark:text-white">Allow audience camera</p>
                 <p className="text-[10px] text-slate-400">
                   {allowVideo ? 'Attendees can turn on their cameras' : 'Audience cameras are locked'}
                 </p>
@@ -429,7 +436,7 @@ export function ParticipantList({ socket }: ParticipantListProps) {
             {/* Toggle 3: Participants see each other */}
             <div className="flex items-center justify-between gap-2 border-t border-white/5 pt-2">
               <div className="min-w-0 pr-2">
-                <p className="text-xs font-semibold text-white">Participants see each other</p>
+                <p className="text-xs font-semibold text-slate-900 dark:text-white">Participants see each other</p>
                 <p className="text-[10px] text-slate-400">
                   {showParticipantsToEachOther ? 'Zoom call mode (everyone visible)' : 'Webinar broadcast mode (staff on stage)'}
                 </p>
@@ -472,7 +479,9 @@ export function ParticipantList({ socket }: ParticipantListProps) {
                   key={h.userId}
                   className="flex items-center gap-2 rounded-lg bg-accent-500/10 px-2 py-1.5"
                 >
-                  <span className="text-sm">✋</span>
+                  <svg viewBox="0 0 24 24" className="h-4 w-4 fill-amber-400 stroke-amber-600 shrink-0" strokeWidth="1.5">
+                    <path d="M8 11V5.5a1.5 1.5 0 0 1 3 0V11m0 0V4.5a1.5 1.5 0 0 1 3 0V11m0 0V6.5a1.5 1.5 0 0 1 3 0V14a6 6 0 0 1-6 6h-1a6 6 0 0 1-6-6v-2.5a1.5 1.5 0 0 1 3 0V13" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
                   <span className="min-w-0 flex-1 truncate text-xs font-medium text-slate-200">
                     {h.name}
                   </span>
@@ -560,7 +569,7 @@ export function ParticipantList({ socket }: ParticipantListProps) {
             className="fixed z-50 w-56 rounded-xl border border-white/15 bg-[#0f172a]/95 p-1.5 shadow-2xl backdrop-blur-md"
           >
             <div className="border-b border-white/10 px-2.5 py-1.5 mb-1">
-              <p className="truncate text-xs font-semibold text-white">{targetPeer.name}</p>
+              <p className="truncate text-xs font-semibold text-slate-900 dark:text-white">{targetPeer.name}</p>
               <span className="text-[10px] text-slate-400 capitalize">
                 {targetPeer.role === 'HOST'
                   ? 'Host'

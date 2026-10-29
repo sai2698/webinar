@@ -147,6 +147,108 @@ body {
  * original look no matter what the console is set to.
  */
 @layer components {
+  html.theme-light body {
+    background-color: rgb(var(--surface));
+    color: rgb(var(--fg));
+    background-image:
+      radial-gradient(900px 500px at 15% -10%, rgba(61, 92, 255, 0.07), transparent 65%),
+      radial-gradient(700px 400px at 90% 0%, rgba(255, 159, 28, 0.04), transparent 60%);
+  }
+
+  .theme-light .bg-ink-950 {
+    background-color: rgb(var(--surface)) !important;
+  }
+
+  .theme-light .bg-ink-900,
+  .theme-light .bg-ink-900\/95,
+  .theme-light .bg-ink-900\/90,
+  .theme-light .bg-ink-900\/80,
+  .theme-light .bg-ink-900\/70,
+  .theme-light .bg-ink-900\/60,
+  .theme-light .bg-ink-900\/50 {
+    background-color: rgb(var(--panel) / 0.95) !important;
+  }
+
+  .theme-light .bg-ink-950\/70,
+  .theme-light .bg-ink-950\/80 {
+    background-color: rgb(var(--surface) / 0.85) !important;
+  }
+
+  .theme-light .bg-ink-850,
+  .theme-light .bg-ink-850\/80 {
+    background-color: rgb(var(--panel)) !important;
+  }
+
+  .theme-light .bg-ink-800 {
+    background-color: rgb(var(--panel-2)) !important;
+  }
+
+  /* Light theme video tiles & cards */
+  .theme-light .bg-black {
+    background-color: #ffffff !important;
+  }
+  .theme-light .bg-ink-900 {
+    background-color: #ffffff !important;
+  }
+  .theme-light .from-ink-800.to-ink-950,
+  .theme-light .from-ink-900.to-ink-950 {
+    --tw-gradient-from: #ffffff !important;
+    --tw-gradient-to: #f8fafc !important;
+    --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important;
+  }
+
+  .theme-light .border-white\/5,
+  .theme-light .border-white\/10,
+  .theme-light .border-white\/15,
+  .theme-light .border-white\/20 {
+    border-color: rgb(var(--line)) !important;
+  }
+
+  .theme-light .text-slate-100,
+  .theme-light .text-slate-200 {
+    color: rgb(var(--fg)) !important;
+  }
+
+  .theme-light .text-slate-300 {
+    color: rgb(var(--muted)) !important;
+  }
+
+  .theme-light .text-slate-400 {
+    color: rgb(var(--subtle)) !important;
+  }
+
+  .theme-light .bg-white\/5,
+  .theme-light .bg-white\/10,
+  .theme-light .bg-white\/15,
+  .theme-light .bg-white\/\[0\.03\],
+  .theme-light .bg-white\/\[0\.04\],
+  .theme-light .bg-white\/\[0\.05\],
+  .theme-light .bg-white\/\[0\.06\],
+  .theme-light .bg-white\/\[0\.08\] {
+    background-color: rgb(var(--panel-2)) !important;
+  }
+
+  .theme-light .bg-white\/15,
+  .theme-light .bg-white\/20,
+  .theme-light .bg-white\/\[0\.12\] {
+    background-color: rgb(var(--line)) !important;
+  }
+
+  .theme-light #participant-context-menu {
+    background-color: rgb(var(--panel)) !important;
+    border-color: rgb(var(--line)) !important;
+    box-shadow: var(--shadow-pop) !important;
+  }
+
+  .theme-light #participant-context-menu p,
+  .theme-light #participant-context-menu span {
+    color: rgb(var(--fg));
+  }
+
+  .theme-light #participant-context-menu button:hover {
+    background-color: rgb(var(--panel-2)) !important;
+  }
+
   .theme-light .glass {
     @apply border-line bg-panel/80;
   }

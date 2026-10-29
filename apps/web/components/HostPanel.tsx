@@ -724,9 +724,9 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
               className="absolute inset-0 cursor-default bg-black/50 backdrop-blur-sm"
             />
 
-            <aside className="relative flex h-full w-full max-w-md flex-col border-l border-white/10 bg-ink-900 shadow-2xl">
+            <aside className="relative flex h-full w-full max-w-md flex-col border-l border-slate-200 dark:border-white/10 bg-white dark:bg-ink-900 shadow-2xl">
             <div className="flex items-center justify-between border-b border-white/10 px-5 py-3">
-              <h2 className="text-sm font-semibold text-white">Host tools</h2>
+              <h2 className="text-sm font-semibold text-slate-900 dark:text-white">Host tools</h2>
               <button
                 onClick={() => setOpen(false)}
                 className="rounded-lg p-1.5 text-slate-400 transition hover:bg-white/5 hover:text-white"
@@ -770,7 +770,7 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
                     <span>{t === 'quiz' ? 'Quizzes' : t === 'poll' ? 'Polls' : 'Offers'}</span>
                     <span
                       className={`rounded-full px-1.5 py-0.5 text-[10px] tabular-nums ${
-                        tab === t ? 'bg-brand-500/25 text-brand-200' : 'bg-white/10 text-slate-400'
+                        tab === t ? 'bg-brand-500/15 text-brand-600 dark:bg-brand-500/25 dark:text-brand-200 font-semibold' : 'bg-slate-100 dark:bg-white/10 text-slate-600 dark:text-slate-400'
                       }`}
                     >
                       {count}
@@ -1180,7 +1180,7 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
                         key={q.id}
                         className="rounded-xl border border-white/10 bg-white/[0.03] p-3"
                       >
-                        <p className="text-xs font-medium text-slate-200">{q.question}</p>
+                        <p className="text-xs font-semibold text-slate-900 dark:text-slate-200">{q.question}</p>
                         <p className="mt-1 text-[11px] text-slate-500">
                           {q.options.length} options · {q.timeLimitSecs}s · {q.answerCount} answers
                         </p>
@@ -1260,7 +1260,7 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
                         key={p.id}
                         className="rounded-xl border border-white/10 bg-white/[0.03] p-3"
                       >
-                        <p className="text-xs font-medium text-slate-200">{p.question}</p>
+                        <p className="text-xs font-semibold text-slate-900 dark:text-slate-200">{p.question}</p>
                         <p className="mt-1 text-[11px] text-slate-500">
                           {p.options.length} options ·{' '}
                           {p.timeLimitSecs > 0 ? `${p.timeLimitSecs}s` : 'open until closed'} ·{' '}
@@ -1362,7 +1362,7 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
                         key={c.id}
                         className="rounded-xl border border-white/10 bg-white/[0.03] p-3"
                       >
-                        <p className="text-xs font-medium text-slate-200">{c.title}</p>
+                        <p className="text-xs font-semibold text-slate-900 dark:text-slate-200">{c.title}</p>
                         <p className="mt-1 text-[11px] text-slate-500">
                           {price ? `₹${(price / 100).toLocaleString('en-IN')}` : 'Free'}
                           {c.course ? ` · ${c.course.title}` : ''}
@@ -1433,7 +1433,7 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
             <div className="border-t border-white/10 px-4 py-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="min-w-0">
-                  <p className="text-[11px] font-semibold text-white">Stage</p>
+                  <p className="text-[11px] font-semibold text-slate-900 dark:text-white">Stage</p>
                   <p className="text-[10px] text-slate-500">
                     {spotlightedPeerId
                       ? 'One speaker is pinned to the big tile.'
@@ -1444,14 +1444,14 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
                   {spotlightedPeerId && (
                     <button
                       onClick={() => spotlight(null)}
-                      className="rounded-lg bg-white/10 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-white/15"
+                      className="rounded-lg bg-slate-100 dark:bg-white/10 border border-slate-200 dark:border-transparent px-2.5 py-1 text-[11px] font-semibold text-slate-800 dark:text-white hover:bg-slate-200 dark:hover:bg-white/15"
                     >
                       Clear spotlight
                     </button>
                   )}
                   <button
                     onClick={muteAll}
-                    className="rounded-lg bg-white/10 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-white/15"
+                    className="rounded-lg bg-slate-100 dark:bg-white/10 border border-slate-200 dark:border-transparent px-2.5 py-1 text-[11px] font-semibold text-slate-800 dark:text-white hover:bg-slate-200 dark:hover:bg-white/15"
                   >
                     Mute all
                   </button>
@@ -1492,7 +1492,7 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
               <div className="border-t border-white/10 bg-brand-500/[0.06] px-4 py-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="min-w-0">
-                    <p className="text-[11px] font-semibold text-white">Start the webinar</p>
+                    <p className="text-[11px] font-semibold text-slate-900 dark:text-white">Start the webinar</p>
                     <p className="text-[10px] text-slate-500">
                       Participants are waiting. They join the moment you start.
                     </p>
@@ -1518,7 +1518,7 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
               <div className="border-t border-white/10 px-4 py-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="min-w-0">
-                    <p className="text-[11px] font-semibold text-white">Session recording</p>
+                    <p className="text-[11px] font-semibold text-slate-900 dark:text-white">Session recording</p>
                     <p className="text-[10px] text-slate-500">
                       {recording
                         ? 'Capturing chat, quizzes and offers for replay.'
@@ -1531,7 +1531,7 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
                     className={`shrink-0 rounded-lg px-2.5 py-1 text-[11px] font-semibold transition disabled:opacity-50 ${
                       recording
                         ? 'bg-amber-500 text-black hover:bg-amber-400'
-                        : 'bg-white/10 text-white hover:bg-white/15'
+                        : 'bg-slate-100 dark:bg-white/10 border border-slate-200 dark:border-transparent text-slate-800 dark:text-white hover:bg-slate-200 dark:hover:bg-white/15'
                     }`}
                   >
                     {recBusy ? 'Working…' : recording ? 'Stop recording' : 'Start recording'}

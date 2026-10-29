@@ -6,6 +6,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { Countdown } from '@/components/Countdown';
 import { CustomFieldsForm } from '@/components/CustomFieldsForm';
 import { Logo } from '@/components/Logo';
+import { ThemeToggle } from '@/components/ThemeToggle';
 import { endpoints, ApiError, API_URL, type PublicWebinar } from '@/lib/api';
 import { writeSession } from '@/lib/session';
 
@@ -153,9 +154,12 @@ export default function WebinarLandingPage() {
 
       <header className="relative z-10 mx-auto flex max-w-6xl items-center justify-between px-6 py-6">
         <Logo />
-        <Link href="/admin/login" className="btn-ghost text-xs">
-          Host sign in
-        </Link>
+        <div className="flex items-center gap-2">
+          <ThemeToggle />
+          <Link href="/admin/login" className="btn-ghost text-xs">
+            Host sign in
+          </Link>
+        </div>
       </header>
 
       <div className="relative z-10 mx-auto grid max-w-6xl gap-10 px-6 pb-20 pt-6 lg:grid-cols-[1.35fr_1fr]">

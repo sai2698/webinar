@@ -54,7 +54,7 @@ export function QaPanel({ socket }: QaPanelProps) {
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
-        <h3 className="text-sm font-semibold text-white">Q&amp;A</h3>
+        <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Q&amp;A</h3>
         <span className="chip py-0.5 text-[10px]">
           {open.length} open
         </span>
@@ -230,7 +230,7 @@ function QuestionCard({
               </span>
             )}
           </div>
-          <p className="whitespace-pre-wrap break-words text-[13px] leading-snug text-slate-200">
+          <p className="whitespace-pre-wrap break-words text-[13px] leading-snug text-slate-800 dark:text-slate-200">
             {question.text}
           </p>
 

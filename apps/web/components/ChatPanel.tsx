@@ -132,7 +132,7 @@ export function ChatPanel({
   return (
     <div className="relative flex h-full flex-col">
       <div className="hidden lg:flex items-center justify-between border-b border-white/10 px-4 py-3 shrink-0">
-        <h3 className="text-sm font-semibold text-white">Live chat</h3>
+        <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Live chat</h3>
         <span className="chip py-0.5 text-[10px]">{messages.length}</span>
       </div>
 
@@ -205,7 +205,7 @@ export function ChatPanel({
 
               <div className={`min-w-0 max-w-[85%] ${mine ? 'items-end text-right' : ''}`}>
                 <div className={`flex flex-wrap items-center gap-1 sm:gap-1.5 ${mine ? 'justify-end' : ''}`}>
-                  <span className="truncate text-[11px] font-semibold text-slate-300">
+                  <span className="truncate text-[11px] font-semibold text-slate-800 dark:text-slate-300">
                     {msg.name}
                   </span>
                   <span className="text-[10px] text-slate-500">to Everyone</span>
@@ -255,7 +255,7 @@ export function ChatPanel({
           chat-adjacent tools, and a full-screen sheet would hide the messages
           the participant opened the sidebar to read. */}
       {actionsOpen && (
-        <div className="border-t border-white/10 bg-ink-900/95 p-3">
+        <div className="border-t border-slate-200 dark:border-white/10 bg-white dark:bg-ink-900/95 p-3">
           <div className="mb-2 flex items-center justify-between">
             <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
               Quick actions
@@ -304,7 +304,21 @@ export function ChatPanel({
             {!isStaffRole && (
               <ActionTile
                 label={handRaised ? 'Lower Hand' : 'Raise Hand'}
-                icon="✋"
+                icon={
+                  <svg
+                    viewBox="0 0 24 24"
+                    className="h-5 w-5 mx-auto"
+                    fill={handRaised ? '#facc15' : 'none'}
+                    stroke={handRaised ? '#b45309' : 'currentColor'}
+                    strokeWidth="1.8"
+                  >
+                    <path
+                      d="M8 11V5.5a1.5 1.5 0 0 1 3 0V11m0 0V4.5a1.5 1.5 0 0 1 3 0V11m0 0V6.5a1.5 1.5 0 0 1 3 0V14a6 6 0 0 1-6 6h-1a6 6 0 0 1-6-6v-2.5a1.5 1.5 0 0 1 3 0V13"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                }
                 active={handRaised}
                 onClick={toggleHand}
               />
@@ -343,7 +357,7 @@ export function ChatPanel({
         {error && <p className="mb-2 break-all text-[11px] text-red-400">{error}</p>}
         <div className="mb-2 flex items-center gap-1.5 text-[11px] text-slate-400">
           <span>Send message to:</span>
-          <span className="inline-flex items-center gap-1 font-semibold text-slate-200">
+          <span className="inline-flex items-center gap-1 font-semibold text-slate-800 dark:text-slate-200">
             Everyone
             <svg viewBox="0 0 24 24" className="h-3 w-3 text-slate-400" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="m6 9 6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
@@ -413,8 +427,8 @@ function ActionTile({
         danger
           ? 'border-red-500/30 bg-red-500/10 text-red-400 hover:border-red-500/50 hover:bg-red-500/20'
           : active
-            ? 'border-accent-500/50 bg-accent-500/15 text-accent-300'
-            : 'border-white/10 bg-white/[0.04] text-slate-300 hover:border-white/25 hover:bg-white/[0.08] hover:text-white'
+            ? 'border-amber-400 bg-amber-400/25 text-amber-600 dark:text-amber-300 shadow-sm'
+            : 'border-slate-200 dark:border-white/10 bg-white dark:bg-white/[0.04] text-slate-700 dark:text-slate-300 hover:border-brand-300 dark:hover:border-white/25 hover:bg-slate-50 dark:hover:bg-white/[0.08] hover:text-slate-900 dark:hover:text-white shadow-sm'
       }`}
     >
       <span className="text-lg leading-none">{icon}</span>
@@ -481,9 +495,9 @@ function ChatSheet({
   };
 
   return (
-    <div className="absolute inset-0 z-20 flex flex-col bg-ink-900/95 backdrop-blur-sm">
+    <div className="absolute inset-0 z-20 flex flex-col bg-white dark:bg-ink-900/95 border-l border-slate-200 dark:border-white/10 backdrop-blur-sm">
       <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
-        <h4 className="text-xs font-semibold text-white">{titles[sheet]}</h4>
+        <h4 className="text-xs font-semibold text-slate-900 dark:text-white">{titles[sheet]}</h4>
         <button
           onClick={onClose}
           aria-label="Close"
@@ -505,12 +519,12 @@ function ChatSheet({
               {quizResults.topScorers.map((s, i) => (
                 <div
                   key={s.userId}
-                  className="flex items-center gap-2.5 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2"
+                  className="flex items-center gap-2.5 rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-white/[0.04] px-3 py-2 shadow-sm"
                 >
                   <span className="w-5 text-center text-[11px] font-bold text-slate-500">
                     {i + 1}
                   </span>
-                  <span className="min-w-0 flex-1 truncate text-[12px] text-slate-200">
+                  <span className="min-w-0 flex-1 truncate text-[12px] text-slate-800 dark:text-slate-200">
                     {s.name}
                   </span>
                   <span className="font-mono text-[11px] tabular-nums text-mint-400">

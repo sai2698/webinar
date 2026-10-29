@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { Logo } from '@/components/Logo';
 import { ConsoleLink } from '@/components/ConsoleLink';
+import { ThemeToggle } from '@/components/ThemeToggle';
 
 const DELAYS = ['animate-delay-100', 'animate-delay-200', 'animate-delay-300', 'animate-delay-500'];
 
@@ -61,6 +62,7 @@ export default function HomePage() {
           <Link href="/w/live-product-teardown" className="btn-primary text-xs sm:text-sm">
             Watch demo
           </Link>
+          <ThemeToggle />
         </nav>
       </header>
 

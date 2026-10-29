@@ -40,7 +40,7 @@ export function WaitingRoom({ title, startsAt }: WaitingRoomProps) {
   const isStaff = role === 'HOST' || role === 'ADMIN' || role === 'MODERATOR';
 
   return (
-    <div className="grid h-full place-items-center rounded-2xl border border-white/10 bg-ink-900/60 px-6">
+    <div className="grid h-full place-items-center rounded-2xl border border-slate-200 dark:border-white/10 bg-white dark:bg-ink-900/60 px-6 shadow-sm">
       <div className="w-full max-w-md text-center">
         {/* A slow pulse rather than a spinner: nothing is loading, we are
             waiting on a person. A spinner would imply the page is stuck. */}
@@ -61,7 +61,7 @@ export function WaitingRoom({ title, startsAt }: WaitingRoomProps) {
         </div>
 
         <h2 className="text-lg font-semibold text-white">The webinar hasn&apos;t started yet</h2>
-        <p className="mt-2 text-sm text-slate-400">
+        <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
           {isStaff
             ? 'You are in the room. Start the session when you are ready.'
             : 'You are in the room. The host will begin shortly — no need to refresh.'}

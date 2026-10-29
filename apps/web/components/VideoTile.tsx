@@ -26,6 +26,7 @@ interface VideoTileProps {
    * layer so a 50-person grid does not download 50 × 720p streams.
    */
   layer?: 0 | 1 | 2;
+  handRaised?: boolean;
 }
 
 export function VideoTile({
@@ -43,6 +44,7 @@ export function VideoTile({
   isScreen = false,
   producerId,
   layer,
+  handRaised = false,
 }: VideoTileProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -117,7 +119,7 @@ export function VideoTile({
   return (
     <div
       ref={rootRef}
-      className={`group relative overflow-hidden rounded-2xl border bg-ink-900 transition-all duration-300 ${hasVideo ? 'border-sky-500/80 shadow-[0_0_0_1px_rgba(56,189,248,0.3)]' : speaking ? 'border-mint-400/60 shadow-[0_0_0_1px_rgba(61,220,151,0.4),0_0_40px_-10px_rgba(61,220,151,0.5)]' : 'border-white/10'} ${className}`}
+      className={`group relative overflow-hidden rounded-2xl border bg-white dark:bg-ink-900 shadow-sm transition-all duration-300 ${hasVideo ? 'border-sky-500/80 shadow-[0_0_0_1px_rgba(56,189,248,0.3)]' : speaking ? 'border-mint-500 dark:border-mint-400/60 shadow-[0_0_0_1px_rgba(34,197,94,0.4),0_0_40px_-10px_rgba(34,197,94,0.3)]' : 'border-slate-200 dark:border-white/10'} ${className}`}
     >
       {inView ? (
         <video
@@ -133,7 +135,7 @@ export function VideoTile({
       ) : (
         // Placeholder keeps the tile's box so the grid does not reflow when
         // the tile scrolls into view and the real video mounts.
-        <div className="h-full w-full bg-ink-950" aria-hidden />
+        <div className="h-full w-full bg-slate-100 dark:bg-ink-950" aria-hidden />
       )}
 
       {isScreen && hasVideo && (
@@ -147,25 +149,39 @@ export function VideoTile({
       )}
 
       {!hasVideo && (
-        <div className="absolute inset-0 z-10 grid place-items-center bg-gradient-to-br from-ink-800 to-ink-950 p-2">
+        <div className="absolute inset-0 z-10 grid place-items-center bg-white dark:bg-gradient-to-br dark:from-ink-800 dark:to-ink-950 p-2">
           <div className="flex flex-col items-center gap-1 sm:gap-2">
-            <div className="relative grid h-9 w-9 sm:h-14 sm:w-14 place-items-center rounded-full bg-gradient-to-br from-brand-500/40 to-brand-800/30 text-xs sm:text-lg font-bold text-white ring-1 ring-white/10">
+            <div className="relative grid h-9 w-9 sm:h-14 sm:w-14 place-items-center rounded-full bg-brand-50 border border-brand-200 dark:border-none dark:bg-gradient-to-br dark:from-brand-500/40 dark:to-brand-800/30 text-xs sm:text-lg font-bold text-brand-600 dark:text-white dark:ring-1 dark:ring-white/10 shadow-sm">
               {initials || '?'}
               {speaking && (
-                <span className="absolute inset-0 animate-pulse-ring rounded-full border-2 border-mint-400/60" />
+                <span className="absolute inset-0 animate-pulse-ring rounded-full border-2 border-mint-500 dark:border-mint-400/60" />
               )}
             </div>
-            <span className="text-[10px] sm:text-xs font-medium text-slate-400 truncate max-w-[85px] sm:max-w-none text-center">
+            <span className="text-[10px] sm:text-xs font-medium text-slate-500 dark:text-slate-400 truncate max-w-[85px] sm:max-w-none text-center">
               {isScreen ? 'Screen share ended' : paused ? 'Camera paused' : 'Camera off'}
             </span>
           </div>
         </div>
       )}
 
+      {/* Raised hand badge */}
+      {handRaised && (
+        <div className="pointer-events-none absolute right-2 top-2 z-20 flex items-center gap-1 rounded-full bg-amber-400 text-amber-950 font-bold px-2 py-0.5 shadow-md border border-amber-300 animate-bounce">
+          <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 fill-amber-900 stroke-amber-950" strokeWidth="1">
+            <path
+              d="M8 11V5.5a1.5 1.5 0 0 1 3 0V11m0 0V4.5a1.5 1.5 0 0 1 3 0V11m0 0V6.5a1.5 1.5 0 0 1 3 0V14a6 6 0 0 1-6 6h-1a6 6 0 0 1-6-6v-2.5a1.5 1.5 0 0 1 3 0V13"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+          <span className="text-[10px] tracking-wide font-extrabold">Hand Raised</span>
+        </div>
+      )}
+
       {/* name plate pill with mic status */}
-      <div className="pointer-events-none absolute bottom-1.5 left-1.5 z-20 flex max-w-[calc(100%-12px)] items-center gap-1 rounded-md bg-black/75 px-1.5 py-0.5 backdrop-blur-sm">
+      <div className="pointer-events-none absolute bottom-1.5 left-1.5 z-20 flex max-w-[calc(100%-12px)] items-center gap-1 rounded-md bg-white/95 dark:bg-black/75 border border-slate-200/80 dark:border-transparent px-1.5 py-0.5 shadow-sm backdrop-blur-sm">
         {!micOn ? (
-          <span className="shrink-0 text-red-400" title="Muted">
+          <span className="shrink-0 text-red-500 dark:text-red-400" title="Muted">
             <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2.2">
               <path d="M4 4l16 16" strokeLinecap="round" />
               <path d="M9 9v3a3 3 0 0 0 4.5 2.6M15 11V6a3 3 0 0 0-5.6-1.5" strokeLinecap="round" />
@@ -173,7 +189,7 @@ export function VideoTile({
           </span>
         ) : (
           <span
-            className={`shrink-0 ${speaking ? 'text-mint-400 animate-pulse' : 'text-slate-300'}`}
+            className={`shrink-0 ${speaking ? 'text-mint-600 dark:text-mint-400 animate-pulse' : 'text-slate-500 dark:text-slate-300'}`}
             title={speaking ? 'Speaking' : 'Microphone on'}
           >
             <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2.2">
@@ -182,9 +198,9 @@ export function VideoTile({
             </svg>
           </span>
         )}
-        <span className="truncate text-[10px] sm:text-xs font-semibold text-white drop-shadow">
+        <span className="truncate text-[10px] sm:text-xs font-semibold text-slate-800 dark:text-white drop-shadow-sm">
           {name}
-          {isLocal && <span className="ml-1 text-white/60">(you)</span>}
+          {isLocal && <span className="ml-1 text-slate-500 dark:text-white/60">(you)</span>}
         </span>
         {role && role !== 'PARTICIPANT' && (
           <span className="shrink-0 rounded bg-brand-500/90 px-1 py-0.2 text-[8px] font-bold uppercase tracking-wide text-white">

@@ -38,7 +38,7 @@ export function PollsPanel({ socket }: PollsPanelProps) {
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
-        <h3 className="text-sm font-semibold text-white">Polls</h3>
+        <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Polls</h3>
         {poll && (
           <span className="chip py-0.5 text-[10px]">
             {total} {total === 1 ? 'vote' : 'votes'}
@@ -67,7 +67,7 @@ export function PollsPanel({ socket }: PollsPanelProps) {
                   {closed ? 'Closed' : 'Live'}
                 </span>
               </div>
-              <p className="text-sm font-medium leading-snug text-white">{poll.question}</p>
+              <p className="text-sm font-semibold leading-snug text-slate-900 dark:text-white">{poll.question}</p>
             </div>
 
             <div className="space-y-2">
@@ -99,7 +99,7 @@ export function PollsPanel({ socket }: PollsPanelProps) {
                     >
                       {opt.id.toUpperCase()}
                     </span>
-                    <span className="relative flex-1 text-[13px] text-slate-200">{opt.text}</span>
+                    <span className="relative flex-1 text-[13px] font-medium text-slate-800 dark:text-slate-200">{opt.text}</span>
                     <span className="relative text-[10px] tabular-nums text-slate-400">
                       {total > 0 ? `${Math.round(width)}%` : ''}
                     </span>
