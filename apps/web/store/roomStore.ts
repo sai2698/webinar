@@ -34,6 +34,9 @@ interface RoomState {
   name: string | null;
   role: Role | null;
   isApprovedSpeaker: boolean;
+  canPublishAudio: boolean;
+  canPublishVideo: boolean;
+  canShareScreen: boolean;
   /** Webinar being attended — needed by the host panel to load quizzes/CTAs. */
   webinarId: string | null;
   /** The webinar's title, shown on the waiting screen and in the header. */
@@ -116,6 +119,8 @@ interface RoomState {
    * webinar is a broadcast. Staff are mutually visible either way.
    */
   showParticipantsToEachOther: boolean;
+  allowMic: boolean;
+  allowVideo: boolean;
   activeQuiz: PublicQuiz | null;
   quizResults: QuizResults | null;
   activePoll: PublicPoll | null;
@@ -169,6 +174,9 @@ const initial = {
   name: null,
   role: null,
   isApprovedSpeaker: false,
+  canPublishAudio: false,
+  canPublishVideo: false,
+  canShareScreen: false,
   webinarId: null,
   title: null,
   connected: false,
@@ -200,6 +208,8 @@ const initial = {
   showQaTab: false,
   showPollsTab: false,
   showParticipantsToEachOther: false,
+  allowMic: false,
+  allowVideo: false,
   activeQuiz: null,
   quizResults: null,
   activePoll: null,
@@ -223,9 +233,9 @@ export const useRoomStore = create<RoomState>((set) => ({
   upsertPeer: (peer) =>
     set((s) =>
       // A peerUpdated for our own peerId is our own state coming back to us.
-      // Keep `self` in step so the roster row for "you" stays honest.
+      // Keep `self` and `role` in step so the roster row and powers stay honest.
       peer.peerId === s.peerId
-        ? { self: peer }
+        ? { self: peer, role: peer.role, canShareScreen: Boolean(peer.canShareScreen) }
         : { peers: { ...s.peers, [peer.peerId]: peer } }
     ),
 

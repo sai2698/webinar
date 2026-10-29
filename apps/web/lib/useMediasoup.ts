@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import * as mediasoupClient from 'mediasoup-client';
 import type { types as MediasoupTypes } from 'mediasoup-client';
-import type { RoomSnapshot, MediaSource } from '@webinar/shared';
+import { isStaff, type RoomSnapshot, type MediaSource } from '@webinar/shared';
 import { useRoomStore } from '@/store/roomStore';
 import { getSocket, type AppSocket } from './socket';
 import { API_URL } from './api';
@@ -100,6 +100,7 @@ export function useMediasoup({ slug, token, onJoined, onError }: UseMediasoupOpt
   const rejoinRef = useRef<(() => Promise<void>) | null>(null);
   /** Set after `toggleMic` is defined so the forceMute listener can reach it. */
   const toggleMicRef = useRef<((force?: boolean) => Promise<void>) | null>(null);
+  const toggleCamRef = useRef<((force?: boolean | unknown) => Promise<void>) | null>(null);
 
   /* ── media effects ─────────────────────────────────────── */
   /**
@@ -277,10 +278,15 @@ export function useMediasoup({ slug, token, onJoined, onError }: UseMediasoupOpt
             showPollsTab: snapshot.settings?.showPollsTab ?? false,
             showParticipantsToEachOther:
               snapshot.settings?.showParticipantsToEachOther ?? false,
+            allowMic: snapshot.settings?.allowMic ?? false,
+            allowVideo: snapshot.settings?.allowVideo ?? false,
             activeQuiz: snapshot.activeQuiz,
             activePoll: snapshot.activePoll,
             activeCta: snapshot.activeCta,
             isApprovedSpeaker: snapshot.self.isApprovedSpeaker,
+            canPublishAudio: Boolean(snapshot.self.canPublishAudio),
+            canPublishVideo: Boolean(snapshot.self.canPublishVideo),
+            canShareScreen: Boolean(snapshot.self.canShareScreen),
             startedAt: snapshot.startedAt,
           });
 
@@ -516,6 +522,33 @@ export function useMediasoup({ slug, token, onJoined, onError }: UseMediasoupOpt
     socket.on('chatDeleted', ({ id }) => store.getState().removeMessage(id));
     socket.on('handList', (hands) => store.getState().set({ hands }));
     socket.on('viewerCount', (count) => store.getState().set({ viewerCount: count }));
+    socket.on('roomSettingsUpdated', ({ settings, showParticipantsToEachOther, allowMic, allowVideo }) => {
+      const enabled = Boolean(showParticipantsToEachOther ?? settings?.showParticipantsToEachOther);
+      const nextAllowMic = allowMic !== undefined ? allowMic : Boolean(settings?.allowMic);
+      const nextAllowVideo = allowVideo !== undefined ? allowVideo : Boolean(settings?.allowVideo);
+      store.getState().set({
+        showParticipantsToEachOther: enabled,
+        allowMic: nextAllowMic,
+        allowVideo: nextAllowVideo,
+      });
+    });
+
+    socket.on('roleChanged', ({ role }) => {
+      const staff = isStaff(role);
+      store.getState().set({
+        role,
+        ...(staff ? { canPublishAudio: true, canPublishVideo: true } : {}),
+      });
+      if (store.getState().self) {
+        store.getState().set({
+          self: {
+            ...store.getState().self!,
+            role,
+            ...(staff ? { canPublishAudio: true, canPublishVideo: true } : {}),
+          },
+        });
+      }
+    });
 
     // The host opened the session. Everyone waiting drops straight in — the
     // socket is already connected, so there is nothing to re-join.
@@ -528,12 +561,22 @@ export function useMediasoup({ slug, token, onJoined, onError }: UseMediasoupOpt
     );
 
     socket.on('handApproved', ({ canPublishAudio, canPublishVideo }) => {
-      store.getState().set({ isApprovedSpeaker: true });
+      store.getState().set({
+        isApprovedSpeaker: true,
+        canPublishAudio: Boolean(canPublishAudio),
+        canPublishVideo: Boolean(canPublishVideo),
+      });
       void startPublishing(canPublishAudio, canPublishVideo);
     });
 
     socket.on('handRevoked', () => {
-      store.getState().set({ isApprovedSpeaker: false, micOn: false, camOn: false });
+      store.getState().set({
+        isApprovedSpeaker: false,
+        canPublishAudio: false,
+        canPublishVideo: false,
+        micOn: false,
+        camOn: false,
+      });
       void stopScreenShare();
       for (const producer of producersRef.current.values()) producer.close();
       producersRef.current.clear();
@@ -570,11 +613,47 @@ export function useMediasoup({ slug, token, onJoined, onError }: UseMediasoupOpt
       void toggleMicRef.current?.(false);
     });
 
+    socket.on('forceStopVideo', () => {
+      const state = store.getState();
+      const local = state.localStream;
+      if (local) {
+        local.getVideoTracks().forEach((track) => {
+          track.stop();
+          local.removeTrack(track);
+        });
+      }
+      if (rawCameraTrackRef.current) {
+        rawCameraTrackRef.current.stop();
+        rawCameraTrackRef.current = null;
+      }
+      for (const [id, producer] of [...producersRef.current.entries()]) {
+        if (producer.kind === 'video' && producer.appData?.source !== 'screen') {
+          producer.close();
+          producersRef.current.delete(id);
+        }
+      }
+      store.getState().set({ camOn: false, canPublishVideo: false });
+    });
+
     // A host is asking this peer to turn something on. Nothing is enabled
     // automatically — the prompt is the consent step, and the participant
     // decides. `mediaRequestRef` is set below once the toggles exist.
     socket.on('mediaRequested', ({ kind, by }) => {
-      store.getState().set({ mediaRequest: { kind, by } });
+      store.getState().set({
+        mediaRequest: { kind, by },
+        ...(kind === 'mic' ? { canPublishAudio: true } : { canPublishVideo: true }),
+      });
+    });
+
+    socket.on('mediaPermissionUpdated', ({ canPublishAudio, canPublishVideo, canShareScreen }) => {
+      store.getState().set({
+        canPublishAudio,
+        canPublishVideo,
+        ...(canShareScreen !== undefined ? { canShareScreen } : {}),
+      });
+      if (canShareScreen === false && store.getState().screenSharing) {
+        void stopScreenShare();
+      }
     });
 
     socket.on('ctaShown', (cta) => store.getState().set({ activeCta: cta }));
@@ -1102,6 +1181,17 @@ export function useMediasoup({ slug, token, onJoined, onError }: UseMediasoupOpt
   const toggleMic = useCallback(async (force?: boolean | unknown) => {
     const forced = typeof force === 'boolean' ? force : undefined;
     const state = store.getState();
+    const isStaff = state.role === 'HOST' || state.role === 'ADMIN' || state.role === 'MODERATOR';
+    const canUseAudio =
+      isStaff ||
+      state.isApprovedSpeaker ||
+      Boolean(state.canPublishAudio) ||
+      state.showParticipantsToEachOther ||
+      state.allowMic;
+    if (forced !== false && !canUseAudio) {
+      onError?.('Microphone is locked by the host');
+      return;
+    }
     const local = state.localStream;
 
     if (!local) {
@@ -1150,6 +1240,17 @@ export function useMediasoup({ slug, token, onJoined, onError }: UseMediasoupOpt
   const toggleCam = useCallback(async (force?: boolean | unknown) => {
     const forced = typeof force === 'boolean' ? force : undefined;
     const state = store.getState();
+    const isStaff = state.role === 'HOST' || state.role === 'ADMIN' || state.role === 'MODERATOR';
+    const canUseVideo =
+      isStaff ||
+      state.isApprovedSpeaker ||
+      Boolean(state.canPublishVideo) ||
+      state.showParticipantsToEachOther ||
+      state.allowVideo;
+    if (forced !== false && !canUseVideo) {
+      onError?.('Camera is locked by the host');
+      return;
+    }
     const local = state.localStream;
 
     if (!local) {
@@ -1195,6 +1296,8 @@ export function useMediasoup({ slug, token, onJoined, onError }: UseMediasoupOpt
       onError?.('Camera unavailable');
     }
   }, [loadPreferences, publishTrack, setBackground, startPublishing, store, onError]);
+
+  toggleCamRef.current = toggleCam;
 
   /**
    * Publish this peer's mic/camera state to the room.

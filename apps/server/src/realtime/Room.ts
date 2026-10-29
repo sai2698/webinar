@@ -260,6 +260,12 @@ export class Room {
   announceProducer(owner: Peer, producerId: string, kind: 'audio' | 'video') {
     const source = owner.sourceOf(producerId, kind);
     const policy = this.visibilityPolicy();
+
+    // If screen share begins, ensure the peer is visible to all viewers who can now see them
+    if (source === 'screen') {
+      this.broadcastPeerToVisible(owner, 'peerUpdated', { includeSelf: true });
+    }
+
     for (const viewer of this.peers.values()) {
       if (viewer.peerId === owner.peerId) continue;
       if (
@@ -268,6 +274,10 @@ export class Room {
           {
             role: owner.role,
             isApprovedSpeaker: owner.isApprovedSpeaker,
+            canPublishAudio: owner.canPublishAudio,
+            canPublishVideo: owner.canPublishVideo,
+            canShareScreen: owner.canShareScreen,
+            hasScreenShare: owner.hasScreenShare,
             kind,
             source,
           },
@@ -313,6 +323,10 @@ export class Room {
           {
             role: owner.role,
             isApprovedSpeaker: owner.isApprovedSpeaker,
+            canPublishAudio: owner.canPublishAudio,
+            canPublishVideo: owner.canPublishVideo,
+            canShareScreen: owner.canShareScreen,
+            hasScreenShare: owner.hasScreenShare,
             kind,
             source,
           },
@@ -356,6 +370,14 @@ export class Room {
   applyVisibilityChange() {
     const policy = this.visibilityPolicy();
 
+    // Broadcast room settings update so all clients update showParticipantsToEachOther in real-time
+    this.io.to(this.roomName()).emit('roomSettingsUpdated', {
+      settings: this.settings,
+      showParticipantsToEachOther: this.settings.showParticipantsToEachOther === true,
+      allowMic: this.settings.allowMic === true,
+      allowVideo: this.settings.allowVideo === true,
+    });
+
     for (const viewer of this.peers.values()) {
       for (const owner of this.peers.values()) {
         if (owner.peerId === viewer.peerId) continue;
@@ -377,6 +399,10 @@ export class Room {
             {
               role: owner.role,
               isApprovedSpeaker: owner.isApprovedSpeaker,
+              canPublishAudio: owner.canPublishAudio,
+              canPublishVideo: owner.canPublishVideo,
+              canShareScreen: owner.canShareScreen,
+              hasScreenShare: owner.hasScreenShare,
               kind,
               source,
             },
@@ -1253,6 +1279,17 @@ export class Room {
   requestMedia(userId: string, kind: 'mic' | 'cam', byName: string): string {
     const target = this.getPeerByUserId(userId);
     if (!target) throw new Error('That participant has left');
+    // Participant stays an audience member - do not promote to speaker!
+    if (kind === 'mic') {
+      target.canPublishAudio = true;
+    } else if (kind === 'cam') {
+      target.canPublishVideo = true;
+    }
+    this.broadcastPeerUpdated(target);
+    this.io.to(target.socketId).emit('mediaPermissionUpdated', {
+      canPublishAudio: Boolean(target.canPublishAudio),
+      canPublishVideo: Boolean(target.canPublishVideo),
+    });
     this.io.to(target.socketId).emit('mediaRequested', { kind, by: byName });
     return target.name;
   }

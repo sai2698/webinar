@@ -98,12 +98,30 @@ export function ControlsBar({
   const camOn = useRoomStore((s) => s.camOn);
   const screenSharing = useRoomStore((s) => s.screenSharing);
   const isApprovedSpeaker = useRoomStore((s) => s.isApprovedSpeaker);
+  const canPublishAudio = useRoomStore((s) => s.canPublishAudio);
+  const canPublishVideo = useRoomStore((s) => s.canPublishVideo);
   const role = useRoomStore((s) => s.role);
   const hands = useRoomStore((s) => s.hands);
   const backgroundMode = useRoomStore((s) => s.backgroundMode);
+  const showParticipantsToEachOther = useRoomStore((s) => s.showParticipantsToEachOther);
+  const allowMic = useRoomStore((s) => s.allowMic);
+  const allowVideo = useRoomStore((s) => s.allowVideo);
+  const canShareScreen = useRoomStore((s) => s.canShareScreen);
 
   const isStaff = role === 'HOST' || role === 'ADMIN' || role === 'MODERATOR';
-  const canUseMedia = isStaff || isApprovedSpeaker || Boolean(canPublish);
+  const canUseAudio =
+    isStaff ||
+    isApprovedSpeaker ||
+    Boolean(canPublishAudio) ||
+    showParticipantsToEachOther ||
+    allowMic;
+  const canUseVideo =
+    isStaff ||
+    isApprovedSpeaker ||
+    Boolean(canPublishVideo) ||
+    showParticipantsToEachOther ||
+    allowVideo;
+  const canUseMedia = canUseAudio || canUseVideo;
   const canConfigureMedia =
     canUseMedia &&
     Boolean(
@@ -167,7 +185,8 @@ export function ControlsBar({
         active={micOn}
         danger={!micOn}
         onClick={() => onToggleMic?.()}
-        disabled={!canUseMedia}
+        disabled={!canUseAudio}
+
       >
         {micOn ? (
           <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
@@ -188,7 +207,8 @@ export function ControlsBar({
         active={camOn}
         danger={!camOn}
         onClick={() => onToggleCam?.()}
-        disabled={!canUseMedia}
+        disabled={!canUseVideo}
+
       >
         {camOn ? (
           <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
@@ -204,7 +224,7 @@ export function ControlsBar({
         )}
       </IconButton>
 
-      {canUseMedia && (
+      {(isStaff || isApprovedSpeaker || canShareScreen) && (
         <IconButton compact={compact}
           label={screenSharing ? 'Stop sharing' : 'Share screen'}
           active={screenSharing}

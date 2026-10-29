@@ -58,7 +58,24 @@ export function ChatPanel({
   const camOn = useRoomStore((s) => s.camOn);
   const screenSharing = useRoomStore((s) => s.screenSharing);
   const isApprovedSpeaker = useRoomStore((s) => s.isApprovedSpeaker);
-  const canUseMedia = isStaffRole || isApprovedSpeaker || Boolean(canPublish);
+  const canPublishAudio = useRoomStore((s) => s.canPublishAudio);
+  const canPublishVideo = useRoomStore((s) => s.canPublishVideo);
+  const showParticipantsToEachOther = useRoomStore((s) => s.showParticipantsToEachOther);
+  const allowMic = useRoomStore((s) => s.allowMic);
+  const allowVideo = useRoomStore((s) => s.allowVideo);
+  const canShareScreen = useRoomStore((s) => s.canShareScreen);
+  const canUseAudio =
+    isStaffRole ||
+    isApprovedSpeaker ||
+    Boolean(canPublishAudio) ||
+    showParticipantsToEachOther ||
+    allowMic;
+  const canUseVideo =
+    isStaffRole ||
+    isApprovedSpeaker ||
+    Boolean(canPublishVideo) ||
+    showParticipantsToEachOther ||
+    allowVideo;
 
   const handRaised = useMemo(
     () => Boolean(selfUserId && hands.some((h) => h.userId === selfUserId)),
@@ -255,7 +272,7 @@ export function ChatPanel({
           </div>
 
           <div className="grid grid-cols-3 gap-2">
-            {canUseMedia && onToggleMic && (
+            {canUseAudio && onToggleMic && (
               <ActionTile
                 label={micOn ? 'Mute' : 'Unmute'}
                 icon={micOn ? '🎙️' : '🔇'}
@@ -263,7 +280,7 @@ export function ChatPanel({
                 onClick={() => onToggleMic?.()}
               />
             )}
-            {canUseMedia && onToggleCam && (
+            {canUseVideo && onToggleCam && (
               <ActionTile
                 label={camOn ? 'Stop Video' : 'Start Video'}
                 icon={camOn ? '📹' : '🚫'}
@@ -271,7 +288,7 @@ export function ChatPanel({
                 onClick={() => onToggleCam?.()}
               />
             )}
-            {canUseMedia && onShareScreen && (
+            {(isStaffRole || isApprovedSpeaker || canShareScreen) && onShareScreen && (
               <ActionTile
                 label={screenSharing ? 'Stop Share' : 'Share Screen'}
                 icon="🖥️"

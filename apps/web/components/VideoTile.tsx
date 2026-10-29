@@ -56,10 +56,15 @@ export function VideoTile({
   // request, no decoded frames. In a large grid this is the difference
   // between downloading four streams and downloading forty.
   const inView = useInView(rootRef);
+  const hasVideo = Boolean(stream && stream.getVideoTracks().length > 0) && (isScreen || camOn) && !paused;
 
   useEffect(() => {
     const el = videoRef.current;
     if (!el) return;
+    if (!hasVideo) {
+      if (el.srcObject) el.srcObject = null;
+      return;
+    }
     if (el.srcObject !== stream) {
       el.srcObject = stream;
     }
@@ -68,7 +73,7 @@ export function VideoTile({
         /* autoplay may be blocked until user gesture */
       });
     }
-  }, [stream, inView]);
+  }, [stream, inView, hasVideo]);
 
   /* ── simulcast layer selection ─────────────────────────── */
   useEffect(() => {
@@ -87,8 +92,6 @@ export function VideoTile({
     // adapt to bandwidth again for whoever renders it next.
     return () => preferAutoLayer(producerId);
   }, [producerId, layer, isLocal, isScreen, inView]);
-
-  const hasVideo = Boolean(stream && stream.getVideoTracks().length > 0) && camOn && !paused;
   // A screen share is always letterboxed so nothing gets cropped away, and it
   // is never mirrored — text would read backwards.
   const fit = isScreen ? 'contain' : isLocal ? preferredFit : objectFit;
@@ -144,7 +147,7 @@ export function VideoTile({
       )}
 
       {!hasVideo && (
-        <div className="absolute inset-0 grid place-items-center bg-gradient-to-br from-ink-800 to-ink-950 p-2">
+        <div className="absolute inset-0 z-10 grid place-items-center bg-gradient-to-br from-ink-800 to-ink-950 p-2">
           <div className="flex flex-col items-center gap-1 sm:gap-2">
             <div className="relative grid h-9 w-9 sm:h-14 sm:w-14 place-items-center rounded-full bg-gradient-to-br from-brand-500/40 to-brand-800/30 text-xs sm:text-lg font-bold text-white ring-1 ring-white/10">
               {initials || '?'}
@@ -160,7 +163,7 @@ export function VideoTile({
       )}
 
       {/* name plate pill with mic status */}
-      <div className="pointer-events-none absolute bottom-1.5 left-1.5 z-10 flex max-w-[calc(100%-12px)] items-center gap-1 rounded-md bg-black/75 px-1.5 py-0.5 backdrop-blur-sm">
+      <div className="pointer-events-none absolute bottom-1.5 left-1.5 z-20 flex max-w-[calc(100%-12px)] items-center gap-1 rounded-md bg-black/75 px-1.5 py-0.5 backdrop-blur-sm">
         {!micOn ? (
           <span className="shrink-0 text-red-400" title="Muted">
             <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2.2">

@@ -38,7 +38,19 @@ export class Peer implements VisibilitySubject {
   role: Role;
 
   isApprovedSpeaker = false;
+  canPublishAudio = false;
+  canPublishVideo = false;
+  canShareScreen = false;
   handRaisedAt: number | null = null;
+
+  get hasScreenShare(): boolean {
+    for (const [id, producer] of this.producers) {
+      if (producer.kind === 'video' && this.sourceOf(id, 'video') === 'screen') {
+        return true;
+      }
+    }
+    return false;
+  }
 
   /**
    * Co-host permissions, or `null` when this peer is not a co-host.
@@ -124,11 +136,13 @@ export class Peer implements VisibilitySubject {
     }
 
     // Server-side publish authorisation — never trust the client.
-    if (!canPublish(this, settings, kind)) {
+    if (!canPublish(this, settings, kind, source)) {
       throw new Error(
         kind === 'audio'
           ? 'You are not allowed to publish audio right now'
-          : 'You are not allowed to publish video right now'
+          : source === 'screen'
+            ? 'You are not allowed to share screen right now'
+            : 'You are not allowed to publish video right now'
       );
     }
 
@@ -173,6 +187,10 @@ export class Peer implements VisibilitySubject {
         {
           role: owner.role,
           isApprovedSpeaker: owner.isApprovedSpeaker,
+          canPublishAudio: owner.canPublishAudio,
+          canPublishVideo: owner.canPublishVideo,
+          canShareScreen: owner.canShareScreen,
+          hasScreenShare: owner.hasScreenShare,
           kind,
           source,
         },
@@ -251,6 +269,9 @@ export class Peer implements VisibilitySubject {
       name: this.name,
       role: this.role,
       isApprovedSpeaker: this.isApprovedSpeaker,
+      canPublishAudio: this.canPublishAudio,
+      canPublishVideo: this.canPublishVideo,
+      canShareScreen: this.canShareScreen,
       producers: [...this.producers.values()].map((p) => ({
         producerId: p.id,
         kind: p.kind as 'audio' | 'video',

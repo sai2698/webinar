@@ -29,6 +29,10 @@ import type { Role, MediaSource } from '@webinar/shared';
 export interface VisibilitySubject {
   role: Role;
   isApprovedSpeaker: boolean;
+  canPublishAudio?: boolean;
+  canPublishVideo?: boolean;
+  canShareScreen?: boolean;
+  hasScreenShare?: boolean;
 }
 
 export interface VisibilityObject extends VisibilitySubject {
@@ -77,17 +81,17 @@ export function canConsume(
   // share would be a confusing half-measure.
   if (policy.participantsSeeEachOther) return true;
 
-  // A screen share is a presentation — it is meant to be seen by the room.
-  // Only approved speakers may publish one, so this stays tightly scoped.
+  // A screen share is a presentation — when someone shares their screen,
+  // it is meant to be visible to all participants in the room!
   if (producerOwner.kind === 'video' && producerOwner.source === 'screen') {
-    return producerOwner.isApprovedSpeaker;
+    return true;
   }
 
   // Participants never receive other participants' camera video.
   if (producerOwner.kind === 'video') return false;
 
   // Participants hear only the currently approved speaker's audio.
-  return producerOwner.isApprovedSpeaker;
+  return Boolean(producerOwner.isApprovedSpeaker || producerOwner.canPublishAudio);
 }
 
 /**
@@ -106,7 +110,7 @@ export function canSeePeer(
   if (isStaffRole(viewer.role)) return true;
   if (isStaffRole(target.role)) return true;
   if (policy.participantsSeeEachOther) return true;
-  return target.isApprovedSpeaker;
+  return Boolean(target.hasScreenShare || target.canShareScreen || target.isApprovedSpeaker);
 }
 
 /**
@@ -116,10 +120,17 @@ export function canSeePeer(
  */
 export function canPublish(
   peer: VisibilitySubject,
-  settings: { allowMic: boolean; allowVideo: boolean },
-  kind: 'audio' | 'video'
+  settings: { allowMic: boolean; allowVideo: boolean; showParticipantsToEachOther?: boolean },
+  kind: 'audio' | 'video',
+  source?: MediaSource
 ): boolean {
   if (isStaffRole(peer.role)) return true;
-  if (!peer.isApprovedSpeaker) return false;
+  if (source === 'screen') {
+    return Boolean(peer.isApprovedSpeaker || peer.canShareScreen);
+  }
+  if (settings.showParticipantsToEachOther) return true;
+  if (peer.isApprovedSpeaker) return true;
+  if (kind === 'audio' && peer.canPublishAudio) return true;
+  if (kind === 'video' && peer.canPublishVideo) return true;
   return kind === 'audio' ? settings.allowMic : settings.allowVideo;
 }

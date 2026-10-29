@@ -435,6 +435,12 @@ export function registerSocketHandlers(io: Server) {
           payload.source
         );
 
+        if (payload.kind === 'video' && payload.source !== 'screen') {
+          c.peer.camOn = true;
+        } else if (payload.kind === 'audio') {
+          c.peer.micOn = true;
+        }
+
         c.room.announceProducer(c.peer, producer.id, payload.kind);
         c.room.broadcastPeerUpdated(c.peer);
 
@@ -453,6 +459,15 @@ export function registerSocketHandlers(io: Server) {
       producer.close();
       c.peer.producers.delete(payload.producerId);
       c.peer.producerSources.delete(payload.producerId);
+
+      if (producer.kind === 'video') {
+        const hasOther = [...c.peer.producers.values()].some((p) => p.kind === 'video');
+        if (!hasOther) c.peer.camOn = false;
+      } else if (producer.kind === 'audio') {
+        const hasOther = [...c.peer.producers.values()].some((p) => p.kind === 'audio');
+        if (!hasOther) c.peer.micOn = false;
+      }
+
       c.room.announceProducerClosed(c.peer, payload.producerId);
       c.room.broadcastPeerUpdated(c.peer);
       ackOk(ack);
@@ -628,8 +643,8 @@ export function registerSocketHandlers(io: Server) {
       c.room.broadcastPeerUpdated(target);
 
       io.to(target.socketId).emit('handApproved', {
-        canPublishAudio: c.room.settings.allowMic,
-        canPublishVideo: c.room.settings.allowVideo,
+        canPublishAudio: true,
+        canPublishVideo: true,
       });
 
       c.room.pushSystemMessage(`${target.name} was invited to speak`);
@@ -645,6 +660,8 @@ export function registerSocketHandlers(io: Server) {
       if (!target) return ackErr(ack, 'Participant is not connected');
 
       target.isApprovedSpeaker = false;
+      target.canPublishAudio = false;
+      target.canPublishVideo = false;
       c.room.hands.delete(target.userId);
 
       // Close their producers — they may no longer publish.
@@ -823,6 +840,47 @@ export function registerSocketHandlers(io: Server) {
       ackOk(ack, { muted: c.room.muteAll() });
     });
 
+    socket.on('updateRoomSettings', async (payload, ack) => {
+      const c = requirePeer();
+      if (!c) return ackErr(ack, 'Not in a room');
+      const no = denied(c.peer, 'liveSettings');
+      if (no) return ackErr(ack, no);
+
+      const { showParticipantsToEachOther, allowMic, allowVideo } = payload ?? {};
+      const updateData: Record<string, boolean> = {};
+
+      if (typeof showParticipantsToEachOther === 'boolean') {
+        c.room.settings.showParticipantsToEachOther = showParticipantsToEachOther;
+        updateData.showParticipantsToEachOther = showParticipantsToEachOther;
+      }
+      if (typeof allowMic === 'boolean') {
+        c.room.settings.allowMic = allowMic;
+        updateData.allowMic = allowMic;
+      }
+      if (typeof allowVideo === 'boolean') {
+        c.room.settings.allowVideo = allowVideo;
+        updateData.allowVideo = allowVideo;
+      }
+
+      if (Object.keys(updateData).length > 0) {
+        try {
+          await prisma.webinar.update({
+            where: { id: c.room.webinarId },
+            data: updateData,
+          });
+        } catch (err) {
+          console.error('[socket] Failed to persist room settings:', err);
+        }
+        c.room.applyVisibilityChange();
+        return ackOk(ack, {
+          showParticipantsToEachOther: c.room.settings.showParticipantsToEachOther,
+          allowMic: c.room.settings.allowMic,
+          allowVideo: c.room.settings.allowVideo,
+        });
+      }
+      return ackErr(ack, 'Invalid settings payload');
+    });
+
     /* ── media state & requests ───────────────────────────── */
     socket.on('mediaState', (payload, ack) => {
       const c = requirePeer();
@@ -903,10 +961,46 @@ export function registerSocketHandlers(io: Server) {
       const target = c.room.getPeerByUserId(payload.userId);
       if (!target) return ackErr(ack, 'Participant is not connected');
 
+      target.micOn = false;
+      target.canPublishAudio = false;
       for (const producer of target.producers.values()) {
         if (producer.kind === 'audio') await producer.pause();
       }
-      io.to(target.socketId).emit('errorMessage', { message: 'A moderator muted you' });
+      io.to(target.socketId).emit('forceMute');
+      io.to(target.socketId).emit('mediaPermissionUpdated', {
+        canPublishAudio: false,
+        canPublishVideo: Boolean(target.canPublishVideo),
+      });
+      c.room.broadcastPeerUpdated(target);
+      ackOk(ack);
+    });
+
+    socket.on('modStopVideo', async (payload, ack) => {
+      const c = requirePeer();
+      if (!c) return ackErr(ack, 'Not in a room');
+      const no = denied(c.peer, 'usersControl');
+      if (no) return ackErr(ack, no);
+
+      const target = c.room.getPeerByUserId(payload.userId);
+      if (!target) return ackErr(ack, 'Participant is not connected');
+
+      target.camOn = false;
+      target.canPublishVideo = false;
+      for (const [id, producer] of [...target.producers.entries()]) {
+        const source = target.producerSources.get(id);
+        if (producer.kind === 'video' && source !== 'screen') {
+          producer.close();
+          target.producers.delete(id);
+          target.producerSources.delete(id);
+          c.room.announceProducerClosed(target, id);
+        }
+      }
+      io.to(target.socketId).emit('forceStopVideo');
+      io.to(target.socketId).emit('mediaPermissionUpdated', {
+        canPublishAudio: Boolean(target.canPublishAudio),
+        canPublishVideo: false,
+      });
+      c.room.broadcastPeerUpdated(target);
       ackOk(ack);
     });
 
@@ -922,6 +1016,123 @@ export function registerSocketHandlers(io: Server) {
       io.to(target.socketId).emit('kicked', { reason: 'You were removed by a moderator' });
       c.room.removePeer(target.peerId);
       ackOk(ack);
+    });
+
+    socket.on('modSetRole', async (payload, ack) => {
+      const c = requirePeer();
+      if (!c) return ackErr(ack, 'Not in a room');
+      if (!c.peer.isStaff) {
+        return ackErr(ack, 'Forbidden: only staff can change roles');
+      }
+      const { userId, peerId, role } = payload ?? {};
+      if ((!userId && !peerId) || (role !== 'MODERATOR' && role !== 'PARTICIPANT')) {
+        return ackErr(ack, 'Invalid role payload');
+      }
+      const target =
+        (userId ? c.room.getPeerByUserId(userId) : undefined) ||
+        (peerId ? c.room.peers.get(peerId) : undefined);
+      if (!target) return ackErr(ack, 'Participant is not connected');
+      if (target.role === 'HOST') return ackErr(ack, 'Cannot change host role');
+      if (target.peerId === c.peer.peerId) return ackErr(ack, 'Cannot change your own role');
+
+      target.role = role;
+      if (role === 'MODERATOR') {
+        target.canPublishAudio = true;
+        target.canPublishVideo = true;
+        if (!c.room.moderatorIds.includes(target.userId)) {
+          c.room.moderatorIds.push(target.userId);
+        }
+      } else {
+        c.room.moderatorIds = c.room.moderatorIds.filter((id) => id !== target.userId);
+      }
+
+      try {
+        if (role === 'MODERATOR') {
+          await prisma.webinarModerator.upsert({
+            where: { webinarId_userId: { webinarId: c.room.webinarId, userId: target.userId } },
+            create: { webinarId: c.room.webinarId, userId: target.userId },
+            update: {},
+          });
+          const u = await prisma.user.findUnique({
+            where: { id: target.userId },
+            select: { email: true, name: true },
+          });
+          if (u?.email) {
+            await prisma.webinarCohost.upsert({
+              where: { webinarId_email: { webinarId: c.room.webinarId, email: u.email } },
+              create: {
+                webinarId: c.room.webinarId,
+                userId: target.userId,
+                email: u.email,
+                name: u.name,
+                source: 'live',
+              },
+              update: { userId: target.userId },
+            });
+          }
+        } else {
+          await prisma.webinarModerator.deleteMany({
+            where: { webinarId: c.room.webinarId, userId: target.userId },
+          });
+          await prisma.webinarCohost.deleteMany({
+            where: { webinarId: c.room.webinarId, userId: target.userId },
+          });
+        }
+      } catch (err) {
+        console.error('[socket] Failed to update moderator in DB:', err);
+      }
+
+      io.to(target.socketId).emit('roleChanged', { role: target.role });
+      if (target.role === 'MODERATOR') {
+        io.to(target.socketId).emit('handList', c.room.getHandList());
+        io.to(target.socketId).emit('mediaPermissionUpdated', {
+          canPublishAudio: true,
+          canPublishVideo: true,
+        });
+      }
+      c.room.broadcastPeerUpdated(target);
+      c.room.applyVisibilityChange();
+      ackOk(ack, { role: target.role });
+    });
+
+    socket.on('modSetScreenShare', async (payload, ack) => {
+      const c = requirePeer();
+      if (!c) return ackErr(ack, 'Not in a room');
+      if (!c.peer.isStaff) {
+        return ackErr(ack, 'Forbidden: only staff can change permissions');
+      }
+      const { userId, peerId, enabled } = payload ?? {};
+      if (!userId && !peerId) {
+        return ackErr(ack, 'Missing participant identifier');
+      }
+      const target =
+        (userId ? c.room.getPeerByUserId(userId) : undefined) ||
+        (peerId ? c.room.peers.get(peerId) : undefined);
+      if (!target) return ackErr(ack, 'Participant is not connected');
+
+      target.canShareScreen = Boolean(enabled);
+
+      if (!target.canShareScreen) {
+        for (const [id, producer] of [...target.producers.entries()]) {
+          const source = target.producerSources.get(id);
+          if (producer.kind === 'video' && source === 'screen') {
+            producer.close();
+            target.producers.delete(id);
+            target.producerSources.delete(id);
+            c.room.announceProducerClosed(target, id);
+          }
+        }
+      }
+
+      io.to(target.socketId).emit('mediaPermissionUpdated', {
+        canPublishAudio: Boolean(target.canPublishAudio),
+        canPublishVideo: Boolean(target.canPublishVideo),
+        canShareScreen: target.canShareScreen,
+      });
+
+      c.room.broadcastPeerUpdated(target);
+      c.room.applyVisibilityChange();
+      ackOk(ack, { canShareScreen: target.canShareScreen });
     });
 
     /* ── snapshot ─────────────────────────────────────────── */

@@ -85,7 +85,21 @@ export default function RoomPage() {
       : tab;
 
   const isApprovedSpeaker = useRoomStore((s) => s.isApprovedSpeaker);
-  const canPublish = role !== 'PARTICIPANT' || isApprovedSpeaker;
+  const canPublishAudio = useRoomStore((s) => s.canPublishAudio);
+  const canPublishVideo = useRoomStore((s) => s.canPublishVideo);
+  const allowMic = useRoomStore((s) => s.allowMic);
+  const allowVideo = useRoomStore((s) => s.allowVideo);
+  const canShareScreen = useRoomStore((s) => s.canShareScreen);
+  const showParticipantsToEachOther = useRoomStore((s) => s.showParticipantsToEachOther);
+  const canPublish =
+    role !== 'PARTICIPANT' ||
+    isApprovedSpeaker ||
+    canPublishAudio ||
+    canPublishVideo ||
+    canShareScreen ||
+    showParticipantsToEachOther ||
+    allowMic ||
+    allowVideo;
 
   const waiting = !isStaff && startedAt === null;
   const notStarted = startedAt === null;
@@ -453,7 +467,7 @@ export default function RoomPage() {
       <MediaRequestPrompt
         onAccept={(kind) => {
           if (kind === 'mic') void toggleMic(true);
-          else void toggleCam();
+          else void toggleCam(true);
         }}
       />
 

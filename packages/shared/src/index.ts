@@ -601,6 +601,9 @@ export interface PeerInfo {
   micOn: boolean;
   /** Whether this peer's camera is currently live. */
   camOn: boolean;
+  canPublishAudio?: boolean;
+  canPublishVideo?: boolean;
+  canShareScreen?: boolean;
 }
 
 export interface RoomSnapshot {
@@ -842,7 +845,16 @@ export interface ClientToServerEvents {
   ) => void;
 
   modMute: (payload: { userId: string }, ack: (res: Ack) => void) => void;
+  modStopVideo: (payload: { userId: string }, ack: (res: Ack) => void) => void;
   modKick: (payload: { userId: string }, ack: (res: Ack) => void) => void;
+  modSetRole: (
+    payload: { userId: string; peerId?: string; role: 'MODERATOR' | 'PARTICIPANT' },
+    ack: (res: Ack<{ role: Role }>) => void
+  ) => void;
+  modSetScreenShare: (
+    payload: { userId: string; peerId?: string; enabled: boolean },
+    ack: (res: Ack<{ canShareScreen: boolean }>) => void
+  ) => void;
 
   /**
    * Host/admin only — opens the session.
@@ -862,6 +874,20 @@ export interface ClientToServerEvents {
   recordingStop: (ack: (res: Ack<{ recordingId: string; durationMs: number }>) => void) => void;
 
   requestSnapshot: (ack: (res: Ack<RoomSnapshot>) => void) => void;
+  updateRoomSettings: (
+    payload: {
+      showParticipantsToEachOther?: boolean;
+      allowMic?: boolean;
+      allowVideo?: boolean;
+    },
+    ack: (
+      res: Ack<{
+        showParticipantsToEachOther?: boolean;
+        allowMic?: boolean;
+        allowVideo?: boolean;
+      }>
+    ) => void
+  ) => void;
 }
 
 export interface ServerToClientEvents {
@@ -902,6 +928,12 @@ export interface ServerToClientEvents {
 
   /** Sent to a speaker when the host mutes the room — the client pauses its mic. */
   forceMute: () => void;
+  forceStopVideo: () => void;
+  mediaPermissionUpdated: (payload: {
+    canPublishAudio: boolean;
+    canPublishVideo: boolean;
+    canShareScreen?: boolean;
+  }) => void;
 
   /**
    * A host is asking this peer to turn their mic or camera on. The client shows
@@ -936,7 +968,14 @@ export interface ServerToClientEvents {
 
   /** Broadcast when the host starts or stops recording, so every client can
    *  show or hide the REC indicator. */
+  roleChanged: (payload: { role: Role }) => void;
   recordingState: (payload: { recording: boolean; startedAt?: number }) => void;
+  roomSettingsUpdated: (payload: {
+    settings: WebinarSettings;
+    showParticipantsToEachOther?: boolean;
+    allowMic?: boolean;
+    allowVideo?: boolean;
+  }) => void;
 }
 
 /* ── transport / consumer payloads ─────────────────────────── */
