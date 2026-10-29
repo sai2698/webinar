@@ -602,6 +602,9 @@ export class Room {
 
     if (this.activeQuiz?.timer) clearTimeout(this.activeQuiz.timer);
 
+    // Clear any old answers so only answers received after this launch are counted
+    await prisma.quizAnswer.deleteMany({ where: { quizId } }).catch(() => undefined);
+
     this.activeQuiz = {
       quiz,
       correctOptionId: row.correctOptionId,
@@ -639,7 +642,12 @@ export class Room {
     if (!active || active.quiz.id !== quizId) return null;
     if (active.timer) clearTimeout(active.timer);
 
-    const answers = await prisma.quizAnswer.findMany({ where: { quizId } });
+    const answers = await prisma.quizAnswer.findMany({
+      where: {
+        quizId,
+        createdAt: { gte: new Date(active.startedAt) },
+      },
+    });
 
     const distribution: Record<string, number> = {};
     for (const opt of active.quiz.options) distribution[opt.id] = 0;
@@ -714,6 +722,9 @@ export class Room {
     };
 
     if (this.activePoll?.timer) clearTimeout(this.activePoll.timer);
+
+    // Clear any old votes so only votes received after this launch are counted
+    await prisma.pollVote.deleteMany({ where: { pollId } }).catch(() => undefined);
 
     this.activePoll = {
       poll,
@@ -941,7 +952,7 @@ export class Room {
 
   /* ── CTA ─────────────────────────────────────────────────── */
 
-  async showCta(ctaId: string): Promise<CtaPayload> {
+  async showCta(ctaId: string, expand = false): Promise<CtaPayload> {
     const cta = await prisma.cta.findUnique({
       where: { id: ctaId },
       include: CTA_INCLUDE,
@@ -951,12 +962,20 @@ export class Room {
     const payload = serializeCta(cta as never, {
       clickCount: await countClicks(cta.id),
       clickedByMe: false,
+      expanded: expand,
     });
 
     this.activeCta = payload;
     this.io.to(this.roomName()).emit('ctaShown', payload);
     this.recorder?.record({ type: 'ctaShown', cta: payload });
     return payload;
+  }
+
+  expandCta(expand = true) {
+    if (!this.activeCta) return;
+    this.activeCta = { ...this.activeCta, expanded: expand };
+    this.io.to(this.roomName()).emit('ctaExpanded', { expanded: expand });
+    this.recorder?.record({ type: 'ctaShown', cta: this.activeCta });
   }
 
   hideCta() {

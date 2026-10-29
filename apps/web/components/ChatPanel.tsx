@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRoomStore } from '@/store/roomStore';
 import { useMediaDevices } from '@/lib/useRoomUi';
 import type { AppSocket } from '@/lib/socket';
+import { ChatCtaNotification } from './ChatCtaNotification';
 
 interface ChatPanelProps {
   socket: React.MutableRefObject<AppSocket | null>;
@@ -135,6 +136,9 @@ export function ChatPanel({
         <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Live chat</h3>
         <span className="chip py-0.5 text-[10px]">{messages.length}</span>
       </div>
+
+      {/* CTA notification at top of chat window for participants */}
+      <ChatCtaNotification />
 
       <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
         {messages.length === 0 && (

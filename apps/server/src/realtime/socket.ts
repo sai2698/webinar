@@ -343,6 +343,10 @@ export function registerSocketHandlers(io: Server) {
         // The snapshot is built synchronously, so the Q&A queue is sent right
         // after the ack — the client renders the room first, then fills in.
         void room.sendQuestionsTo(peer);
+        if (room.getActivePoll()) {
+          const pr = room.getPollResults();
+          if (pr) socket.emit('pollResults', pr);
+        }
 
         log.info(`${name} (${role}) joined ${webinar.slug}`);
       } catch (err) {
@@ -911,10 +915,23 @@ export function registerSocketHandlers(io: Server) {
       if (!c) return ackErr(ack, 'Not in a room');
       if (!c.peer.isStaff) return ackErr(ack, 'Not allowed');
       try {
-        await c.room.showCta(payload.ctaId);
+        await c.room.showCta(payload.ctaId, Boolean(payload.expand));
         ackOk(ack);
       } catch (err) {
         ackErr(ack, err instanceof Error ? err.message : 'Could not show offer');
+      }
+    });
+
+    socket.on('ctaExpand', async (payload, ack) => {
+      const c = requirePeer();
+      if (!c) return ackErr(ack, 'Not in a room');
+      if (!c.peer.isStaff) return ackErr(ack, 'Not allowed');
+      try {
+        const expand = payload?.expand !== undefined ? Boolean(payload.expand) : true;
+        c.room.expandCta(expand);
+        ackOk(ack);
+      } catch (err) {
+        ackErr(ack, err instanceof Error ? err.message : 'Could not update offer expansion');
       }
     });
 

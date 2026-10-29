@@ -172,25 +172,60 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
     if (open) void load();
   }, [open, load]);
 
-  const launch = (quizId: string) =>
+  const launch = (quizId: string) => {
+    useRoomStore.getState().set({ quizResults: null });
+    setQuizzes((prev) =>
+      prev.map((q) => (q.id === quizId ? { ...q, answerCount: 0 } : q))
+    );
     socket.current?.emit('quizLaunch', { quizId }, (res: { ok: boolean; error?: string }) => {
       if (!res?.ok) setError(res?.error ?? 'Could not launch quiz');
     });
+  };
 
   const close = (quizId: string) =>
     socket.current?.emit('quizClose', { quizId }, () => {});
 
-  const launchPoll = (pollId: string) =>
+  const launchPoll = (pollId: string) => {
+    useRoomStore.getState().set({ pollResults: null });
+    setPolls((prev) =>
+      prev.map((p) => (p.id === pollId ? { ...p, voteCount: 0 } : p))
+    );
     socket.current?.emit('pollLaunch', { pollId }, (res: { ok: boolean; error?: string }) => {
       if (!res?.ok) setError(res?.error ?? 'Could not launch poll');
     });
+  };
 
   const closePoll = (pollId: string) =>
     socket.current?.emit('pollClose', { pollId }, () => {});
 
-  const showCta = (ctaId: string) =>
-    socket.current?.emit('ctaShow', { ctaId }, (res: { ok: boolean; error?: string }) => {
+  useEffect(() => {
+    if (quizResults) {
+      setQuizzes((prev) =>
+        prev.map((q) =>
+          q.id === quizResults.quizId ? { ...q, answerCount: quizResults.totalAnswers } : q
+        )
+      );
+    }
+  }, [quizResults]);
+
+  useEffect(() => {
+    if (pollResults) {
+      setPolls((prev) =>
+        prev.map((p) =>
+          p.id === pollResults.pollId ? { ...p, voteCount: pollResults.totalVotes } : p
+        )
+      );
+    }
+  }, [pollResults]);
+
+  const showCta = (ctaId: string, expand = false) =>
+    socket.current?.emit('ctaShow', { ctaId, expand }, (res: { ok: boolean; error?: string }) => {
       if (!res?.ok) setError(res?.error ?? 'Could not show offer');
+    });
+
+  const expandCta = (expand = true) =>
+    socket.current?.emit('ctaExpand', { expand }, (res: { ok: boolean; error?: string }) => {
+      if (!res?.ok) setError(res?.error ?? 'Could not update offer expansion');
     });
 
   const hideCta = () => socket.current?.emit('ctaHide', () => {});
@@ -215,6 +250,7 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
   const [ctaButton, setCtaButton] = useState('Enroll Now');
   const [ctaPrice, setCtaPrice] = useState('');
   const [ctaUrl, setCtaUrl] = useState('');
+  const [autoExpandOffer, setAutoExpandOffer] = useState(false);
 
   /* ── pre-payment form builder ─────────────────────────────
    * The form is what turns a click into a lead. It is authored here, in the
@@ -446,6 +482,7 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
     setCtaButton('Enroll Now');
     setCtaPrice('');
     setCtaUrl('');
+    setAutoExpandOffer(false);
     resetFormDraft();
     setError(null);
   }, [tab]);
@@ -604,7 +641,7 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
       await load();
       setComposing(false);
       resetDraft();
-      if (res.cta?.id) showCta(res.cta.id);
+      if (res.cta?.id) showCta(res.cta.id, autoExpandOffer);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not save the offer');
     } finally {
@@ -1150,6 +1187,18 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
                     )}
                   </div>
 
+                  {!formOnly && !editingId && (
+                    <label className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300 cursor-pointer pt-1">
+                      <input
+                        type="checkbox"
+                        checked={autoExpandOffer}
+                        onChange={(e) => setAutoExpandOffer(e.target.checked)}
+                        className="h-3.5 w-3.5 rounded border-slate-300 dark:border-white/20 text-accent-500"
+                      />
+                      Expand offer automatically at participant end
+                    </label>
+                  )}
+
                   <button
                     onClick={formOnly ? saveForm : createOffer}
                     disabled={saving}
@@ -1182,7 +1231,13 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
                       >
                         <p className="text-xs font-semibold text-slate-900 dark:text-slate-200">{q.question}</p>
                         <p className="mt-1 text-[11px] text-slate-500">
-                          {q.options.length} options · {q.timeLimitSecs}s · {q.answerCount} answers
+                          {q.options.length} options · {q.timeLimitSecs}s ·{' '}
+                          {isLive
+                            ? 0
+                            : quizResults?.quizId === q.id
+                            ? quizResults.totalAnswers
+                            : q.answerCount}{' '}
+                          answers
                         </p>
                         <div className="mt-2.5 flex gap-2">
                           {isLive ? (
@@ -1217,17 +1272,29 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
 
                   {quizResults && (
                     <div className="mt-3 rounded-xl border border-brand-500/30 bg-brand-500/10 p-3">
-                      <p className="text-[11px] font-semibold text-brand-200">Last results</p>
-                      <p className="mt-1 text-[11px] text-slate-300">
+                      <div className="flex items-center justify-between">
+                        <p className="text-[11px] font-semibold text-brand-600 dark:text-brand-200">
+                          Results for “{quizResults.question}”
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => useRoomStore.getState().set({ quizResults: null })}
+                          className="text-[10px] text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                          title="Dismiss results"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                      <p className="mt-1 text-[11px] text-slate-700 dark:text-slate-300">
                         {quizResults.correctCount}/{quizResults.totalAnswers} correct
                       </p>
                       <ul className="mt-2 space-y-1">
                         {Object.entries(quizResults.distribution).map(([optId, count]) => (
-                          <li key={optId} className="flex items-center gap-2 text-[11px] text-slate-400">
+                          <li key={optId} className="flex items-center gap-2 text-[11px] text-slate-600 dark:text-slate-400">
                             <span className="w-4 font-mono text-slate-500">{optId}</span>
-                            <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/10">
+                            <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-200 dark:bg-white/10">
                               <span
-                                className="block h-full rounded-full bg-brand-400"
+                                className="block h-full rounded-full bg-brand-500"
                                 style={{
                                   width: `${
                                     quizResults.totalAnswers
@@ -1264,10 +1331,13 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
                         <p className="mt-1 text-[11px] text-slate-500">
                           {p.options.length} options ·{' '}
                           {p.timeLimitSecs > 0 ? `${p.timeLimitSecs}s` : 'open until closed'} ·{' '}
-                          {/* While the poll is live the stored count is stale —
-                              votes are only persisted per-vote, not re-counted
-                              into the list row. Prefer the live tally. */}
-                          {isLive && pollResults ? pollResults.totalVotes : p.voteCount}{' '}
+                          {isLive && pollResults
+                            ? pollResults.totalVotes
+                            : pollResults && pollResults.pollId === p.id
+                            ? pollResults.totalVotes
+                            : isLive
+                            ? 0
+                            : p.voteCount}{' '}
                           votes
                         </p>
                         <div className="mt-2.5 flex gap-2">
@@ -1303,10 +1373,20 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
 
                   {pollResults && (
                     <div className="mt-3 rounded-xl border border-accent-500/30 bg-accent-500/10 p-3">
-                      <p className="text-[11px] font-semibold text-accent-400">
-                        {pollResults.closed ? 'Final tally' : 'Live tally'}
-                      </p>
-                      <p className="mt-1 text-[11px] text-slate-300">
+                      <div className="flex items-center justify-between">
+                        <p className="text-[11px] font-semibold text-accent-600 dark:text-accent-400">
+                          {pollResults.closed ? 'Final tally' : 'Live tally'}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => useRoomStore.getState().set({ pollResults: null })}
+                          className="text-[10px] text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                          title="Dismiss results"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                      <p className="mt-1 text-[11px] text-slate-700 dark:text-slate-300">
                         {pollResults.totalVotes}{' '}
                         {pollResults.totalVotes === 1 ? 'vote' : 'votes'}
                       </p>
@@ -1316,12 +1396,12 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
                           return (
                             <li
                               key={opt.id}
-                              className="flex items-center gap-2 text-[11px] text-slate-400"
+                              className="flex items-center gap-2 text-[11px] text-slate-600 dark:text-slate-400"
                             >
                               <span className="w-4 font-mono text-slate-500">
                                 {opt.id.toUpperCase()}
                               </span>
-                              <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/10">
+                              <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-200 dark:bg-white/10">
                                 <span
                                   className="block h-full rounded-full bg-accent-500"
                                   style={{
@@ -1382,22 +1462,58 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
                           {c.formEnabled && (
                             <span className="text-slate-500">· form before payment</span>
                           )}
+                          {isLive && activeCta?.expanded && (
+                            <span className="ml-1 rounded-full bg-accent-500/20 px-1.5 py-0.5 text-[9px] font-bold text-accent-400 border border-accent-500/30">
+                              Expanded on audience screens
+                            </span>
+                          )}
                         </p>
                         <div className="mt-2.5 flex flex-wrap gap-2">
                           {isLive ? (
-                            <button
-                              onClick={hideCta}
-                              className="btn-ghost px-2.5 py-1 text-[11px]"
-                            >
-                              Hide offer
-                            </button>
+                            <>
+                              <button
+                                onClick={hideCta}
+                                className="btn-ghost px-2.5 py-1 text-[11px]"
+                              >
+                                Hide offer
+                              </button>
+                              <button
+                                onClick={() => expandCta(!activeCta?.expanded)}
+                                className={`px-2.5 py-1 text-[11px] font-semibold rounded-lg transition flex items-center gap-1.5 ${
+                                  activeCta?.expanded
+                                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 hover:bg-amber-500/30'
+                                    : 'btn-accent'
+                                }`}
+                              >
+                                <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2">
+                                  {activeCta?.expanded ? (
+                                    <path d="M4 14h6m0 0v6m0-6L3 21m17-7h-6m0 0v6m0-6l7 7M14 4h6m0 0v6m0-6l-7 7M4 10h6m0 0V4m0 6L3 3" strokeLinecap="round" strokeLinejoin="round" />
+                                  ) : (
+                                    <path d="M15 3h6m0 0v6m0-6L14 10M9 21H3m0 0v-6m0 6l7-7M3 9V3m0 0h6m-6 0l7 7m11 5v6m0 0h-6m6 0l-7-7" strokeLinecap="round" strokeLinejoin="round" />
+                                  )}
+                                </svg>
+                                {activeCta?.expanded ? 'Collapse on audience' : 'Expand at participant end'}
+                              </button>
+                            </>
                           ) : (
-                            <button
-                              onClick={() => showCta(c.id)}
-                              className="btn-primary px-2.5 py-1 text-[11px]"
-                            >
-                              Show to everyone
-                            </button>
+                            <>
+                              <button
+                                onClick={() => showCta(c.id, false)}
+                                className="btn-primary px-2.5 py-1 text-[11px]"
+                              >
+                                Show offer
+                              </button>
+                              <button
+                                onClick={() => showCta(c.id, true)}
+                                className="btn-accent px-2.5 py-1 text-[11px] flex items-center gap-1.5"
+                                title="Publish offer and automatically open it expanded for all participants"
+                              >
+                                <span>Show &amp; expand</span>
+                                <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2">
+                                  <path d="M15 3h6m0 0v6m0-6L14 10M9 21H3m0 0v-6m0 6l7-7M3 9V3m0 0h6m-6 0l7 7m11 5v6m0 0h-6m6 0l-7-7" strokeLinecap="round" strokeLinejoin="round" />
+                                </svg>
+                              </button>
+                            </>
                           )}
                           <button
                             onClick={() => setFollowUpFor(c.id)}

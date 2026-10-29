@@ -512,6 +512,8 @@ export interface CtaPayload {
   clickedByMe: boolean;
   /** Present only when the host configured a pre-payment form. */
   form: CtaForm | null;
+  /** When true, participant clients automatically open the offer in expanded full view. */
+  expanded?: boolean;
 }
 
 /**
@@ -829,7 +831,8 @@ export interface ClientToServerEvents {
     ack: (res: Ack) => void
   ) => void;
 
-  ctaShow: (payload: { ctaId: string }, ack: (res: Ack) => void) => void;
+  ctaShow: (payload: { ctaId: string; expand?: boolean }, ack: (res: Ack) => void) => void;
+  ctaExpand: (payload: { expand?: boolean }, ack: (res: Ack) => void) => void;
   ctaHide: (ack: (res: Ack) => void) => void;
 
   /**
@@ -943,6 +946,7 @@ export interface ServerToClientEvents {
 
   ctaShown: (cta: CtaPayload) => void;
   ctaHidden: () => void;
+  ctaExpanded: (payload: { expanded: boolean }) => void;
 
   /**
    * Staff only — the offer's click tally moved.

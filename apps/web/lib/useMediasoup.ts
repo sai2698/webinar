@@ -658,6 +658,12 @@ export function useMediasoup({ slug, token, onJoined, onError }: UseMediasoupOpt
 
     socket.on('ctaShown', (cta) => store.getState().set({ activeCta: cta }));
     socket.on('ctaHidden', () => store.getState().set({ activeCta: null }));
+    socket.on('ctaExpanded', ({ expanded }: { expanded: boolean }) => {
+      const current = store.getState().activeCta;
+      if (current) {
+        store.getState().set({ activeCta: { ...current, expanded } });
+      }
+    });
 
     // Staff only — the offer's click tally moved. Participants never receive
     // this, so the count stays a host-side signal rather than social proof.

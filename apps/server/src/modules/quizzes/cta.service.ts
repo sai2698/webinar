@@ -85,7 +85,7 @@ export function serializeForm(row: CtaRow): CtaForm | null {
  */
 export function serializeCta(
   row: CtaRow,
-  opts: { clickCount: number; clickedByMe: boolean }
+  opts: { clickCount: number; clickedByMe: boolean; expanded?: boolean }
 ): CtaPayload {
   return {
     id: row.id,
@@ -98,6 +98,7 @@ export function serializeCta(
     clickCount: opts.clickCount,
     clickedByMe: opts.clickedByMe,
     form: serializeForm(row),
+    expanded: opts.expanded ?? false,
   };
 }
 

@@ -6,7 +6,7 @@ import { endpoints } from '@/lib/api';
 import { currentSocket } from '@/lib/socket';
 import type { CtaFormField } from '@webinar/shared';
 
-function formatPrice(paise: number, currency: string) {
+export function formatPrice(paise: number, currency: string) {
   if (!paise) return 'Free';
   return new Intl.NumberFormat('en-IN', {
     style: 'currency',
@@ -360,7 +360,7 @@ function CtaFormInput({
   );
 }
 
-function loadRazorpay(): Promise<void> {
+export function loadRazorpay(): Promise<void> {
   return new Promise((resolve, reject) => {
     if (window.Razorpay) return resolve();
     const script = document.createElement('script');

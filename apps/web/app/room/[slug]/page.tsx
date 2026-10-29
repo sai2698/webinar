@@ -14,7 +14,6 @@ import { PollModal } from '@/components/PollModal';
 import { AudioRenderer } from '@/components/AudioRenderer';
 import { PollsPanel } from '@/components/PollsPanel';
 import { QaPanel } from '@/components/QaPanel';
-import { CtaOverlay } from '@/components/CtaOverlay';
 import { EnrollmentBanner } from '@/components/EnrollmentBanner';
 import { HostPanel } from '@/components/HostPanel';
 import { JoinGate } from '@/components/JoinGate';
@@ -75,8 +74,10 @@ export default function RoomPage() {
   const showQaTab = useRoomStore((s) => s.showQaTab);
   const showPollsTab = useRoomStore((s) => s.showPollsTab);
   const canSeePeople = isStaff || showPeopleTab;
-  const canSeeQa = isStaff || showQaTab;
-  const canSeePolls = isStaff || showPollsTab;
+  // In host/staff view, Q&A and Polls tabs are removed from the right sidebar.
+  // Attendees still see them when enabled by host settings.
+  const canSeeQa = !isStaff && showQaTab;
+  const canSeePolls = !isStaff && showPollsTab;
 
   const activeTab: Tab =
     (tab === 'people' && !canSeePeople) ||
@@ -348,7 +349,6 @@ export default function RoomPage() {
             )}
             <WatermarkOverlay />
             <EnrollmentBanner />
-            <CtaOverlay />
           </div>
 
           {/* Desktop Controls */}
