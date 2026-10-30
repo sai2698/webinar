@@ -118,23 +118,21 @@ preflight() {
   command -v npm >/dev/null 2>&1 || die "npm is not installed."
 
   command -v openssl >/dev/null 2>&1 \
-    || die "openssl is missing. Install it: apt-get install -y openssl"
+    || { info "Installing openssl..."; $SUDO apt-get update -qq && $SUDO apt-get install -y -qq openssl; }
 
-  # Used to render the nginx and coturn configs from their templates.
   command -v envsubst >/dev/null 2>&1 \
-    || die "envsubst is missing. Install gettext: apt-get install -y gettext-base"
+    || { info "Installing gettext-base..."; $SUDO apt-get update -qq && $SUDO apt-get install -y -qq gettext-base; }
+
+  command -v curl >/dev/null 2>&1 \
+    || { info "Installing curl..."; $SUDO apt-get update -qq && $SUDO apt-get install -y -qq curl; }
+
+  command -v tar >/dev/null 2>&1 \
+    || { info "Installing tar..."; $SUDO apt-get update -qq && $SUDO apt-get install -y -qq tar; }
 
   local cores
   cores="$(nproc 2>/dev/null || echo 1)"
   if [ "$cores" -lt 4 ]; then
     warn "Running on ${cores} CPU core(s). Configured for lightweight 1 vCPU mode."
-  fi
-
-  # mediasoup ships a prebuilt worker for common platforms; if it has to compile
-  # it needs a toolchain.
-  if ! command -v g++ >/dev/null 2>&1 || ! command -v python3 >/dev/null 2>&1; then
-    warn "g++ / python3 not found — installing build tools..."
-    $SUDO apt-get update -qq && $SUDO apt-get install -y -qq build-essential python3
   fi
 
   local mem
@@ -560,6 +558,9 @@ write_units() {
   api_port="$(env_get API_PORT 4000)"
   web_port="$(env_get WEB_PORT 3000)"
 
+  local ms_worker="$SCRIPT_DIR/node_modules/mediasoup/worker/out/Release/mediasoup-worker"
+  [ -f "$ms_worker" ] || ms_worker="$SCRIPT_DIR/apps/server/node_modules/mediasoup/worker/out/Release/mediasoup-worker"
+
   info "Writing systemd units…"
 
   $SUDO tee "/etc/systemd/system/${API_SERVICE}.service" >/dev/null <<EOF
@@ -576,6 +577,7 @@ WorkingDirectory=${SCRIPT_DIR}
 EnvironmentFile=${ENV_FILE}
 Environment=NODE_ENV=production
 Environment=PORT=${api_port}
+Environment=MEDIASOUP_WORKER_BIN=${ms_worker}
 ExecStart=${SCRIPT_DIR}/node_modules/.bin/tsx apps/server/src/index.ts
 Restart=always
 RestartSec=3
@@ -621,6 +623,94 @@ EOF
   ok "systemd units written and reloaded"
 }
 
+# ── mediasoup prebuilt binary fetcher ─────────────────────────
+ensure_mediasoup_worker() {
+  info "Checking mediasoup-worker native binary…"
+
+  local ms_dirs=(
+    "$SCRIPT_DIR/node_modules/mediasoup"
+    "$SCRIPT_DIR/apps/server/node_modules/mediasoup"
+  )
+
+  local found_dir=""
+  for d in "${ms_dirs[@]}"; do
+    if [ -d "$d" ]; then
+      found_dir="$d"
+      break
+    fi
+  done
+
+  if [ -z "$found_dir" ]; then
+    warn "mediasoup directory not found in node_modules"
+    return 0
+  fi
+
+  local bin_path="$found_dir/worker/out/Release/mediasoup-worker"
+  if [ -x "$bin_path" ]; then
+    ok "mediasoup-worker binary present: $bin_path"
+    export MEDIASOUP_WORKER_BIN="$bin_path"
+    return 0
+  fi
+
+  local os_type arch kernel_ver
+  os_type="$(uname -s | tr '[:upper:]' '[:lower:]')"
+  arch="$(uname -m)"
+  case "$arch" in
+    x86_64) arch="x64" ;;
+    aarch64|arm64) arch="arm64" ;;
+  esac
+  kernel_ver="$(uname -r | cut -d. -f1)"
+
+  local ms_version="3.15.5"
+  if [ -f "$found_dir/package.json" ]; then
+    local v
+    v="$(node -e "try { console.log(JSON.parse(require('fs').readFileSync('$found_dir/package.json','utf8')).version); } catch(e){}" 2>/dev/null || true)"
+    [ -n "$v" ] && ms_version="$v"
+  fi
+
+  info "Fetching official prebuilt mediasoup-worker (v${ms_version}, Linux kernel ${kernel_ver}, ${arch})…"
+  mkdir -p "$found_dir/worker/out/Release"
+
+  local kernels=("$kernel_ver" 6 5)
+  local versions=("$ms_version" "3.15.5")
+  local installed=0
+
+  for ver in "${versions[@]}"; do
+    for k in "${kernels[@]}"; do
+      local tar_name="mediasoup-worker-${ver}-${os_type}-${arch}-kernel${k}.tgz"
+      local url="https://github.com/versatica/mediasoup/releases/download/${ver}/${tar_name}"
+      local tmp_tar
+      tmp_tar="$(mktemp)"
+      if curl -sSL -f --retry 2 -o "$tmp_tar" "$url" 2>/dev/null && [ -s "$tmp_tar" ]; then
+        tar -xzf "$tmp_tar" -C "$found_dir/worker/out/Release" 2>/dev/null || true
+        rm -f "$tmp_tar"
+        if [ -f "$bin_path" ]; then
+          chmod 755 "$bin_path"
+          ok "Prebuilt mediasoup-worker installed ($ver, kernel $k)"
+          installed=1
+          break 2
+        fi
+      fi
+      rm -f "$tmp_tar"
+    done
+  done
+
+  if [ "$installed" -eq 0 ] && [ ! -f "$bin_path" ]; then
+    warn "Could not fetch prebuilt worker binary automatically."
+    warn "The platform will start, but audio/video SFU requires mediasoup-worker."
+  else
+    # Sync binary to any other node_modules path
+    for d in "${ms_dirs[@]}"; do
+      if [ "$d" != "$found_dir" ] && [ -d "$d" ]; then
+        mkdir -p "$d/worker/out/Release"
+        cp -f "$bin_path" "$d/worker/out/Release/mediasoup-worker" 2>/dev/null || true
+        chmod 755 "$d/worker/out/Release/mediasoup-worker" 2>/dev/null || true
+      fi
+    done
+    export MEDIASOUP_WORKER_BIN="$bin_path"
+  fi
+}
+
 # ── build ────────────────────────────────────────────────────
 build_apps() {
   load_env
@@ -629,22 +719,20 @@ build_apps() {
 
   local mem
   mem="$(mem_total_mb)"
-  local heap_mb=1536
+  local heap_mb=1024
   if [ "$mem" -gt 0 ] && [ "$mem" -lt 2048 ]; then
     heap_mb=$(( mem - 256 ))
-    [ "$heap_mb" -lt 768 ] && heap_mb=768
+    [ "$heap_mb" -lt 512 ] && heap_mb=512
   fi
   export NODE_OPTIONS="--max-old-space-size=${heap_mb}"
   info "Node heap capped at ${heap_mb} MB (RAM: ${mem} MB, swap: $(swap_total_mb) MB)"
 
-  local npm_flags=(--include=dev --no-audit --no-fund)
-  if [ "$(nproc 2>/dev/null || echo 1)" -le 2 ]; then
-    npm_flags+=(--maxsockets 1)
-    info "Low core count — installing dependencies serially for stability..."
-  fi
+  info "Installing dependencies (--ignore-scripts to skip slow C++ compilation)…"
+  # Using --ignore-scripts avoids slow C++ compilation (mediasoup/node-gyp) on 1GB VPS
+  npm install --include=dev --no-audit --no-fund --ignore-scripts
 
-  info "Installing dependencies…"
-  npm ci "${npm_flags[@]}" || npm install "${npm_flags[@]}"
+  # Ensure prebuilt mediasoup worker binary is downloaded directly
+  ensure_mediasoup_worker
 
   info "Generating the Prisma client…"
   npx prisma generate --schema apps/server/prisma/schema.prisma
@@ -705,6 +793,12 @@ wait_healthy() {
 # ── install ──────────────────────────────────────────────────
 cmd_install() {
   preflight
+  ensure_swap
+
+  # Terminate any hung background compiler or npm jobs from prior runs
+  $SUDO pkill -f 'npm install' 2>/dev/null || true
+  $SUDO pkill -f 'make -C worker' 2>/dev/null || true
+  $SUDO pkill -f 'cc1plus' 2>/dev/null || true
 
   if [ -f "$ENV_FILE" ]; then
     warn ".env already exists — leaving it alone."

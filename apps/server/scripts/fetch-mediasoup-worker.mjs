@@ -2,13 +2,13 @@
  * Ensures the mediasoup native worker binary exists.
  *
  * mediasoup ships a prebuilt `mediasoup-worker` binary per platform, but its
- * own postinstall download can fail behind corporate proxies. This script
- * checks for the binary and, if missing, downloads the official prebuilt
+ * own postinstall download can fail or fallback to compiling from source.
+ * This script checks for the binary and, if missing, downloads the official prebuilt
  * tarball directly from GitHub releases.
  *
  * Safe to run repeatedly — it exits immediately when the binary is present.
  */
-import { existsSync, mkdirSync, createWriteStream, unlinkSync, chmodSync, statSync } from 'node:fs';
+import { existsSync, mkdirSync, createWriteStream, unlinkSync, chmodSync, statSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execSync } from 'node:child_process';
@@ -47,51 +47,70 @@ if (existsSync(binPath)) {
   process.exit(0);
 }
 
-const pkg = JSON.parse(
-  execSync(`node -p "JSON.stringify(require('${join(msRoot, 'package.json').replace(/\\/g, '/')}'))"`, {
-    encoding: 'utf8',
-  })
-);
-
-let tarName = `mediasoup-worker-${pkg.version}-${os.platform()}-${os.arch()}`;
-if (os.platform() === 'linux') {
-  tarName += `-kernel${Number(os.release().split('.')[0])}`;
+let pkg = { version: '3.15.5' };
+try {
+  pkg = JSON.parse(readFileSync(join(msRoot, 'package.json'), 'utf8'));
+} catch (e) {
+  console.warn('[mediasoup] could not read package.json directly:', e.message);
 }
-tarName += '.tgz';
-
-const url = `https://github.com/versatica/mediasoup/releases/download/${pkg.version}/${tarName}`;
-console.log(`[mediasoup] downloading worker: ${url}`);
 
 const releaseDir = join(msRoot, 'worker', 'out', 'Release');
 mkdirSync(releaseDir, { recursive: true });
 const tarPath = join(releaseDir, 'worker.tgz');
 
-try {
-  let downloaded = false;
+// Candidate kernels to try on Linux (exact, then common LTS kernels)
+const kernelMajor = Number(os.release().split('.')[0]) || 6;
+const kernelCandidates = isWin ? [''] : (kernelMajor === 6 ? ['kernel6', 'kernel5', 'kernel7'] : ['kernel5', 'kernel6']);
 
-  // Node's global fetch does not honour HTTP(S)_PROXY, which breaks behind
-  // corporate proxies. Try curl first (it does), then fall back to fetch.
-  try {
-    execSync(`curl -sSL --retry 3 -o "${tarPath}" "${url}"`, { stdio: 'inherit' });
-    downloaded = existsSync(tarPath) && statSync(tarPath).size > 100_000;
-  } catch {
-    downloaded = false;
+let installed = false;
+for (const k of kernelCandidates) {
+  let tarName = `mediasoup-worker-${pkg.version}-${os.platform()}-${os.arch()}`;
+  if (os.platform() === 'linux' && k) {
+    tarName += `-${k}`;
+  }
+  tarName += '.tgz';
+
+  const urls = [
+    `https://github.com/versatica/mediasoup/releases/download/${pkg.version}/${tarName}`,
+  ];
+  if (pkg.version !== '3.15.5' && os.platform() === 'linux') {
+    urls.push(`https://github.com/versatica/mediasoup/releases/download/3.15.5/mediasoup-worker-3.15.5-linux-${os.arch()}-${k}.tgz`);
   }
 
-  if (!downloaded) {
-    const res = await fetch(url, { redirect: 'follow' });
-    if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
-    await pipeline(Readable.fromWeb(res.body), createWriteStream(tarPath));
-  }
+  for (const url of urls) {
+    console.log(`[mediasoup] trying prebuilt worker: ${url}`);
+    try {
+      try {
+        execSync(`curl -sSL -f --retry 2 -o "${tarPath}" "${url}"`, { stdio: 'ignore' });
+      } catch {
+        // Fall back to fetch if curl failed
+        const res = await fetch(url, { redirect: 'follow' });
+        if (!res.ok) continue;
+        await pipeline(Readable.fromWeb(res.body), createWriteStream(tarPath));
+      }
 
-  execSync(`tar -xzf "${tarPath}" -C "${releaseDir}"`, { stdio: 'inherit' });
-  unlinkSync(tarPath);
-  if (!isWin) chmodSync(binPath, 0o775);
-  console.log('[mediasoup] worker binary installed');
-} catch (err) {
+      if (existsSync(tarPath) && statSync(tarPath).size > 100_000) {
+        execSync(`tar -xzf "${tarPath}" -C "${releaseDir}"`, { stdio: 'ignore' });
+        unlinkSync(tarPath);
+        if (!isWin && existsSync(binPath)) {
+          chmodSync(binPath, 0o775);
+        }
+        if (existsSync(binPath)) {
+          console.log('[mediasoup] prebuilt worker binary installed successfully');
+          installed = true;
+          break;
+        }
+      }
+    } catch {
+      if (existsSync(tarPath)) unlinkSync(tarPath);
+    }
+  }
+  if (installed) break;
+}
+
+if (!installed && !existsSync(binPath)) {
   console.warn(
-    `[mediasoup] could not fetch prebuilt worker (${err.message}).\n` +
-      '  The server will still start, but media routing needs the binary.\n' +
-      '  Fix: run `npm run worker:build -w @webinar/server` (needs Python 3 + C++ toolchain).'
+    '[mediasoup] could not automatically fetch prebuilt worker.\n' +
+    '  Will skip native C++ compilation to prevent freezing low-memory servers.'
   );
 }
