@@ -99,13 +99,23 @@ export function serializePublicWebinar(w: WebinarWithRelations) {
 }
 
 export async function findWebinarBySlug(slug: string) {
-  return prisma.webinar.findUnique({
+  let webinar = await prisma.webinar.findUnique({
     where: { slug },
     include: {
       moderators: true,
       host: { select: { id: true, name: true, email: true } },
     },
   });
+  if (!webinar) {
+    webinar = await prisma.webinar.findUnique({
+      where: { id: slug },
+      include: {
+        moderators: true,
+        host: { select: { id: true, name: true, email: true } },
+      },
+    });
+  }
+  return webinar;
 }
 
 export async function findWebinarById(id: string) {

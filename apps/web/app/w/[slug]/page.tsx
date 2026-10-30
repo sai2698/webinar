@@ -35,6 +35,17 @@ function formatPrice(paise: number, currency: string) {
   }).format(paise / 100);
 }
 
+function getBannerSrc(url?: string | null): string {
+  if (!url) return '';
+  if (url.startsWith('/uploads/')) {
+    const apiOrigin = typeof window !== 'undefined'
+      ? window.location.origin.replace(':3000', ':4000')
+      : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000');
+    return `${apiOrigin}${url}`;
+  }
+  return url;
+}
+
 export default function WebinarLandingPage() {
   const params = useParams<{ slug: string }>();
   const router = useRouter();
@@ -43,6 +54,7 @@ export default function WebinarLandingPage() {
   const [webinar, setWebinar] = useState<PublicWebinar | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [copiedLink, setCopiedLink] = useState(false);
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -140,16 +152,16 @@ export default function WebinarLandingPage() {
 
   return (
     <main className="relative min-h-screen">
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-[420px] overflow-hidden">
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-[480px] overflow-hidden opacity-30 dark:opacity-20">
         {webinar.bannerUrl && (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={webinar.bannerUrl}
+            src={getBannerSrc(webinar.bannerUrl)}
             alt=""
-            className="h-full w-full scale-105 object-cover opacity-25 blur-[2px]"
+            className="h-full w-full scale-110 object-cover blur-3xl"
           />
         )}
-        <div className="absolute inset-0 bg-gradient-to-b from-ink-950/40 via-ink-950/80 to-ink-950" />
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-ink-950/80 to-ink-950" />
       </div>
 
       <header className="relative z-10 mx-auto flex max-w-6xl items-center justify-between px-6 py-6">
@@ -165,6 +177,18 @@ export default function WebinarLandingPage() {
       <div className="relative z-10 mx-auto grid max-w-6xl gap-10 px-6 pb-20 pt-6 lg:grid-cols-[1.35fr_1fr]">
         {/* ── left: details ─────────────────────────────── */}
         <div className="animate-fade-up">
+          {/* Prominent Foreground Banner Image */}
+          {webinar.bannerUrl && (
+            <div className="relative mb-6 overflow-hidden rounded-2xl border border-slate-200/80 dark:border-white/10 bg-slate-900 shadow-2xl aspect-[16/9] w-full max-h-[400px]">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={getBannerSrc(webinar.bannerUrl)}
+                alt={webinar.title}
+                className="h-full w-full object-cover"
+              />
+            </div>
+          )}
+
           <div className="flex flex-wrap items-center gap-2">
             {isLive ? (
               <span className="chip border-red-500/30 bg-red-500/15 text-red-300">
@@ -213,6 +237,21 @@ export default function WebinarLandingPage() {
               </svg>
               Hosted by {webinar.hostName}
             </span>
+            <button
+              type="button"
+              onClick={() => {
+                const regUrl = typeof window !== 'undefined'
+                  ? `${window.location.origin}/w/${slug}/register`
+                  : `/w/${slug}/register`;
+                navigator.clipboard.writeText(regUrl);
+                setCopiedLink(true);
+                setTimeout(() => setCopiedLink(false), 2500);
+              }}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-medium text-slate-300 hover:bg-white/10 transition"
+              title="Copy registration link to share on YouTube and social media"
+            >
+              <span>{copiedLink ? '✓ Link Copied!' : '🔗 Copy Registration Link'}</span>
+            </button>
           </div>
 
           {startsInFuture && !isEnded && (

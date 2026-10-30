@@ -7,8 +7,14 @@ function getBaseUrl(fallbackPort = 4000): string {
     if (configured && !configured.includes('localhost') && !configured.includes('127.0.0.1')) {
       return configured;
     }
-    const { hostname, protocol } = window.location;
+    const { hostname, protocol, origin, port } = window.location;
+    if (configured === '') {
+      return origin;
+    }
     if (hostname && hostname !== 'localhost' && hostname !== '127.0.0.1') {
+      if (port === '5173' || port === '80' || port === '443' || port === '') {
+        return origin;
+      }
       return `${protocol}//${hostname}:${fallbackPort}`;
     }
     return configured || `http://localhost:${fallbackPort}`;

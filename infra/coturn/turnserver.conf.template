@@ -1,0 +1,26 @@
+# coturn configuration for the webinar platform.
+listening-port=${TURN_PORT}
+tls-listening-port=${TURN_TLS_PORT}
+
+# Public IP of the TURN host
+external-ip=${PUBLIC_IP}
+
+realm=${TURN_REALM}
+server-name=${TURN_REALM}
+
+# Long-term credential mechanism
+lt-cred-mech
+user=${TURN_USERNAME}:${TURN_PASSWORD}
+
+# Restrict relayed ports to the range opened in the firewall
+min-port=${TURN_MIN_PORT}
+max-port=${TURN_MAX_PORT}
+
+# Security
+no-multicast-peers
+no-cli
+
+# Logging
+log-file=stdout
+simple-log
+
