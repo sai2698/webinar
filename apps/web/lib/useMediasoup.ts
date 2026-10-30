@@ -310,6 +310,11 @@ export function useMediasoup({ slug, token, onJoined, onError }: UseMediasoupOpt
                     iceParameters: tres.data.iceParameters as MediasoupTypes.IceParameters,
                     iceCandidates: tres.data.iceCandidates as MediasoupTypes.IceCandidate[],
                     dtlsParameters: tres.data.dtlsParameters as MediasoupTypes.DtlsParameters,
+                    iceServers: (tres.data.iceServers || []) as RTCIceServer[],
+                  });
+
+                  transport.on('connectionstatechange', (state) => {
+                    console.log(`[mediasoup] recvTransport state: ${state}`);
                   });
 
                   transport.on('connect', ({ dtlsParameters }, callback, errback) => {
@@ -338,6 +343,11 @@ export function useMediasoup({ slug, token, onJoined, onError }: UseMediasoupOpt
                     iceParameters: tres.data.iceParameters as MediasoupTypes.IceParameters,
                     iceCandidates: tres.data.iceCandidates as MediasoupTypes.IceCandidate[],
                     dtlsParameters: tres.data.dtlsParameters as MediasoupTypes.DtlsParameters,
+                    iceServers: (tres.data.iceServers || []) as RTCIceServer[],
+                  });
+
+                  transport.on('connectionstatechange', (state) => {
+                    console.log(`[mediasoup] sendTransport state: ${state}`);
                   });
 
                   transport.on('connect', ({ dtlsParameters }, callback, errback) => {
