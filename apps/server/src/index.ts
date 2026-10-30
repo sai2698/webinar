@@ -46,11 +46,9 @@ import { adminSeriesRouter } from './modules/series/routes.js';
 import { adminApiTokenRouter } from './modules/publicApi/tokens.js';
 import { publicApiRouter } from './modules/publicApi/routes.js';
 import { adminEmbedRouter, publicEmbedRouter } from './modules/embed/routes.js';
-import {
-  adminAnalyticsRouter,
-  publicAnalyticsRouter,
-} from './modules/analytics/routes.js';
+import { adminAnalyticsRouter, publicAnalyticsRouter } from './modules/analytics/routes.js';
 import { adminAutomationRouter } from './modules/automation/routes.js';
+import { uploadRouter, getUploadsDir } from './modules/uploads/routes.js';
 
 const app = express();
 
@@ -68,9 +66,13 @@ app.use(
 app.use(cookieParser());
 
 /* ── Webhook must receive the raw body — mount BEFORE json parser ── */
-app.use('/api/payments/webhook', express.raw({ type: 'application/json' }), webhookRouter);
+app.use('/api/payments/webhook', express.raw({ type: '*/*' }), webhookRouter);
 
-app.use(express.json({ limit: '2mb' }));
+app.use(express.json({ limit: '25mb' }));
+app.use(express.urlencoded({ extended: true, limit: '25mb' }));
+
+/* ── Serve uploaded static assets (webinar banners, etc.) ── */
+app.use('/uploads', express.static(getUploadsDir()));
 
 /* ── health & time ─────────────────────────────────────────── */
 app.get('/api/health', (_req, res) => {
@@ -114,6 +116,7 @@ app.use('/api/admin', adminPollRouter);
 app.use('/api/admin', adminCtaRouter);
 app.use('/api/admin/courses', adminCourseRouter);
 app.use('/api/admin/payments', adminPaymentRouter);
+app.use('/api/admin/upload', uploadRouter);
 app.use('/api/admin/recordings', adminRecordingRouter);
 app.use('/api/recordings', publicRecordingByIdRouter);
 

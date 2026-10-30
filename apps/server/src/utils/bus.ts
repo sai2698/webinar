@@ -10,6 +10,18 @@ import { EventEmitter } from 'node:events';
 export interface AppEvents {
   'enrollment:created': { webinarId: string | null; userId: string; courseTitle: string };
   'registration:paid': { webinarId: string; userId: string };
+  'payment:captured': {
+    webinarId: string;
+    payment: {
+      id: string;
+      amountPaise: number;
+      userName: string;
+      userEmail?: string;
+      itemTitle: string;
+      status: string;
+      createdAt: string;
+    };
+  };
   'webinar:ended': { webinarId: string };
 }
 

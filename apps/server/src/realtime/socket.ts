@@ -152,6 +152,13 @@ export function registerSocketHandlers(io: Server) {
     room?.markEnrolled(userId);
   });
 
+  bus.onEvent('payment:captured', ({ webinarId, payment }) => {
+    if (!webinarId) return;
+    const room = roomManager.get(webinarId);
+    if (!room) return;
+    room.notifyStaffPayment(payment);
+  });
+
   io.on('connection', (socket: AppSocket) => {
     log.debug(`socket connected ${socket.id}`);
 

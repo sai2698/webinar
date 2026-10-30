@@ -6,8 +6,13 @@ import { orderSchema, verifySchema } from '../webinars/schema.js';
 import {
   createOrder,
   verifySignature,
-  razorpayEnabled,
   refundPayment,
+  isRazorpayActive,
+  getActiveKeyId,
+  getGatewayStatus,
+  saveGatewayConfig,
+  getWebinarWebhookSecret,
+  setWebinarWebhookSecret,
 } from './razorpay.service.js';
 import { bus } from '../../utils/bus.js';
 import { logger } from '../../utils/logger.js';
@@ -61,7 +66,12 @@ paymentRouter.post(
       receipt = `cta_${cta.id.slice(0, 12)}`;
     }
 
-    const order = await createOrder(amountPaise, receipt);
+    let order;
+    try {
+      order = await createOrder(amountPaise, receipt);
+    } catch (err: any) {
+      throw badRequest(err?.message || 'Could not initiate payment order');
+    }
 
     const payment = await prisma.payment.create({
       data: {
@@ -80,7 +90,7 @@ paymentRouter.post(
       amount: order.amount,
       currency: order.currency,
       paymentId: payment.id,
-      keyId: razorpayEnabled ? process.env.RZP_KEY_ID : null,
+      keyId: getActiveKeyId(),
       mock: Boolean(order.mock),
     });
   })
@@ -245,6 +255,28 @@ export async function fulfilPayment(
     await markPurchased(payment.ctaId, payment.userId);
   }
 
+  if (payment.webinarId) {
+    const [buyer, course, cta, webinar] = await Promise.all([
+      prisma.user.findUnique({ where: { id: payment.userId } }),
+      payment.courseId ? prisma.course.findUnique({ where: { id: payment.courseId } }) : null,
+      payment.ctaId ? prisma.cta.findUnique({ where: { id: payment.ctaId } }) : null,
+      prisma.webinar.findUnique({ where: { id: payment.webinarId } }),
+    ]);
+
+    bus.emitEvent('payment:captured', {
+      webinarId: payment.webinarId,
+      payment: {
+        id: payment.id,
+        amountPaise: payment.amountPaise,
+        userName: buyer?.name || 'Attendee',
+        userEmail: buyer?.email,
+        itemTitle: course?.title ?? cta?.title ?? webinar?.title ?? 'Offer',
+        status: 'PAID',
+        createdAt: payment.createdAt.toISOString(),
+      },
+    });
+  }
+
   logger.info(`Payment fulfilled: ${payment.id} (${payment.amountPaise} paise)`);
 }
 
@@ -252,7 +284,98 @@ export async function fulfilPayment(
 
 export const adminPaymentRouter = Router();
 
-adminPaymentRouter.use(requireAuth, requireRole('ADMIN'));
+adminPaymentRouter.use(requireAuth, requireRole('ADMIN', 'HOST'));
+
+/**
+ * GET /api/admin/payments/gateway
+ * Current payment gateway status & configuration for admin console
+ */
+adminPaymentRouter.get(
+  '/gateway',
+  asyncHandler(async (_req, res) => {
+    res.json({ gateway: getGatewayStatus() });
+  })
+);
+
+/**
+ * POST /api/admin/payments/gateway
+ * Save/update payment gateway configuration from admin console
+ */
+adminPaymentRouter.post(
+  '/gateway',
+  asyncHandler(async (req, res) => {
+    const { keyId, keySecret, enabled } = req.body;
+    const currentStatus = getGatewayStatus();
+    const effectiveKeyId = keyId !== undefined && keyId !== null ? String(keyId).trim() : currentStatus.keyId;
+    const hasSecret = Boolean((keySecret && String(keySecret).trim()) || currentStatus.hasSecret);
+
+    if (enabled && (!effectiveKeyId || !hasSecret)) {
+      throw badRequest('Razorpay Key ID and Key Secret are required to activate payments');
+    }
+    saveGatewayConfig({
+      keyId: effectiveKeyId,
+      keySecret: keySecret ? String(keySecret).trim() : undefined,
+      enabled: Boolean(enabled),
+    });
+    res.json({ ok: true, gateway: getGatewayStatus() });
+  })
+);
+
+/**
+ * GET /api/admin/payments/:webinarId/webhook-info
+ * Returns the unique webhook URL for a specific webinar and setup instructions.
+ */
+adminPaymentRouter.get(
+  '/:webinarId/webhook-info',
+  asyncHandler(async (req, res) => {
+    const { webinarId } = req.params;
+    const webinar = await prisma.webinar.findUnique({
+      where: { id: webinarId },
+      select: { id: true, title: true, slug: true },
+    });
+    if (!webinar) throw notFound('Webinar not found');
+
+    const origin = (process.env.API_ORIGIN || `${req.protocol}://${req.get('host')}`);
+    const webhookUrl = `${origin}/api/payments/webhook/${webinar.id}`;
+    const configuredSecret = getWebinarWebhookSecret(webinar.id);
+
+    res.json({
+      webinarId: webinar.id,
+      webinarTitle: webinar.title,
+      webhookUrl,
+      webhookSecret: configuredSecret || '',
+      hasWebhookSecret: Boolean(configuredSecret),
+      recommendedEvents: ['payment.captured', 'order.paid', 'payment.failed', 'refund.processed'],
+      secretHint: 'In Razorpay Webhooks, enter your secret or Razorpay Key Secret.',
+    });
+  })
+);
+
+/**
+ * POST /api/admin/payments/:webinarId/webhook-secret
+ * Sets or updates the webhook secret key for a specific webinar.
+ */
+adminPaymentRouter.post(
+  '/:webinarId/webhook-secret',
+  asyncHandler(async (req, res) => {
+    const { webinarId } = req.params;
+    const { secret } = req.body;
+    const webinar = await prisma.webinar.findUnique({
+      where: { id: webinarId },
+      select: { id: true },
+    });
+    if (!webinar) throw notFound('Webinar not found');
+
+    setWebinarWebhookSecret(webinarId, typeof secret === 'string' ? secret : '');
+
+    res.json({
+      ok: true,
+      webinarId,
+      webhookSecret: typeof secret === 'string' ? secret.trim() : '',
+      hasWebhookSecret: Boolean(secret && secret.trim()),
+    });
+  })
+);
 
 /**
  * GET /api/admin/payments?webinarId=...
@@ -279,6 +402,11 @@ adminPaymentRouter.get(
       },
     });
 
+    const ctas = webinarId
+      ? await prisma.cta.findMany({ where: { webinarId }, select: { id: true, title: true } })
+      : await prisma.cta.findMany({ select: { id: true, title: true } });
+    const ctaMap = Object.fromEntries(ctas.map((c) => [c.id, c.title]));
+
     res.json({
       payments: payments.map((p) => ({
         id: p.id,
@@ -289,8 +417,13 @@ adminPaymentRouter.get(
         razorpayPaymentId: p.razorpayPaymentId,
         user: p.user,
         webinar: p.webinar,
-        kind: p.courseId ? 'course' : 'webinar',
+        offerTitle: (p.ctaId && ctaMap[p.ctaId]) || (p.courseId ? 'Course' : 'Webinar Seat'),
+        kind: p.courseId ? 'course' : p.ctaId ? 'offer' : 'webinar',
       })),
+      totalPaise: payments
+        .filter((p) => p.status === 'PAID')
+        .reduce((sum, p) => sum + p.amountPaise, 0),
+      count: payments.filter((p) => p.status === 'PAID').length,
     });
   })
 );

@@ -51,7 +51,7 @@ export const webinarSettingsSchema = z.object({
 export const createWebinarSchema = z.object({
   title: z.string().min(3).max(160),
   description: z.string().max(5000).default(''),
-  bannerUrl: z.string().url().or(z.literal('')).optional(),
+  bannerUrl: z.string().or(z.literal('')).optional(),
   slug: z
     .string()
     .regex(/^[a-z0-9-]+$/, 'Slug may only contain lowercase letters, numbers and dashes')
@@ -199,6 +199,7 @@ export const orderSchema = z
   .object({
     webinarId: z.string().optional(),
     ctaId: z.string().optional(),
+    responses: z.record(z.unknown()).optional(),
   })
   .refine((v) => Boolean(v.webinarId || v.ctaId), {
     message: 'webinarId or ctaId is required',

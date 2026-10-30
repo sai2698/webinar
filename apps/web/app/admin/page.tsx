@@ -31,6 +31,7 @@ import { StreamsPanel } from '@/components/admin/StreamsPanel';
 import { SeriesPanel } from '@/components/admin/SeriesPanel';
 import { EmbedPanel } from '@/components/admin/EmbedPanel';
 import { WebhooksPanel } from '@/components/admin/WebhooksPanel';
+import { GatewayConfigPanel } from '@/components/admin/GatewayConfigPanel';
 import { AnalyticsPanel } from '@/components/admin/AnalyticsPanel';
 import { AutomationPanel } from '@/components/admin/AutomationPanel';
 import { ApiTokensPanel } from '@/components/admin/ApiTokensPanel';
@@ -806,6 +807,52 @@ function DetailView({
   analytics: Analytics | null;
 }) {
   if (!selected) {
+    if (tab === 'payments' || tab === 'integrations') {
+      return (
+        <div className="space-y-6">
+          <GatewayConfigPanel />
+          <div className="rounded-2xl border border-line bg-panel p-6 shadow-card">
+            <h2 className="text-sm font-semibold text-fg">
+              {tab === 'payments' ? 'Webinar Payments & Refunds' : 'Integrations & Webhooks'}
+            </h2>
+            <p className="mt-1 text-xs text-muted">
+              {tab === 'payments'
+                ? 'Choose a webinar below to view its transactions and process refunds.'
+                : 'Choose a webinar below to configure webhooks, automation cues, and tracking pixels.'}
+            </p>
+            {webinars.length === 0 ? (
+              <p className="py-10 text-center text-sm text-subtle">No webinars yet.</p>
+            ) : (
+              <div className="mt-4 divide-y divide-line">
+                {webinars.map((w) => (
+                  <button
+                    key={w.id}
+                    onClick={() => onSelect(w)}
+                    className="flex w-full items-center gap-3 py-3 text-left transition hover:opacity-80"
+                  >
+                    <span
+                      className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ring-1 ring-inset ${
+                        statusStyles[w.status] ?? statusStyles.DRAFT
+                      }`}
+                    >
+                      {w.status}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate text-sm font-medium text-fg">
+                      {w.title}
+                    </span>
+                    <span className="shrink-0 text-xs text-subtle">
+                      {w.registrationCount ?? 0} regs
+                    </span>
+                    <IconChevron className="h-4 w-4 shrink-0 text-subtle" />
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="rounded-2xl border border-line bg-panel p-6 shadow-card">
         <h2 className="text-sm font-semibold text-fg">Choose a webinar</h2>
@@ -865,7 +912,11 @@ function DetailView({
         ) : tab === 'engagement' ? (
           <EngagementPanel webinarId={selected.id} />
         ) : tab === 'payments' ? (
-          <PaymentsPanel webinarId={selected.id} />
+          <div className="space-y-8">
+            <GatewayConfigPanel />
+            <div className="divider" />
+            <PaymentsPanel webinarId={selected.id} />
+          </div>
         ) : tab === 'recordings' ? (
           <RecordingsPanel
             webinarId={selected.id}
@@ -897,6 +948,8 @@ function DetailView({
           </div>
         ) : tab === 'integrations' ? (
           <div className="space-y-8">
+            <GatewayConfigPanel />
+            <div className="divider" />
             <WebhooksPanel />
             <div className="divider" />
             <AnalyticsPanel webinarId={selected.id} />

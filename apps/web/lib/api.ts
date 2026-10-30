@@ -92,7 +92,7 @@ function scopeForPath(path: string): SessionScope {
 
 function authHeaders(scope: SessionScope): Record<string, string> {
   if (typeof window === 'undefined') return {};
-  const token = getToken(scope);
+  const token = getToken(scope) ?? (scope === 'admin' ? getToken('participant') : getToken('admin'));
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
@@ -325,7 +325,7 @@ export const endpoints = {
       webinar: { slug: string; title: string; status: string };
     }>(`/api/webinars/${slug}/claim`, data),
 
-  createOrder: (data: { webinarId?: string; ctaId?: string }) =>
+  createOrder: (data: { webinarId?: string; ctaId?: string; responses?: Record<string, unknown> }) =>
     api.post<{
       orderId: string;
       amount: number;
@@ -344,6 +344,19 @@ export const endpoints = {
   serverTime: () => api.get<{ now: number }>('/api/time'),
 
   /* admin */
+  uploadImage: async (file: File) => {
+    const data = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = () => reject(new Error('Failed to read image file'));
+      reader.readAsDataURL(file);
+    });
+    return api.post<{ ok: boolean; url: string; filename: string; size: number }>(
+      '/api/admin/upload',
+      { data, filename: file.name },
+      'admin'
+    );
+  },
   adminWebinars: () => api.get<{ webinars: unknown[] }>('/api/admin/webinars'),
   adminWebinar: (id: string) => api.get<{ webinar: unknown }>(`/api/admin/webinars/${id}`),
   createWebinar: (data: unknown) => api.post<{ webinar: { id: string; slug: string } }>('/api/admin/webinars', data),
@@ -424,8 +437,81 @@ export const endpoints = {
   createCourse: (data: unknown) => api.post<{ course: unknown }>('/api/admin/courses', data),
   deleteCourse: (id: string) => api.del<{ ok: boolean }>(`/api/admin/courses/${id}`),
 
-  payments: (webinarId: string) =>
-    api.get<{ payments: unknown[] }>(`/api/admin/payments?webinarId=${webinarId}`),
+  payments: (webinarId?: string, status?: string) =>
+    api.get<{
+      payments: {
+        id: string;
+        amountPaise: number;
+        status: string;
+        createdAt: string;
+        razorpayOrderId: string;
+        razorpayPaymentId?: string;
+        user: { id: string; name: string; email: string };
+        webinar?: { id: string; title: string; slug: string };
+        offerTitle?: string;
+        kind: string;
+      }[];
+      totalPaise?: number;
+      count?: number;
+    }>(
+      `/api/admin/payments${
+        webinarId || status
+          ? '?' +
+            [
+              webinarId ? `webinarId=${encodeURIComponent(webinarId)}` : '',
+              status ? `status=${encodeURIComponent(status)}` : '',
+            ]
+              .filter(Boolean)
+              .join('&')
+          : ''
+      }`
+    ),
+  webhookInfo: (webinarId: string) =>
+    api.get<{
+      webinarId: string;
+      webinarTitle: string;
+      webhookUrl: string;
+      webhookSecret?: string;
+      hasWebhookSecret?: boolean;
+      recommendedEvents: string[];
+      secretHint: string;
+    }>(`/api/admin/payments/${webinarId}/webhook-info`),
+  saveWebhookSecret: (webinarId: string, secret: string) =>
+    api.post<{
+      ok: boolean;
+      webinarId: string;
+      webhookSecret: string;
+      hasWebhookSecret: boolean;
+    }>(`/api/admin/payments/${webinarId}/webhook-secret`, { secret }),
+  paymentGateway: () =>
+    api.get<{
+      gateway: {
+        configured: boolean;
+        enabled: boolean;
+        keyId: string;
+        maskedKeyId: string;
+        hasSecret: boolean;
+        mode: 'mock' | 'test' | 'live';
+        updatedAt?: string;
+      };
+    }>('/api/admin/payments/gateway'),
+  savePaymentGateway: (data: {
+    keyId: string;
+    keySecret: string;
+    enabled: boolean;
+  }) =>
+    api.post<{
+      ok: boolean;
+      gateway: {
+        configured: boolean;
+        enabled: boolean;
+        keyId: string;
+        maskedKeyId: string;
+        hasSecret: boolean;
+        mode: 'mock' | 'test' | 'live';
+        updatedAt?: string;
+      };
+    }>('/api/admin/payments/gateway', data),
   refundPayment: (id: string, amountPaise?: number) =>
     api.post<{ ok: boolean; refundId: string; amountPaise: number; full: boolean; mock: boolean }>(
       `/api/admin/payments/${id}/refund`,

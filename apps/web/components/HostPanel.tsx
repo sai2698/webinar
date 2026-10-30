@@ -7,6 +7,7 @@ import type { QuizOption, CtaForm, CtaFormFieldType } from '@webinar/shared';
 import { useRoomStore } from '@/store/roomStore';
 import { endpoints } from '@/lib/api';
 import { CtaFollowUp } from './CtaFollowUp';
+import { GatewayConfigPanel } from './admin/GatewayConfigPanel';
 
 interface AdminQuiz {
   id: string;
@@ -116,6 +117,121 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
   const peers = useRoomStore((s) => s.peers);
   const spotlightedPeerId = useRoomStore((s) => s.spotlightedPeerId);
   const [stageMsg, setStageMsg] = useState<string | null>(null);
+  const [gatewayStatus, setGatewayStatus] = useState<{
+    configured: boolean;
+    enabled: boolean;
+    active: boolean;
+    mode: 'mock' | 'test' | 'live';
+  } | null>(null);
+  const [showGatewayModal, setShowGatewayModal] = useState(false);
+  const [payments, setPayments] = useState<{
+    id: string;
+    amountPaise: number;
+    status: string;
+    createdAt: string;
+    user: { id: string; name: string; email: string };
+    offerTitle?: string;
+  }[]>([]);
+  const [totalRevenuePaise, setTotalRevenuePaise] = useState(0);
+  const [paymentCount, setPaymentCount] = useState(0);
+  const [webhookUrl, setWebhookUrl] = useState('');
+  const [copiedWebhook, setCopiedWebhook] = useState(false);
+  const [webhookSecret, setWebhookSecret] = useState('');
+  const [savingSecret, setSavingSecret] = useState(false);
+  const [secretSaved, setSecretSaved] = useState(false);
+  const [showSecret, setShowSecret] = useState(false);
+  const [offerSubTab, setOfferSubTab] = useState<'offers' | 'sales'>('offers');
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const refreshGatewayStatus = useCallback(async () => {
+    try {
+      const res = await endpoints.paymentGateway();
+      setGatewayStatus(res.gateway as any);
+    } catch {
+      // Offline or participant scope without admin access
+    }
+  }, []);
+
+  const refreshPayments = useCallback(async () => {
+    if (!webinarId) return;
+    try {
+      const [payRes, hookRes] = await Promise.all([
+        endpoints.payments(webinarId) as Promise<any>,
+        endpoints.webhookInfo(webinarId).catch(() => null),
+      ]);
+      if (payRes) {
+        setPayments(payRes.payments || []);
+        setTotalRevenuePaise(payRes.totalPaise || 0);
+        setPaymentCount(payRes.count || 0);
+      }
+      if (hookRes?.webhookUrl) {
+        setWebhookUrl(hookRes.webhookUrl);
+      }
+      if (hookRes?.webhookSecret !== undefined) {
+        setWebhookSecret(hookRes.webhookSecret);
+      }
+    } catch {
+      // Offline or error
+    }
+  }, [webinarId]);
+
+  const handleSaveWebhookSecret = async () => {
+    if (!webinarId) return;
+    setSavingSecret(true);
+    try {
+      await endpoints.saveWebhookSecret(webinarId, webhookSecret);
+      setSecretSaved(true);
+      setTimeout(() => setSecretSaved(false), 2500);
+    } catch (err: any) {
+      alert(err instanceof Error ? err.message : 'Failed to save webhook secret');
+    } finally {
+      setSavingSecret(false);
+    }
+  };
+
+  useEffect(() => {
+    if (tab === 'offer') {
+      void refreshGatewayStatus();
+      void refreshPayments();
+    }
+  }, [tab, refreshGatewayStatus, refreshPayments]);
+
+  useEffect(() => {
+    const sock = socket.current;
+    if (!sock) return;
+
+    const onPayment = (p: {
+      id: string;
+      amountPaise: number;
+      userName: string;
+      userEmail?: string;
+      itemTitle: string;
+      status: string;
+      createdAt: string;
+    }) => {
+      setToastMessage(`💰 Payment: ${p.userName} paid ₹${(p.amountPaise / 100).toLocaleString('en-IN')} for ${p.itemTitle}!`);
+      setTimeout(() => setToastMessage(null), 6000);
+
+      setPayments((prev) => [
+        {
+          id: p.id,
+          amountPaise: p.amountPaise,
+          status: p.status,
+          createdAt: p.createdAt,
+          user: { id: '', name: p.userName, email: p.userEmail || '' },
+          offerTitle: p.itemTitle,
+        },
+        ...prev,
+      ]);
+      setTotalRevenuePaise((r) => r + p.amountPaise);
+      setPaymentCount((c) => c + 1);
+    };
+
+    sock.on('paymentReceived' as any, onPayment);
+    return () => {
+      sock.off('paymentReceived' as any, onPayment);
+    };
+  }, [socket]);
 
   /** Speakers the host can put on stage — staff are already visible. */
   const speakers = Object.values(peers).filter((p) => p.isApprovedSpeaker);
@@ -1428,7 +1544,252 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
               )}
 
               {!loading && !composing && tab === 'offer' && !followUpFor && (
-                <div className="space-y-2">
+                <div className="space-y-3">
+                  {/* Payment Gateway Status & Dedicated Webinar Webhook Card */}
+                  <div className="rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/[0.04] p-3 text-xs shadow-sm space-y-2.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <span className="text-base shrink-0">💳</span>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-semibold text-slate-800 dark:text-slate-200">
+                              Razorpay Payments
+                            </span>
+                            <span
+                              className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                                !gatewayStatus
+                                  ? 'bg-slate-200 dark:bg-white/10 text-slate-500'
+                                  : !gatewayStatus.enabled
+                                  ? 'bg-red-500/15 text-red-600 dark:text-red-400 ring-1 ring-red-500/20'
+                                  : gatewayStatus.mode === 'live'
+                                  ? 'bg-mint-500/15 text-mint-600 dark:text-mint-400 ring-1 ring-mint-500/20'
+                                  : gatewayStatus.mode === 'test'
+                                  ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 ring-1 ring-amber-500/20'
+                                  : 'bg-slate-200 dark:bg-white/10 text-slate-600 dark:text-slate-300'
+                              }`}
+                            >
+                              {!gatewayStatus
+                                ? 'Checking…'
+                                : !gatewayStatus.enabled
+                                ? '🔴 Disabled'
+                                : gatewayStatus.mode === 'live'
+                                ? '🟢 Live Active'
+                                : gatewayStatus.mode === 'test'
+                                ? '🟡 Test Active'
+                                : '⚪ Mock Mode'}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
+                            {!gatewayStatus
+                              ? 'Checking payment gateway configuration…'
+                              : !gatewayStatus.enabled
+                              ? 'Online checkout is currently paused for attendees.'
+                              : gatewayStatus.configured
+                              ? 'Captures payments via UPI, QR, Cards, & Netbanking.'
+                              : 'Auto-approves simulated checkout (no keys set).'}
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setShowGatewayModal(true)}
+                        className="shrink-0 px-2.5 py-1 text-[11px] font-semibold rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 text-slate-700 dark:text-slate-200 transition shadow-sm"
+                      >
+                        ⚙️ Configure Keys
+                      </button>
+                    </div>
+
+                    {/* Dedicated Webinar Webhook Box */}
+                    <div className="pt-2 border-t border-slate-200 dark:border-white/10 space-y-1">
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1">
+                          <span>🔗</span> Webhook URL for this Webinar:
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const effectiveUrl =
+                              webhookUrl ||
+                              (typeof window !== 'undefined'
+                                ? `${window.location.origin.replace(':3000', ':4000')}/api/payments/webhook/${webinarId}`
+                                : '');
+                            if (effectiveUrl) {
+                              navigator.clipboard.writeText(effectiveUrl);
+                              setCopiedWebhook(true);
+                              setTimeout(() => setCopiedWebhook(false), 2500);
+                            }
+                          }}
+                          className="text-amber-500 font-semibold hover:underline flex items-center gap-1 text-[11px]"
+                        >
+                          {copiedWebhook ? '✓ Copied!' : '📋 Copy Webhook URL'}
+                        </button>
+                      </div>
+                      <div className="flex items-center bg-white dark:bg-black/30 rounded-lg p-1.5 border border-slate-200 dark:border-white/10">
+                        <input
+                          type="text"
+                          readOnly
+                          value={
+                            webhookUrl ||
+                            (typeof window !== 'undefined'
+                              ? `${window.location.origin.replace(':3000', ':4000')}/api/payments/webhook/${webinarId}`
+                              : '')
+                          }
+                          className="bg-transparent text-[10px] font-mono text-slate-600 dark:text-slate-300 flex-1 truncate select-all focus:outline-none"
+                        />
+                      </div>
+
+                      {/* Webhook Secret Key */}
+                      <div className="pt-2 border-t border-dashed border-slate-200 dark:border-white/10 space-y-1.5">
+                        <div className="flex items-center justify-between text-[11px]">
+                          <span className="font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1">
+                            <span>🔑</span> Webhook Secret Key:
+                          </span>
+                          {secretSaved && (
+                            <span className="text-emerald-500 font-medium text-[10px] flex items-center gap-1">
+                              <span>✓</span> Saved
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <div className="relative flex-1">
+                            <input
+                              type={showSecret ? 'text' : 'password'}
+                              value={webhookSecret}
+                              onChange={(e) => {
+                                setWebhookSecret(e.target.value);
+                                setSecretSaved(false);
+                              }}
+                              placeholder="Enter Razorpay Webhook Secret..."
+                              className="w-full bg-white dark:bg-black/30 rounded-lg py-1.5 pl-2.5 pr-7 border border-slate-200 dark:border-white/10 text-[10px] font-mono text-slate-800 dark:text-slate-200 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setShowSecret(!showSecret)}
+                              className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xs"
+                              title={showSecret ? 'Hide secret' : 'Show secret'}
+                            >
+                              {showSecret ? '👁️' : '🔒'}
+                            </button>
+                          </div>
+                          <button
+                            type="button"
+                            disabled={savingSecret}
+                            onClick={handleSaveWebhookSecret}
+                            className="btn btn-primary py-1 px-3 text-[11px] rounded-lg font-medium shrink-0 disabled:opacity-50"
+                          >
+                            {savingSecret ? 'Saving...' : 'Save Secret'}
+                          </button>
+                        </div>
+                      </div>
+
+                      <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                        Add to Razorpay → Settings → Webhooks. Events: <code className="font-mono text-amber-500">payment.captured</code>, <code className="font-mono text-amber-500">order.paid</code>. Webhook Secret: enter above or use your Razorpay Key Secret.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Sub-tabs: Offers vs Live Sales */}
+                  <div className="flex items-center gap-2 border-b border-slate-200 dark:border-white/10 pb-2">
+                    <button
+                      type="button"
+                      onClick={() => setOfferSubTab('offers')}
+                      className={`px-3 py-1 rounded-lg text-xs font-semibold transition ${
+                        offerSubTab === 'offers'
+                          ? 'bg-amber-500 text-slate-950 shadow-sm'
+                          : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5'
+                      }`}
+                    >
+                      Offers ({ctas.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOfferSubTab('sales');
+                        void refreshPayments();
+                      }}
+                      className={`px-3 py-1 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 ${
+                        offerSubTab === 'sales'
+                          ? 'bg-amber-500 text-slate-950 shadow-sm'
+                          : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5'
+                      }`}
+                    >
+                      <span>💰 Live Sales</span>
+                      <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-black/10 dark:bg-white/15">
+                        {paymentCount} · ₹{(totalRevenuePaise / 100).toLocaleString('en-IN')}
+                      </span>
+                    </button>
+                  </div>
+
+                  {/* Live Sales View */}
+                  {offerSubTab === 'sales' && (
+                    <div className="space-y-2.5 animate-fade-in">
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/[0.03] p-3 text-center">
+                          <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+                            Total Revenue
+                          </p>
+                          <p className="mt-1 text-base font-extrabold text-slate-900 dark:text-white tabular-nums">
+                            ₹{(totalRevenuePaise / 100).toLocaleString('en-IN')}
+                          </p>
+                        </div>
+                        <div className="rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/[0.03] p-3 text-center">
+                          <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+                            Successful Sales
+                          </p>
+                          <p className="mt-1 text-base font-extrabold text-slate-900 dark:text-white tabular-nums">
+                            {paymentCount} paid
+                          </p>
+                        </div>
+                      </div>
+
+                      {payments.length === 0 ? (
+                        <div className="py-8 text-center space-y-2">
+                          <p className="text-2xl">💳</p>
+                          <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">
+                            No payments recorded yet for this webinar
+                          </p>
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400 max-w-xs mx-auto">
+                            When attendees pay through live offers or via the Razorpay webhook, captured transactions appear here in real-time.
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="space-y-2 max-h-72 overflow-y-auto pr-0.5">
+                          {payments.map((p) => (
+                            <div
+                              key={p.id}
+                              className="rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/[0.03] p-2.5 text-xs shadow-xs"
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="min-w-0">
+                                  <p className="font-semibold text-slate-900 dark:text-white truncate">
+                                    {p.user?.name || 'Attendee'}
+                                  </p>
+                                  <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                                    {p.user?.email || 'No email'} · {p.offerTitle || 'Offer'}
+                                  </p>
+                                </div>
+                                <div className="text-right shrink-0">
+                                  <p className="font-bold text-slate-900 dark:text-white tabular-nums">
+                                    ₹{(p.amountPaise / 100).toLocaleString('en-IN')}
+                                  </p>
+                                  <span className="inline-block mt-0.5 px-1.5 py-0.2 rounded text-[9px] font-bold uppercase tracking-wider bg-mint-500/15 text-mint-600 dark:text-mint-400">
+                                    {p.status}
+                                  </span>
+                                </div>
+                              </div>
+                              <p className="mt-1 text-[10px] text-slate-400 dark:text-slate-500">
+                                {new Date(p.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · {new Date(p.createdAt).toLocaleDateString()}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Offers List View */}
+                  {offerSubTab === 'offers' && (
+                    <div className="space-y-2">
                   {ctas.length === 0 && (
                     <p className="py-6 text-center text-xs text-slate-500">
                       No offers yet — tap “+ New” to create one now.
@@ -1541,6 +1902,8 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
                       </div>
                     );
                   })}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -1705,6 +2068,50 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
               </div>
             )}
             </aside>
+          </div>,
+          document.body
+        )}
+
+      {/* Host Live Payment Toast Notification */}
+      {toastMessage && (
+        <div className="fixed top-5 right-5 z-[99999] rounded-xl bg-amber-500 text-slate-950 font-bold px-4 py-3 shadow-2xl animate-fade-in flex items-center gap-2.5 text-xs">
+          <span className="text-base">🎉</span>
+          <span>{toastMessage}</span>
+        </div>
+      )}
+
+      {/* Gateway Configuration Modal for Host */}
+      {showGatewayModal &&
+        createPortal(
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+            <div className="relative w-full max-w-lg rounded-2xl bg-white dark:bg-ink-950 border border-slate-200 dark:border-white/10 p-5 sm:p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between pb-3 mb-4 border-b border-slate-200 dark:border-white/10">
+                <div className="flex items-center gap-2">
+                  <span className="text-xl">💳</span>
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                      Razorpay Gateway Setup
+                    </h3>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                      Configure credentials to accept attendee payments in live webinars.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowGatewayModal(false)}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/10 transition text-sm font-bold"
+                  aria-label="Close gateway setup"
+                >
+                  ✕
+                </button>
+              </div>
+              <GatewayConfigPanel
+                compact
+                onSaved={() => {
+                  void refreshGatewayStatus();
+                }}
+              />
+            </div>
           </div>,
           document.body
         )}

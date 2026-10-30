@@ -1,0 +1,11 @@
+{
+  "keyId": "rzp_test_TtmbX1sNOn6AEb",
+  "keySecret": "f9HhrTccsAjCgf53SCXc7qmN",
+  "webhookSecret": "",
+  "enabled": true,
+  "updatedAt": "2026-10-29T16:15:09.689Z",
+  "webinarWebhookSecrets": {
+    "cmvpdrxvq000srqo4lf6m379c": "f9HhrTccsAjCgf53SCXc7qmN",
+    "cmvoraq480004rqok4w5fhjiq": "super_secret_webhook_123"
+  }
+}

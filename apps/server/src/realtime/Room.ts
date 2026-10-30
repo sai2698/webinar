@@ -1032,6 +1032,25 @@ export class Room {
     return clickCount;
   }
 
+  /**
+   * Broadcast a payment received event exclusively to staff in this webinar.
+   */
+  notifyStaffPayment(payment: {
+    id: string;
+    amountPaise: number;
+    userName: string;
+    userEmail?: string;
+    itemTitle: string;
+    status: string;
+    createdAt: string;
+  }) {
+    for (const peer of this.peers.values()) {
+      if (peer.isStaff) {
+        this.io.to(peer.socketId).emit('paymentReceived', payment);
+      }
+    }
+  }
+
   /* ── spotlight & mute-all ────────────────────────────────── */
 
   /**

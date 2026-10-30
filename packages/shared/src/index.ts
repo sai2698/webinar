@@ -957,6 +957,20 @@ export interface ServerToClientEvents {
    */
   ctaClicks: (payload: { ctaId: string; clickCount: number }) => void;
 
+  /**
+   * Staff only — a payment was captured for this webinar (via webhook or checkout).
+   * Used to show live revenue and buyer names in the host panel.
+   */
+  paymentReceived: (payload: {
+    id: string;
+    amountPaise: number;
+    userName: string;
+    userEmail?: string;
+    itemTitle: string;
+    status: string;
+    createdAt: string;
+  }) => void;
+
   viewerCount: (count: number) => void;
   enrolledUpdated: (payload: { userId: string; enrolled: boolean }) => void;
 
