@@ -27,7 +27,6 @@ import { endpoints } from '@/lib/api';
 import { roomToken } from '@/lib/session';
 import { useFullscreen } from '@/lib/useRoomUi';
 import { PremiereStage } from '@/components/PremiereStage';
-import { CtaOverlay } from '@/components/CtaOverlay';
 
 type Tab = 'chat' | 'people' | 'qa' | 'polls';
 
@@ -392,7 +391,6 @@ export default function RoomPage() {
             )}
             <WatermarkOverlay />
             <EnrollmentBanner />
-            <CtaOverlay />
           </div>
 
           {/* Desktop Controls */}

@@ -175,16 +175,17 @@ ensure_swap() {
   swap="$(swap_total_mb)"
 
   # Plenty of RAM and some swap already — nothing to do.
-  if [ "$mem" -ge 2048 ] && [ "$swap" -gt 0 ]; then
+  if [ "$mem" -ge 2048 ] && [ "$swap" -ge 1024 ]; then
     return 0
   fi
   if [ "$mem" -ge 4096 ]; then
     return 0
   fi
 
-  # Target: enough swap that RAM + swap clears ~3 GB.
-  want_mb=$(( 3072 - mem ))
-  [ "$want_mb" -lt 1024 ] && want_mb=1024
+  # Target: on low-RAM VPS (1GB), aim for at least 2560 MB total swap so
+  # combined virtual memory (RAM + swap) clears ~3.5 GB for Next.js compilation.
+  want_mb=$(( 3584 - mem ))
+  [ "$want_mb" -lt 2048 ] && want_mb=2048
   [ "$want_mb" -gt 4096 ] && want_mb=4096
 
   if [ "$swap" -ge "$want_mb" ]; then
@@ -192,18 +193,34 @@ ensure_swap() {
     return 0
   fi
 
+  # If /swapfile exists, activate it and check if sufficient
   if [ -e /swapfile ]; then
-    warn "/swapfile exists but is not active — trying to enable it."
     $SUDO swapon /swapfile 2>/dev/null || true
-    if [ "$(swap_total_mb)" -gt 0 ]; then
-      ok "swap enabled ($(swap_total_mb) MB)"
+    swap="$(swap_total_mb)"
+    if [ "$swap" -ge "$want_mb" ]; then
+      ok "swap enabled (${swap} MB)"
       return 0
     fi
-    warn "Could not enable /swapfile; leaving it alone."
+
+    # /swapfile was small (e.g. 512MB on cloud-init) — add /swapfile2 to reach target
+    local extra_mb=$(( want_mb - swap ))
+    [ "$extra_mb" -lt 1024 ] && extra_mb=1024
+    info "Existing swap is only ${swap} MB. Adding a ${extra_mb} MB secondary swapfile (/swapfile2) for build safety…"
+    if ! $SUDO fallocate -l "${extra_mb}M" /swapfile2 2>/dev/null; then
+      $SUDO dd if=/dev/zero of=/swapfile2 bs=1M count="$extra_mb" status=none
+    fi
+    $SUDO chmod 600 /swapfile2
+    $SUDO mkswap /swapfile2 >/dev/null
+    $SUDO swapon /swapfile2
+    if ! grep -qE '^/swapfile2[[:space:]]' /etc/fstab 2>/dev/null; then
+      printf '/swapfile2 none swap sw 0 0\n' | $SUDO tee -a /etc/fstab >/dev/null
+    fi
+    $SUDO sysctl -qw vm.swappiness=10 2>/dev/null || true
+    ok "additional swap enabled (total swap: $(swap_total_mb) MB)"
     return 0
   fi
 
-  info "Adding a ${want_mb} MB swapfile (RAM is ${mem} MB — the build needs it)…"
+  info "Adding a ${want_mb} MB swapfile (RAM is ${mem} MB — Next.js build requires swap)…"
 
   # fallocate is instant but unsupported on some filesystems; dd always works.
   if ! $SUDO fallocate -l "${want_mb}M" /swapfile 2>/dev/null; then
@@ -262,8 +279,14 @@ print_ports() {
   turn_max="$(env_get TURN_MAX_PORT 65535)"
   pg_port="$(env_get POSTGRES_PORT 5432)"
 
+  local workers
+  workers="$(env_get MEDIASOUP_WORKERS 1)"
+  local active_v2_ports="${rtc_min}"
+  if [ "$workers" -gt 1 ]; then
+    active_v2_ports="${rtc_min}-$(( rtc_min + workers - 1 ))"
+  fi
+
   local rtc_count=$(( rtc_max - rtc_min + 1 ))
-  local peer_capacity=$(( rtc_count / 2 ))
 
   hr
   printf '%s\n' "${B}PORTS TO WHITELIST IN FIREWALL${R}"
@@ -277,8 +300,8 @@ print_ports() {
   printf '  %-22s %-10s %s\n' "22" "tcp" "SSH remote access"
   printf '  %-22s %-10s %s\n' "$http_port" "tcp" "Platform Web + API + WebSockets (via Nginx)"
   printf '  %-22s %-10s %s\n' "80, 443" "tcp" "Caddy Reverse Proxy (HTTP & HTTPS SSL)"
-  printf '  %-22s %-10s %s\n' "$rtc_min-$rtc_max" "udp" "WebRTC media (mediasoup) — ${rtc_count} ports"
-  printf '  %-22s %-10s %s\n' "$rtc_min-$rtc_max" "tcp" "WebRTC media fallback when UDP is blocked"
+  printf '  %-22s %-10s %s\n' "$active_v2_ports" "udp+tcp" "V2 WebRtcServer Single-Port Demux (${workers} worker(s) = 10,000+ peers)"
+  printf '  %-22s %-10s %s\n' "$rtc_min-$rtc_max" "udp+tcp" "Mediasoup fallback port range (${rtc_count} ports)"
   printf '  %-22s %-10s %s\n' "$turn_port" "udp+tcp" "TURN relay — for restrictive networks"
   printf '  %-22s %-10s %s\n' "$turn_tls" "tcp" "TURN over TLS"
   printf '  %-22s %-10s %s\n' "$turn_min-$turn_max" "udp" "TURN relay port range"
@@ -561,6 +584,17 @@ write_units() {
   local ms_worker="$SCRIPT_DIR/node_modules/mediasoup/worker/out/Release/mediasoup-worker"
   [ -f "$ms_worker" ] || ms_worker="$SCRIPT_DIR/apps/server/node_modules/mediasoup/worker/out/Release/mediasoup-worker"
 
+  local node_bin
+  node_bin="$(command -v node || echo "/usr/bin/node")"
+
+  # On 1GB VPS, running compiled JS via node consumes ~50MB RAM compared to ~200MB with tsx JIT
+  local api_exec
+  if [ -f "$SCRIPT_DIR/apps/server/dist/index.js" ]; then
+    api_exec="${node_bin} ${SCRIPT_DIR}/apps/server/dist/index.js"
+  else
+    api_exec="${SCRIPT_DIR}/node_modules/.bin/tsx apps/server/src/index.ts"
+  fi
+
   info "Writing systemd units…"
 
   $SUDO tee "/etc/systemd/system/${API_SERVICE}.service" >/dev/null <<EOF
@@ -577,8 +611,9 @@ WorkingDirectory=${SCRIPT_DIR}
 EnvironmentFile=${ENV_FILE}
 Environment=NODE_ENV=production
 Environment=PORT=${api_port}
+Environment=NODE_OPTIONS=--max-old-space-size=384
 Environment=MEDIASOUP_WORKER_BIN=${ms_worker}
-ExecStart=${SCRIPT_DIR}/node_modules/.bin/tsx apps/server/src/index.ts
+ExecStart=${api_exec}
 Restart=always
 RestartSec=3
 LimitNOFILE=65535
@@ -606,6 +641,7 @@ WorkingDirectory=${SCRIPT_DIR}/apps/web
 EnvironmentFile=${ENV_FILE}
 Environment=NODE_ENV=production
 Environment=PORT=${web_port}
+Environment=NODE_OPTIONS=--max-old-space-size=384
 ExecStart=${SCRIPT_DIR}/node_modules/.bin/next start -p ${web_port}
 Restart=always
 RestartSec=3
@@ -719,13 +755,16 @@ build_apps() {
 
   local mem
   mem="$(mem_total_mb)"
-  local heap_mb=1024
-  if [ "$mem" -gt 0 ] && [ "$mem" -lt 2048 ]; then
-    heap_mb=$(( mem - 256 ))
-    [ "$heap_mb" -lt 512 ] && heap_mb=512
+  local heap_mb=768
+  if [ "$mem" -ge 2048 ]; then
+    heap_mb=1536
+  elif [ "$mem" -ge 4096 ]; then
+    heap_mb=3072
   fi
   export NODE_OPTIONS="--max-old-space-size=${heap_mb}"
-  info "Node heap capped at ${heap_mb} MB (RAM: ${mem} MB, swap: $(swap_total_mb) MB)"
+  export NEXT_TELEMETRY_DISABLED=1
+  export NEXT_CPU_COUNT=1
+  info "Node heap capped at ${heap_mb} MB (RAM: ${mem} MB, swap: $(swap_total_mb) MB, 1 CPU thread mode)"
 
   info "Installing dependencies (--ignore-scripts to skip slow C++ compilation)…"
   # Using --ignore-scripts avoids slow C++ compilation (mediasoup/node-gyp) on 1GB VPS
@@ -733,6 +772,9 @@ build_apps() {
 
   # Ensure prebuilt mediasoup worker binary is downloaded directly
   ensure_mediasoup_worker
+  if [ -f "$SCRIPT_DIR/apps/server/scripts/fetch-mediasoup-worker.mjs" ]; then
+    node "$SCRIPT_DIR/apps/server/scripts/fetch-mediasoup-worker.mjs" 2>/dev/null || true
+  fi
 
   info "Generating the Prisma client…"
   npx prisma generate --schema apps/server/prisma/schema.prisma
@@ -751,6 +793,7 @@ build_apps() {
   NEXT_PUBLIC_SOCKET_URL="$(env_get NEXT_PUBLIC_SOCKET_URL)" \
   NEXT_PUBLIC_RZP_KEY_ID="$(env_get NEXT_PUBLIC_RZP_KEY_ID)" \
   NEXT_TELEMETRY_DISABLED=1 \
+  NEXT_CPU_COUNT=1 \
   CI=1 \
     npm run build -w @webinar/web
 

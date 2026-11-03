@@ -580,7 +580,6 @@ export default function ReplayPage() {
                   closed={activePoll.closed}
                 />
               )}
-              {activeCta && <ReplayCta cta={activeCta} />}
 
               {/* paused / ended veil — a premiere has no pause button */}
               {!playing && !live && (
@@ -789,11 +788,18 @@ export default function ReplayPage() {
             </button>
           </div>
 
-          <div className="min-h-0 flex-1 overflow-hidden">
-            {tab === 'chat' && <ReplayChat messages={chat} />}
-            {tab === 'people' && <ReplayPeople people={people} hands={hands} />}
-            {tab === 'qa' && <ReplayQa questions={qaHistory} />}
-            {tab === 'polls' && <ReplayPolls polls={pollHistory} />}
+          <div className="min-h-0 flex-1 overflow-hidden flex flex-col">
+            {activeCta && tab === 'chat' && (
+              <div className="p-3 border-b border-white/10 shrink-0">
+                <ReplayCta cta={activeCta} />
+              </div>
+            )}
+            <div className="min-h-0 flex-1 overflow-hidden">
+              {tab === 'chat' && <ReplayChat messages={chat} />}
+              {tab === 'people' && <ReplayPeople people={people} hands={hands} />}
+              {tab === 'qa' && <ReplayQa questions={qaHistory} />}
+              {tab === 'polls' && <ReplayPolls polls={pollHistory} />}
+            </div>
           </div>
 
           <div className="shrink-0 border-t border-white/10 px-4 py-2.5">

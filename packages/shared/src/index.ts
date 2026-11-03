@@ -741,6 +741,11 @@ export interface ClientToServerEvents {
     ack: (res: Ack) => void
   ) => void;
 
+  closeTransport: (
+    payload: { direction: 'send' | 'recv'; transportId?: string },
+    ack?: (res: Ack<{ closed: boolean }>) => void
+  ) => void;
+
   produce: (
     payload: {
       transportId: string;

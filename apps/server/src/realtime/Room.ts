@@ -1,4 +1,4 @@
-import type { Router, RtpCapabilities } from 'mediasoup/types';
+import type { Router, RtpCapabilities, Worker, WebRtcServer } from 'mediasoup/types';
 import type { Server } from 'socket.io';
 import type {
   ChatMessagePayload,
@@ -143,7 +143,9 @@ export class Room {
     this.startTimers();
   }
 
-  private async getRouter(): Promise<Router> {
+  private worker: Worker | null = null;
+
+  async getRouter(): Promise<Router> {
     if (this.router) return this.router;
     if (this.routerReady) return this.routerReady;
 
@@ -151,11 +153,16 @@ export class Room {
       const worker = workerPool.getNext();
       const router = await worker.createRouter({ mediaCodecs });
       this.router = router;
+      this.worker = worker;
       log.info(`Router created for "${this.slug}"`);
       return router;
     })();
 
     return this.routerReady;
+  }
+
+  getWebRtcServer(): WebRtcServer | undefined {
+    return this.worker ? workerPool.getWebRtcServer(this.worker) : undefined;
   }
 
   get rtpCapabilities(): RtpCapabilities | null {

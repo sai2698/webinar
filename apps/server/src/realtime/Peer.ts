@@ -5,6 +5,7 @@ import type {
   RtpCapabilities,
   RtpParameters,
   WebRtcTransport,
+  WebRtcServer,
 } from 'mediasoup/types';
 import type { Role, MediaSource, CohostPermissions } from '@webinar/shared';
 import { webRtcTransportOptions } from '../config/mediasoup.js';
@@ -107,8 +108,23 @@ export class Peer implements VisibilitySubject {
     return this.permissions[permission] === true;
   }
 
-  async createTransport(router: Router, direction: 'send' | 'recv'): Promise<WebRtcTransport> {
-    const transport = await router.createWebRtcTransport(webRtcTransportOptions);
+  async createTransport(
+    router: Router,
+    direction: 'send' | 'recv',
+    webRtcServer?: WebRtcServer
+  ): Promise<WebRtcTransport> {
+    const options = webRtcServer
+      ? {
+          webRtcServer,
+          enableUdp: true,
+          enableTcp: true,
+          preferUdp: true,
+          initialAvailableOutgoingBitrate: 1_000_000,
+          maxIncomingBitrate: 3_000_000,
+        }
+      : webRtcTransportOptions;
+
+    const transport = await router.createWebRtcTransport(options as any);
 
     transport.on('dtlsstatechange', (state: string) => {
       if (state === 'closed') {
@@ -121,6 +137,25 @@ export class Peer implements VisibilitySubject {
     else this.recvTransport = transport;
 
     return transport;
+  }
+
+  closeTransport(direction: 'send' | 'recv', transportId?: string): boolean {
+    if (direction === 'send' && this.sendTransport) {
+      if (!transportId || this.sendTransport.id === transportId) {
+        log.debug(`Closing send transport on-demand for ${this.name} (${this.sendTransport.id})`);
+        this.sendTransport.close();
+        this.sendTransport = null;
+        return true;
+      }
+    } else if (direction === 'recv' && this.recvTransport) {
+      if (!transportId || this.recvTransport.id === transportId) {
+        log.debug(`Closing recv transport on-demand for ${this.name} (${this.recvTransport.id})`);
+        this.recvTransport.close();
+        this.recvTransport = null;
+        return true;
+      }
+    }
+    return false;
   }
 
   async produce(

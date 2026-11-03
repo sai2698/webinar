@@ -1,7 +1,7 @@
 import * as mediasoup from 'mediasoup';
-import type { Worker } from 'mediasoup/types';
+import type { Worker, WebRtcServer } from 'mediasoup/types';
 import { env } from '../config/env.js';
-import { workerSettings } from '../config/mediasoup.js';
+import { announcedIp, workerSettings } from '../config/mediasoup.js';
 import { createLogger } from '../utils/logger.js';
 
 const log = createLogger('sfu');
@@ -9,9 +9,11 @@ const log = createLogger('sfu');
 /**
  * Pool of mediasoup Workers — one per CPU core (capped by MEDIASOUP_WORKERS).
  * Routers are assigned round-robin so load spreads across cores.
+ * Each worker hosts a WebRtcServer on a single unified port, eliminating port exhaustion.
  */
 class WorkerPool {
   private workers: Worker[] = [];
+  private webRtcServers = new Map<Worker, WebRtcServer>();
   private nextIndex = 0;
   private starting: Promise<void> | null = null;
 
@@ -28,6 +30,32 @@ class WorkerPool {
           log.error(`Worker ${worker.pid} died — exiting in 2s`, error);
           setTimeout(() => process.exit(1), 2000);
         });
+
+        // Initialize WebRtcServer so all thousands of transports on this worker
+        // share the same single UDP & TCP port, solving port exhaustion completely.
+        try {
+          const port = env.RTC_MIN_PORT + i;
+          const webRtcServer = await worker.createWebRtcServer({
+            listenInfos: [
+              {
+                protocol: 'udp',
+                ip: '0.0.0.0',
+                announcedAddress: announcedIp,
+                port,
+              },
+              {
+                protocol: 'tcp',
+                ip: '0.0.0.0',
+                announcedAddress: announcedIp,
+                port,
+              },
+            ],
+          });
+          this.webRtcServers.set(worker, webRtcServer);
+          log.info(`WebRtcServer single-port router started for Worker ${i + 1} on port ${port} (UDP/TCP)`);
+        } catch (serverErr) {
+          log.warn(`Could not start WebRtcServer for Worker ${i + 1}, using dynamic port fallback:`, serverErr);
+        }
 
         this.workers.push(worker);
         log.info(`Worker ${i + 1}/${count} started (pid ${worker.pid})`);
@@ -46,11 +74,19 @@ class WorkerPool {
     return worker;
   }
 
+  getWebRtcServer(worker: Worker): WebRtcServer | undefined {
+    return this.webRtcServers.get(worker);
+  }
+
   get size(): number {
     return this.workers.length;
   }
 
   async close(): Promise<void> {
+    for (const server of this.webRtcServers.values()) {
+      server.close();
+    }
+    this.webRtcServers.clear();
     await Promise.all(this.workers.map((w) => w.close()));
     this.workers = [];
   }

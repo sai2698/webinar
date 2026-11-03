@@ -150,6 +150,89 @@ payment captured and the registration paid. `POST /api/payments/webhook` is moun
 a raw body parser *before* `express.json()` so the signature can be verified against the
 exact bytes Razorpay sent.
 
+## V2 High-Scale Architecture (10,000+ Participants)
+
+The platform was upgraded from a legacy 2-ports-per-peer allocation model to a high-density single-port WebRtcServer architecture capable of scaling to 10,000+ participants with zero port exhaustion.
+
+### 1. Single-Port Demultiplexing (`WebRtcServer`)
+
+- **Old V1 Problem:** Each participant allocated 2 UDP ports (1 for send transport, 1 for recv transport). 10,000 participants required 20,000 open UDP ports on the host, quickly exhausting Linux ephemeral port allocations and breaking firewall security rules.
+- **V2 Solution:** Each mediasoup worker creates a `WebRtcServer` listening on a single UDP and TCP port (`RTC_MIN_PORT + workerIndex`, e.g. 40000 on worker 0).
+- All 10,000 participants connect to the **same single port** (`40000/udp` and `40000/tcp`). Mediasoup demultiplexes incoming packets at the C++ kernel level using the STUN `ufrag` and DTLS handshake tuples.
+- On a 1 vCPU server (`MEDIASOUP_WORKERS=1`), only **port 40000** is consumed regardless of how many thousands of participants join.
+
+```
+       10,000 Participants (Browsers)
+    ┌───────────────────────────────────┐
+    │  Viewer 1, Viewer 2, ... 10,000  │
+    └─────────────────┬─────────────────┘
+                      │ (All 10,000 peers connect to the SAME port)
+                      ▼
+             Port 40000 (UDP / TCP)
+    ┌───────────────────────────────────┐
+    │     mediasoup WebRtcServer        │
+    │  Demuxes by STUN ufrag + DTLS     │
+    └─────────────────┬─────────────────┘
+                      ▼
+    ┌───────────────────────────────────┐
+    │  Worker 1 Router (Audio / Video)  │
+    └───────────────────────────────────┘
+```
+
+### 2. Just-In-Time (JIT) On-Demand Send Transports
+
+- In a webinar, 99.9% of participants are passive viewers. Only 1 to 3 users (host and speakers) produce audio or video.
+- **Old V1:** Every viewer created a `sendTransport` on join "just in case", wasting socket file descriptors, ICE checks, and upload bandwidth.
+- **V2 Solution:** Passive viewers connect with **0 send transports**. A `sendTransport` is allocated lazily (`ensureSendTransport`) only when the user is explicitly granted permission and clicks "Start Camera" or "Unmute".
+- When a user turns their camera/mic off, the client emits `closeTransport`, immediately closing the transport on the server and reclaiming OS file descriptors and memory.
+
+---
+
+## Operating Without a CDN: What Happens and How to Survive
+
+A common question when self-hosting or scaling webinars is: **"What happens if I don't have a CDN?"**
+
+The answer depends on whether you are running **Live WebRTC sessions** or **Premiere / Evergreen Replay sessions**.
+
+### 1. Live WebRTC Sessions (Do NOT Use a CDN By Design)
+
+- WebRTC operates directly over UDP with sub-second latency ($<200\text{ ms}$). Standard CDNs (Cloudflare, CloudFront, Fastly) cache HTTP/TCP traffic and **cannot** proxy or cache live WebRTC media.
+- Your SFU (mediasoup) *is* the media distribution engine. It copies and forwards RTP packets directly to connected viewers.
+- **What happens on your VPS:**
+  - Bandwidth consumption is $N_{\text{viewers}} \times \text{Bitrate}$.
+  - At 720p 30fps ($\sim 1\text{ Mbps}$ per viewer):
+    - 100 viewers = $100\text{ Mbps}$ egress.
+    - 1,000 viewers = $1\text{ Gbps}$ egress (saturates a standard 1 Gbps VPS network interface).
+    - 10,000 viewers = $10\text{ Gbps}$ continuous egress.
+  - **Solution for Live WebRTC scale:** Multi-node SFU clustering with `router.pipeToRouter()`. Dedicated media edge nodes forward streams in a tree hierarchy across regions.
+
+### 2. Premiere / Evergreen Replays (HTTP Video Range Requests)
+
+Premiere and Replay sessions serve pre-recorded MP4/WebM video files via HTTP range requests (`/api/recordings/:id/media`).
+
+#### What happens if you DO NOT have a CDN:
+
+1. **Egress Network Wall:**
+   - 10,000 concurrent viewers streaming a $1.2\text{ Mbps}$ recording file generate **$12\text{ Gbps}$ of outbound traffic**.
+   - A single VPS with a 1 Gbps network card will drop packets, choke, and stall video playback for 90% of attendees.
+2. **File Descriptor & Event Loop Exhaustion:**
+   - 10,000 concurrent HTTP streaming connections directly hitting Node.js/Express consume 10,000 open file descriptors and TCP sockets. Node.js's single-threaded event loop becomes sluggish handling chunked byte streams, delaying chat messages and API responses.
+3. **Disk I/O Bottlenecks:**
+   - If recordings are read repeatedly from a slow disk, disk seek queues stall I/O.
+
+#### How to Survive Without a Paid CDN:
+
+1. **Nginx Kernel Zero-Copy Streaming (`sendfile on;`):**
+   - In our V2 Nginx configuration (`infra/nginx/templates/default.conf.template`), we enabled `sendfile on;` and `proxy_buffering off;`.
+   - Nginx transfers video file bytes directly from kernel page cache to the network socket via the Linux `sendfile(2)` system call, completely bypassing user space and Node.js memory.
+2. **Fast NVMe Storage:**
+   - Keep the `recordings/` directory on NVMe SSD storage. The Linux kernel page cache (`vm.swappiness=10`) keeps active video segments in RAM.
+3. **Free Cloudflare Caching (Recommended $0 Alternative):**
+   - Point your domain's DNS through Cloudflare (free plan).
+   - Cloudflare automatically caches static assets (`/_next/static/`) and proxies HTTP byte-range requests for `/api/recordings/*/media`, absorbing up to 90% of egress bandwidth at edge points of presence around the world without costing a dime.
+
+---
+
 ## Failure modes worth knowing
 
 - **Worker binary missing.** mediasoup installs but cannot spawn a worker. The server

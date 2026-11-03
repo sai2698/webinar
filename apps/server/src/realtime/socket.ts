@@ -396,7 +396,8 @@ export function registerSocketHandlers(io: Server) {
         const router = c.room.router;
         if (!router) return ackErr(ack, 'Router not ready');
 
-        const transport = await c.peer.createTransport(router, payload.direction);
+        const webRtcServer = c.room.getWebRtcServer();
+        const transport = await c.peer.createTransport(router, payload.direction, webRtcServer);
 
         ackOk(ack, {
           id: transport.id,
@@ -407,6 +408,17 @@ export function registerSocketHandlers(io: Server) {
         });
       } catch (err) {
         ackErr(ack, err instanceof Error ? err.message : 'Transport failed');
+      }
+    });
+
+    socket.on('closeTransport', async (payload, ack) => {
+      const c = requirePeer();
+      if (!c) return ackErr(ack, 'Not in a room');
+      try {
+        const closed = c.peer.closeTransport(payload.direction, payload.transportId);
+        ackOk(ack, { closed });
+      } catch (err) {
+        ackErr(ack, err instanceof Error ? err.message : 'Could not close transport');
       }
     });
 

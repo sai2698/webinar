@@ -177,6 +177,74 @@ export function useMediasoup({ slug, token, onJoined, onError }: UseMediasoupOpt
     [store]
   );
 
+  /* ── on-demand JIT send transport allocation ───────────── */
+  const ensureSendTransport = useCallback(async (): Promise<MediasoupTypes.Transport | null> => {
+    if (sendTransportRef.current && !sendTransportRef.current.closed) {
+      return sendTransportRef.current;
+    }
+
+    const device = deviceRef.current;
+    const socket = socketRef.current;
+    if (!device || !socket) return null;
+
+    return new Promise<MediasoupTypes.Transport | null>((resolve, reject) => {
+      socket.emit('createTransport', { direction: 'send' }, async (tres) => {
+        if (!tres.ok) return reject(new Error(tres.error));
+        try {
+          const transport = device.createSendTransport({
+            id: tres.data.id,
+            iceParameters: tres.data.iceParameters as MediasoupTypes.IceParameters,
+            iceCandidates: tres.data.iceCandidates as MediasoupTypes.IceCandidate[],
+            dtlsParameters: tres.data.dtlsParameters as MediasoupTypes.DtlsParameters,
+            iceServers: (tres.data.iceServers || []) as RTCIceServer[],
+          });
+
+          transport.on('connectionstatechange', (state) => {
+            console.log(`[mediasoup] on-demand sendTransport state: ${state}`);
+            if (state === 'closed' || state === 'failed') {
+              if (sendTransportRef.current === transport) {
+                sendTransportRef.current = null;
+              }
+            }
+          });
+
+          transport.on('connect', ({ dtlsParameters }, callback, errback) => {
+            socket.emit(
+              'connectTransport',
+              { transportId: transport.id, dtlsParameters: safeClone(dtlsParameters) },
+              (cres) => (cres.ok ? callback() : errback(new Error(cres.error)))
+            );
+          });
+
+          transport.on('produce', ({ kind, rtpParameters, appData }, callback, errback) => {
+            socket.emit(
+              'produce',
+              {
+                transportId: transport.id,
+                kind,
+                rtpParameters: safeClone(rtpParameters),
+                source: (appData as { source?: MediaSource } | undefined)?.source,
+                appData: appData
+                  ? {
+                      kind: (appData as Record<string, unknown>).kind,
+                      source: (appData as Record<string, unknown>).source,
+                    }
+                  : undefined,
+              },
+              (pres) => (pres.ok ? callback({ id: pres.data.producerId }) : errback(new Error(pres.error)))
+            );
+          });
+
+          sendTransportRef.current = transport;
+          console.log(`[mediasoup] JIT on-demand sendTransport created (${transport.id})`);
+          resolve(transport);
+        } catch (err) {
+          reject(err);
+        }
+      });
+    });
+  }, []);
+
   /* ── publish a local track ─────────────────────────────── */
   const publishTrack = useCallback(
     async (
@@ -184,7 +252,8 @@ export function useMediasoup({ slug, token, onJoined, onError }: UseMediasoupOpt
       kind: 'audio' | 'video',
       source: MediaSource = kind === 'audio' ? 'microphone' : 'camera'
     ) => {
-      const sendTransport = sendTransportRef.current;
+      // Lazy JIT: only acquire send transport when actually publishing a track
+      const sendTransport = await ensureSendTransport();
       if (!sendTransport) return null;
 
       const producer = await sendTransport.produce({
@@ -335,52 +404,7 @@ export function useMediasoup({ slug, token, onJoined, onError }: UseMediasoupOpt
               });
             });
 
-            /* send transport */
-            await new Promise<void>((resolve, reject) => {
-              socket.emit('createTransport', { direction: 'send' }, async (tres) => {
-                if (!tres.ok) return reject(new Error(tres.error));
-                try {
-                  const transport = device.createSendTransport({
-                    id: tres.data.id,
-                    iceParameters: tres.data.iceParameters as MediasoupTypes.IceParameters,
-                    iceCandidates: tres.data.iceCandidates as MediasoupTypes.IceCandidate[],
-                    dtlsParameters: tres.data.dtlsParameters as MediasoupTypes.DtlsParameters,
-                    iceServers: (tres.data.iceServers || []) as RTCIceServer[],
-                  });
-
-                  transport.on('connectionstatechange', (state) => {
-                    console.log(`[mediasoup] sendTransport state: ${state}`);
-                  });
-
-                  transport.on('connect', ({ dtlsParameters }, callback, errback) => {
-                    socket.emit(
-                      'connectTransport',
-                      { transportId: transport.id, dtlsParameters: safeClone(dtlsParameters) },
-                      (cres) => (cres.ok ? callback() : errback(new Error(cres.error)))
-                    );
-                  });
-
-                  transport.on('produce', ({ kind, rtpParameters, appData }, callback, errback) => {
-                    socket.emit(
-                      'produce',
-                      {
-                        transportId: transport.id,
-                        kind,
-                        rtpParameters: safeClone(rtpParameters),
-                        source: (appData as { source?: MediaSource } | undefined)?.source,
-                        appData: appData ? { kind: (appData as Record<string,unknown>).kind, source: (appData as Record<string,unknown>).source } : undefined,
-                      },
-                      (pres) => (pres.ok ? callback({ id: pres.data.producerId }) : errback(new Error(pres.error)))
-                    );
-                  });
-
-                  sendTransportRef.current = transport;
-                  resolve();
-                } catch (err) {
-                  reject(err);
-                }
-              });
-            });
+            /* send transport is lazy / on-demand: only allocated if the participant publishes mic/cam/screen */
 
             /* consume everything already on air */
             for (const peer of snapshot.peers) {
