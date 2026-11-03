@@ -7,6 +7,7 @@ import { Countdown } from '@/components/Countdown';
 import { CustomFieldsForm } from '@/components/CustomFieldsForm';
 import { Logo } from '@/components/Logo';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import { Button, Input, Badge, Card } from '@/components/ui';
 import { endpoints, ApiError, API_URL, type PublicWebinar } from '@/lib/api';
 import { writeSession } from '@/lib/session';
 
@@ -28,7 +29,7 @@ function formatDate(iso: string, tz: string) {
 }
 
 function formatPrice(paise: number, currency: string) {
-  if (!paise) return 'Free';
+  if (!paise) return 'Free Entry';
   return new Intl.NumberFormat('en-IN', {
     style: 'currency',
     currency: currency || 'INR',
@@ -99,14 +100,10 @@ export default function DedicatedRegistrationPage() {
       setJoinUrl(targetRoomUrl);
 
       if ('pendingApproval' in res && res.pendingApproval) {
-        router.push(`${targetRoomUrl}?pending=1`);
+        router.push(`/room/${slug}?pending=1`);
       } else if (res.requiresPayment) {
-        router.push(`/w/${webinar?.slug || slug}/pay`);
-      } else if (webinar?.status === 'LIVE') {
-        // If live now, take them straight to the room
-        router.push(targetRoomUrl);
+        router.push(`/w/${slug}/pay`);
       } else {
-        // If scheduled for future, show clear confirmation with calendar download
         setRegisteredSuccess(true);
       }
     } catch (err) {
@@ -118,10 +115,10 @@ export default function DedicatedRegistrationPage() {
 
   if (loading) {
     return (
-      <main className="grid min-h-screen place-items-center bg-slate-950 text-white">
-        <div className="flex flex-col items-center gap-4">
-          <div className="h-10 w-10 animate-spin rounded-full border-2 border-white/10 border-t-amber-400" />
-          <p className="text-sm text-slate-400">Loading registration page…</p>
+      <main className="grid min-h-screen place-items-center bg-surface text-fg">
+        <div className="flex flex-col items-center gap-3">
+          <span className="h-10 w-10 animate-spin rounded-full border-2 border-line border-t-brand-500" />
+          <p className="text-xs text-muted">Loading registration details…</p>
         </div>
       </main>
     );
@@ -129,20 +126,22 @@ export default function DedicatedRegistrationPage() {
 
   if (error || !webinar) {
     return (
-      <main className="grid min-h-screen place-items-center px-6 bg-slate-950 text-white">
-        <div className="rounded-2xl border border-white/10 bg-slate-900/80 p-8 text-center max-w-md shadow-2xl backdrop-blur-md">
-          <div className="mx-auto mb-4 grid h-12 w-12 place-items-center rounded-full bg-red-500/15 text-red-400">
-            <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="1.8">
-              <path d="M12 8v5m0 3.5v.5" strokeLinecap="round" />
+      <main className="grid min-h-screen place-items-center px-6 bg-surface text-fg">
+        <Card className="max-w-md p-8 text-center">
+          <div className="mx-auto mb-4 grid h-12 w-12 place-items-center rounded-2xl bg-red-500/15 text-red-500">
+            <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="2">
               <circle cx="12" cy="12" r="9" />
+              <path d="M12 8v5m0 3.5v.5" strokeLinecap="round" />
             </svg>
           </div>
-          <h1 className="text-lg font-semibold text-white">Webinar not found</h1>
-          <p className="mt-2 text-sm text-slate-400">{error ?? 'This webinar link is invalid or expired.'}</p>
-          <Link href="/" className="mt-6 inline-block rounded-xl bg-white/10 px-4 py-2 text-xs font-semibold text-white hover:bg-white/20 transition">
-            Back to Home
-          </Link>
-        </div>
+          <h1 className="text-lg font-bold text-fg">Webinar not found</h1>
+          <p className="mt-2 text-sm text-muted">{error ?? 'This webinar registration page is unavailable.'}</p>
+          <div className="mt-6">
+            <Link href="/">
+              <Button variant="outline">Back to Home</Button>
+            </Link>
+          </div>
+        </Card>
       </main>
     );
   }
@@ -153,7 +152,7 @@ export default function DedicatedRegistrationPage() {
   const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
 
   return (
-    <main className="relative min-h-screen bg-slate-950 text-slate-100 overflow-x-hidden selection:bg-amber-500 selection:text-black">
+    <main className="relative min-h-screen bg-surface text-fg overflow-x-hidden transition-colors duration-200">
       {/* Ambient background glow */}
       <div className="pointer-events-none absolute inset-x-0 top-0 h-[520px] overflow-hidden opacity-25">
         {webinar.bannerUrl && (
@@ -164,16 +163,16 @@ export default function DedicatedRegistrationPage() {
             className="h-full w-full scale-125 object-cover blur-3xl"
           />
         )}
-        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-slate-950/80 to-slate-950" />
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-surface/80 to-surface" />
       </div>
 
       {/* Top Navbar */}
-      <header className="relative z-10 mx-auto flex max-w-6xl items-center justify-between px-6 py-6 border-b border-white/5">
+      <header className="relative z-10 mx-auto flex max-w-6xl items-center justify-between px-6 py-6 border-b border-line">
         <Logo />
         <div className="flex items-center gap-3">
           <Link
             href={`/w/${webinar.slug}`}
-            className="text-xs font-medium text-slate-400 hover:text-white transition flex items-center gap-1"
+            className="text-xs font-semibold text-muted hover:text-fg transition flex items-center gap-1"
           >
             ← Overview
           </Link>
@@ -184,12 +183,10 @@ export default function DedicatedRegistrationPage() {
       {/* Main Container */}
       <div className="relative z-10 mx-auto max-w-6xl px-6 py-8 md:py-12">
         <div className="grid gap-10 lg:grid-cols-[1.3fr_1fr] items-start">
-          
           {/* Left Column: Webinar Banner & Details */}
           <div className="space-y-6 animate-fade-up">
-            {/* Prominent Foreground Banner */}
-            {webinar.bannerUrl ? (
-              <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-slate-900 shadow-2xl aspect-[16/9] w-full">
+            {webinar.bannerUrl && (
+              <div className="relative overflow-hidden rounded-2xl border border-line bg-panel-2 shadow-pop aspect-[16/9] w-full">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={getBannerSrc(webinar.bannerUrl)}
@@ -197,93 +194,76 @@ export default function DedicatedRegistrationPage() {
                   className="h-full w-full object-cover"
                 />
               </div>
-            ) : null}
+            )}
 
             {/* Badges */}
             <div className="flex flex-wrap items-center gap-2">
               {isLive ? (
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-red-500/40 bg-red-500/20 px-3 py-1 text-xs font-bold text-red-300">
-                  <span className="relative flex h-2 w-2">
-                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400" />
-                    <span className="relative inline-flex h-2 w-2 rounded-full bg-red-400" />
-                  </span>
-                  LIVE NOW
-                </span>
+                <Badge variant="live" dot>LIVE NOW</Badge>
               ) : isEnded ? (
-                <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-medium text-slate-400">
-                  Ended
-                </span>
+                <Badge variant="default">Ended</Badge>
               ) : (
-                <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-xs font-semibold text-amber-300">
-                  Upcoming Live Session
-                </span>
+                <Badge variant="brand">Upcoming Live Session</Badge>
               )}
 
-              <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-medium text-slate-300">
-                ⏱️ {webinar.durationMins} minutes
-              </span>
-
-              <span className="rounded-full border border-amber-500/30 bg-amber-500/15 px-3 py-1 text-xs font-bold text-amber-400">
-                {webinar.requirePayment ? formatPrice(webinar.priceInPaise, webinar.currency) : '🎉 Free Entry'}
-              </span>
+              <Badge variant="default">⏱️ {webinar.durationMins} minutes</Badge>
+              <Badge variant="warning">{formatPrice(webinar.priceInPaise, webinar.currency)}</Badge>
 
               {webinar.seatsLeft !== null && webinar.seatsLeft <= 50 && (
-                <span className="rounded-full border border-red-500/30 bg-red-500/10 px-3 py-1 text-xs font-medium text-red-300">
-                  🔥 Only {webinar.seatsLeft} seats left
-                </span>
+                <Badge variant="danger">🔥 Only {webinar.seatsLeft} seats left</Badge>
               )}
             </div>
 
             {/* Title & Host Info */}
             <div>
-              <h1 className="text-3xl font-extrabold leading-tight tracking-tight text-white sm:text-4xl">
+              <h1 className="text-3xl font-extrabold leading-tight tracking-tight text-fg sm:text-4xl">
                 {webinar.title}
               </h1>
 
-              <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-slate-400">
-                <span className="inline-flex items-center gap-2">
-                  <svg viewBox="0 0 24 24" className="h-4 w-4 text-amber-400" fill="none" stroke="currentColor" strokeWidth="1.7">
+              <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-muted">
+                <span className="inline-flex items-center gap-2 font-medium">
+                  <svg viewBox="0 0 24 24" className="h-4 w-4 text-brand-500" fill="none" stroke="currentColor" strokeWidth="1.8">
                     <circle cx="12" cy="12" r="9" />
                     <path d="M12 7.5V12l3 2" strokeLinecap="round" />
                   </svg>
                   {formatDate(webinar.startsAt, webinar.timezone)}
                 </span>
-                <span className="inline-flex items-center gap-2">
-                  <svg viewBox="0 0 24 24" className="h-4 w-4 text-amber-400" fill="none" stroke="currentColor" strokeWidth="1.7">
+                <span className="inline-flex items-center gap-2 font-medium">
+                  <svg viewBox="0 0 24 24" className="h-4 w-4 text-brand-500" fill="none" stroke="currentColor" strokeWidth="1.8">
                     <circle cx="12" cy="8.5" r="3.5" />
                     <path d="M5 19.5c0-3.3 3.1-5.5 7-5.5s7 2.2 7 5.5" strokeLinecap="round" />
                   </svg>
-                  Hosted by <strong className="text-white">{webinar.hostName}</strong>
+                  Hosted by <strong className="text-fg">{webinar.hostName}</strong>
                 </span>
               </div>
             </div>
 
             {/* Countdown timer */}
             {startsInFuture && !isEnded && (
-              <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 backdrop-blur-sm">
-                <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-3">
+              <Card className="p-5">
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted mb-3">
                   Starts In
                 </p>
                 <Countdown target={webinar.startsAt} />
-              </div>
+              </Card>
             )}
 
             {/* Description */}
             {webinar.description && (
               <div className="space-y-2 pt-2">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-muted">
                   About this Live Webinar
                 </h3>
-                <p className="whitespace-pre-line text-sm leading-relaxed text-slate-300">
+                <p className="whitespace-pre-line text-sm leading-relaxed text-fg">
                   {webinar.description}
                 </p>
               </div>
             )}
 
-            {/* Share Bar for YouTube & Social Media */}
-            <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-4 space-y-3">
+            {/* Share Bar */}
+            <Card className="p-4 space-y-3">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                <span className="text-xs font-semibold text-fg flex items-center gap-1.5">
                   <span>📢</span> Share this Webinar:
                 </span>
                 <button
@@ -293,19 +273,18 @@ export default function DedicatedRegistrationPage() {
                     setCopiedShareLink(true);
                     setTimeout(() => setCopiedShareLink(false), 2500);
                   }}
-                  className="text-xs font-semibold text-amber-400 hover:text-amber-300 transition"
+                  className="text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline"
                 >
                   {copiedShareLink ? '✓ Copied Link!' : '📋 Copy Link'}
                 </button>
               </div>
 
-              {/* Share links */}
               <div className="flex items-center gap-2 flex-wrap text-xs">
                 <a
                   href={`https://api.whatsapp.com/send?text=${encodeURIComponent(`Join me for "${webinar.title}" live! Register here: ${currentUrl}`)}`}
                   target="_blank"
                   rel="noreferrer"
-                  className="px-3 py-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20 transition flex items-center gap-1.5"
+                  className="px-3 py-1.5 rounded-xl border border-line bg-panel-2 text-fg hover:bg-line transition flex items-center gap-1.5"
                 >
                   <span>💬</span> WhatsApp
                 </a>
@@ -313,172 +292,167 @@ export default function DedicatedRegistrationPage() {
                   href={`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(currentUrl)}`}
                   target="_blank"
                   rel="noreferrer"
-                  className="px-3 py-1.5 rounded-lg border border-blue-500/30 bg-blue-500/10 text-blue-300 hover:bg-blue-500/20 transition flex items-center gap-1.5"
+                  className="px-3 py-1.5 rounded-xl border border-line bg-panel-2 text-fg hover:bg-line transition flex items-center gap-1.5"
                 >
                   <span>💼</span> LinkedIn
                 </a>
                 <a
-                  href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(`Register for "${webinar.title}" live webinar:`)}&url=${encodeURIComponent(currentUrl)}`}
+                  href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(`Joining "${webinar.title}" live! Join here: ${currentUrl}`)}`}
                   target="_blank"
                   rel="noreferrer"
-                  className="px-3 py-1.5 rounded-lg border border-sky-500/30 bg-sky-500/10 text-sky-300 hover:bg-sky-500/20 transition flex items-center gap-1.5"
+                  className="px-3 py-1.5 rounded-xl border border-line bg-panel-2 text-fg hover:bg-line transition flex items-center gap-1.5"
                 >
-                  <span>🐦</span> Twitter / X
+                  <span>🐦</span> X / Twitter
                 </a>
               </div>
-            </div>
+            </Card>
           </div>
 
-          {/* Right Column: Dedicated Registration Form */}
+          {/* Right Column: Registration Form or Success Screen */}
           <div className="sticky top-6">
-            <div className="rounded-3xl border border-white/10 bg-slate-900/90 p-6 md:p-8 shadow-2xl backdrop-blur-xl">
+            <Card className="p-6 sm:p-7 shadow-pop">
               {registeredSuccess ? (
-                /* Success state after registering for future session */
-                <div className="text-center space-y-4 py-4 animate-fade-in">
-                  <div className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-emerald-500/20 text-emerald-400 text-3xl">
-                    ✓
+                <div className="text-center space-y-5 py-4 animate-fade-up">
+                  <div className="mx-auto h-16 w-16 rounded-full bg-mint-500/15 text-mint-500 border border-mint-500/30 flex items-center justify-center text-3xl">
+                    🎉
                   </div>
                   <div>
-                    <h3 className="text-xl font-bold text-white">Your Seat is Reserved!</h3>
-                    <p className="mt-1.5 text-xs text-slate-300 leading-relaxed">
-                      We look forward to seeing you at <strong>{webinar.title}</strong>.
+                    <h2 className="text-xl font-bold text-fg">You are Registered!</h2>
+                    <p className="text-xs text-muted mt-1 leading-relaxed">
+                      Your seat is reserved. Click below to enter the live room directly.
                     </p>
                   </div>
 
-                  <div className="pt-2 space-y-2.5">
+                  <Link href={joinUrl}>
+                    <Button variant="primary" className="w-full py-3 text-sm font-bold shadow-glow">
+                      Enter Webinar Room Now →
+                    </Button>
+                  </Link>
+
+                  <div className="pt-2">
                     <a
-                      href={`${API_URL}/api/webinars/${webinar.slug}/calendar.ics`}
+                      href={`${API_URL}/api/webinars/${slug}/calendar.ics`}
                       download
-                      className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold py-2.5 px-4 text-xs transition shadow-lg"
+                      className="text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline flex items-center justify-center gap-1.5"
                     >
                       <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
-                        <rect x="3" y="5" width="18" height="16" rx="2" />
-                        <path d="M8 3v4M16 3v4M3 11h18" strokeLinecap="round" />
+                        <rect x="3" y="4" width="18" height="18" rx="2" />
+                        <path d="M16 2v4M8 2v4M3 10h18" />
                       </svg>
                       Add to Google / Apple Calendar
                     </a>
-
-                    <Link
-                      href={joinUrl || `/room/${webinar.slug}`}
-                      className="w-full inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-white font-semibold py-2.5 px-4 text-xs transition"
-                    >
-                      Go to Webinar Room →
+                  </div>
+                </div>
+              ) : isEnded ? (
+                <div className="text-center space-y-4 py-6">
+                  <div className="text-3xl">⏰</div>
+                  <h2 className="text-lg font-bold text-fg">This session has concluded</h2>
+                  <p className="text-xs text-muted">
+                    This webinar has ended. You can check out our other live masterclasses.
+                  </p>
+                  <div className="pt-2">
+                    <Link href="/">
+                      <Button variant="outline" className="w-full">
+                        Browse Other Webinars
+                      </Button>
                     </Link>
                   </div>
                 </div>
               ) : (
-                /* Normal Registration Form */
-                <form onSubmit={handleRegister} className="space-y-4">
-                  <div className="border-b border-white/10 pb-4">
-                    <h2 className="text-xl font-bold text-white">Reserve Your Seat</h2>
-                    <p className="mt-1 text-xs text-slate-400">
-                      {webinar.requirePayment
-                        ? `Secure your spot for ${formatPrice(webinar.priceInPaise, webinar.currency)}`
-                        : 'Free instant access • No password needed'}
+                <div>
+                  <div className="mb-5 pb-4 border-b border-line">
+                    <h2 className="text-lg font-bold text-fg">Reserve Your Free Seat</h2>
+                    <p className="text-xs text-muted mt-0.5">
+                      Fast registration • Instant room access
                     </p>
                   </div>
 
-                  {formError && (
-                    <div className="rounded-xl border border-red-500/40 bg-red-500/10 p-3 text-xs text-red-300">
-                      {formError}
-                    </div>
-                  )}
-
-                  {/* Name field */}
-                  <div className="space-y-1">
-                    <label className="block text-xs font-semibold text-slate-300" htmlFor="name">
-                      Full Name <span className="text-red-400">*</span>
-                    </label>
-                    <input
+                  <form onSubmit={handleRegister} className="space-y-4">
+                    <Input
+                      label="Full Name"
                       id="name"
-                      type="text"
-                      required
+                      placeholder="e.g. Ada Lovelace"
                       value={name}
                       onChange={(e) => setName(e.target.value)}
-                      placeholder="e.g. Rahul Sharma"
-                      className="w-full rounded-xl border border-white/10 bg-slate-950/60 px-3.5 py-2.5 text-xs text-white placeholder:text-slate-500 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500 transition"
+                      required
+                      minLength={2}
                     />
-                  </div>
 
-                  {/* Email & Phone if registration required */}
-                  {webinar.requireRegistration && (
-                    <>
-                      <div className="space-y-1">
-                        <label className="block text-xs font-semibold text-slate-300" htmlFor="email">
-                          Email Address <span className="text-red-400">*</span>
-                        </label>
-                        <input
+                    {webinar.requireRegistration && (
+                      <>
+                        <Input
+                          label="Email Address"
                           id="email"
                           type="email"
-                          required
+                          placeholder="you@company.com"
                           value={email}
                           onChange={(e) => setEmail(e.target.value)}
-                          placeholder="rahul@example.com"
-                          className="w-full rounded-xl border border-white/10 bg-slate-950/60 px-3.5 py-2.5 text-xs text-white placeholder:text-slate-500 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500 transition"
+                          required
                         />
-                      </div>
 
-                      <div className="space-y-1">
-                        <label className="block text-xs font-semibold text-slate-300" htmlFor="phone">
-                          Phone Number <span className="text-red-400">*</span>
-                        </label>
-                        <input
+                        <Input
+                          label="Mobile Number"
                           id="phone"
                           type="tel"
-                          required
+                          placeholder="+91 98765 43210"
                           value={phone}
                           onChange={(e) => setPhone(e.target.value)}
-                          placeholder="10-digit mobile number"
-                          className="w-full rounded-xl border border-white/10 bg-slate-950/60 px-3.5 py-2.5 text-xs text-white placeholder:text-slate-500 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500 transition"
+                          required
+                          minLength={6}
+                          maxLength={20}
+                          pattern="[+]?[0-9\s\(\)\-]{6,20}"
+                          helperText="Used only for event reminders and login link"
                         />
-                      </div>
-                    </>
-                  )}
+                      </>
+                    )}
 
-                  {/* Passcode if webinar requires one */}
-                  {webinar.passcodeRequired && (
-                    <div className="space-y-1">
-                      <label className="block text-xs font-semibold text-slate-300" htmlFor="passcode">
-                        Passcode <span className="text-red-400">*</span>
-                      </label>
-                      <input
+                    {webinar.passcodeRequired && (
+                      <Input
+                        label="Room Passcode"
                         id="passcode"
                         type="password"
-                        required
+                        placeholder="Enter passcode shared by host"
                         value={passcode}
                         onChange={(e) => setPasscode(e.target.value)}
-                        placeholder="Enter room passcode"
-                        className="w-full rounded-xl border border-white/10 bg-slate-950/60 px-3.5 py-2.5 text-xs text-white placeholder:text-slate-500 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500 transition"
+                        required
                       />
-                    </div>
-                  )}
+                    )}
 
-                  {/* Custom Fields configured by host */}
-                  {webinar.requireRegistration && (
-                    <div className="pt-2 border-t border-white/10">
+                    {webinar.requireRegistration && (
                       <CustomFieldsForm
                         slug={slug}
                         values={customResponses}
                         onChange={setCustomResponses}
                         disabled={submitting}
                       />
-                    </div>
-                  )}
+                    )}
 
-                  <button
-                    type="submit"
-                    disabled={submitting}
-                    className="w-full rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-extrabold py-3 px-4 text-sm transition shadow-xl disabled:opacity-60 cursor-pointer"
-                  >
-                    {submitting ? 'Registering...' : isLive ? 'Join Live Webinar Now →' : 'Register for Webinar →'}
-                  </button>
+                    {formError && (
+                      <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-xs font-medium text-red-500 dark:text-red-400">
+                        {formError}
+                      </div>
+                    )}
 
-                  <p className="text-center text-[11px] text-slate-500">
-                    By registering you agree to receive webinar reminders and notifications.
-                  </p>
-                </form>
+                    <Button
+                      type="submit"
+                      variant="primary"
+                      isLoading={submitting}
+                      className="w-full py-3 text-sm font-bold shadow-glow"
+                    >
+                      {webinar.requirePayment
+                        ? `Pay ${formatPrice(webinar.priceInPaise, webinar.currency)} & Join`
+                        : webinar.requireRegistration
+                        ? 'Confirm Free Registration'
+                        : 'Join Now'}
+                    </Button>
+
+                    <p className="text-[11px] text-center text-muted pt-1">
+                      🔒 Your information is secure and private.
+                    </p>
+                  </form>
+                </div>
               )}
-            </div>
+            </Card>
           </div>
         </div>
       </div>

@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { endpoints, ApiError } from '@/lib/api';
+import { Button, Badge, StatCard } from '@/components/ui';
+import { IconCard, IconChart, IconUsers } from '@/components/admin/icons';
 
 interface AdminPayment {
   id: string;
@@ -29,20 +31,13 @@ function formatDate(iso: string): string {
   });
 }
 
-const STATUS_STYLES: Record<string, string> = {
-  PAID: 'bg-mint-500/15 text-mint-500 dark:text-mint-400',
-  CREATED: 'bg-amber-500/15 text-amber-600 dark:text-amber-400',
-  FAILED: 'bg-red-500/15 text-red-600 dark:text-red-400',
-  REFUNDED: 'bg-panel-2 text-muted',
+const statusBadgeVariant = (status: string): 'success' | 'warning' | 'danger' | 'default' => {
+  if (status === 'PAID') return 'success';
+  if (status === 'CREATED') return 'warning';
+  if (status === 'FAILED') return 'danger';
+  return 'default';
 };
 
-/**
- * Payments and refunds for one webinar.
- *
- * Refunds are irreversible, so the button asks for confirmation and shows the
- * exact amount. A partial refund is offered because the common real-world case
- * is a goodwill gesture, not a full reversal.
- */
 export function PaymentsPanel({ webinarId }: { webinarId: string }) {
   const [payments, setPayments] = useState<AdminPayment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -105,80 +100,88 @@ export function PaymentsPanel({ webinarId }: { webinarId: string }) {
     .reduce((sum, p) => sum + p.amountPaise, 0);
 
   return (
-    <div>
-      <div className="mb-4 grid gap-3 sm:grid-cols-3">
-        {[
-          ['Collected', rupees(collected)],
-          ['Refunded', rupees(refunded)],
-          ['Transactions', String(payments.length)],
-        ].map(([label, value]) => (
-          <div key={label} className="rounded-xl border border-line bg-panel-2 px-4 py-3">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-subtle">
-              {label}
-            </p>
-            <p className="mt-1 text-lg font-semibold text-fg">{value}</p>
-          </div>
-        ))}
+    <div className="space-y-5">
+      <div className="grid gap-4 sm:grid-cols-3">
+        <StatCard
+          label="Total Collected"
+          value={rupees(collected)}
+          sub="Gross ticket sales"
+          icon={IconCard}
+          tone="mint"
+        />
+        <StatCard
+          label="Total Refunded"
+          value={rupees(refunded)}
+          sub="Processed refunds"
+          icon={IconChart}
+          tone="live"
+        />
+        <StatCard
+          label="Transactions"
+          value={String(payments.length)}
+          sub="Payment orders created"
+          icon={IconUsers}
+          tone="default"
+        />
       </div>
 
       {error && (
-        <p className="mb-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-600 dark:text-red-300">
+        <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-xs font-medium text-red-600 dark:text-red-400">
           {error}
-        </p>
+        </div>
       )}
       {notice && (
-        <p className="mb-3 rounded-lg border border-mint-500/30 bg-mint-500/10 px-3 py-2 text-xs text-mint-500 dark:text-mint-300">
-          {notice}
-        </p>
+        <div className="rounded-xl border border-mint-500/30 bg-mint-500/10 px-4 py-3 text-xs font-semibold text-mint-600 dark:text-mint-400">
+          ✓ {notice}
+        </div>
       )}
 
       {payments.length === 0 ? (
-        <p className="py-10 text-center text-sm text-subtle">No payments yet.</p>
+        <div className="rounded-2xl border border-dashed border-line p-10 text-center text-xs text-muted">
+          No transactions or payments recorded yet for this session.
+        </div>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
+        <div className="overflow-x-auto rounded-2xl border border-line bg-panel shadow-sm">
+          <table className="w-full text-left text-xs">
             <thead>
-              <tr className="border-b border-line text-[11px] uppercase tracking-wider text-subtle">
-                <th className="pb-2 pr-4 font-medium">Buyer</th>
-                <th className="pb-2 pr-4 font-medium">Amount</th>
-                <th className="pb-2 pr-4 font-medium">Type</th>
-                <th className="pb-2 pr-4 font-medium">Status</th>
-                <th className="pb-2 pr-4 font-medium">Date</th>
-                <th className="pb-2 font-medium" />
+              <tr className="border-b border-line bg-panel-2/60 text-[10px] uppercase tracking-wider text-subtle">
+                <th className="p-3.5 font-bold">Buyer</th>
+                <th className="p-3.5 font-bold">Amount</th>
+                <th className="p-3.5 font-bold">Category</th>
+                <th className="p-3.5 font-bold">Status</th>
+                <th className="p-3.5 font-bold">Date</th>
+                <th className="p-3.5 text-right font-bold">Action</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className="divide-y divide-line/60">
               {payments.map((p) => (
-                <tr key={p.id} className="border-b border-line/60 last:border-0">
-                  <td className="py-2.5 pr-4">
-                    <div className="text-fg">{p.user.name}</div>
-                    <div className="text-xs text-subtle">{p.user.email}</div>
+                <tr key={p.id} className="transition hover:bg-panel-2/40">
+                  <td className="p-3.5">
+                    <p className="font-semibold text-fg">{p.user.name}</p>
+                    <p className="text-[11px] text-muted">{p.user.email}</p>
                   </td>
-                  <td className="py-2.5 pr-4 tabular-nums text-fg">
+                  <td className="p-3.5 tabular-nums font-bold text-fg">
                     {rupees(p.amountPaise)}
                   </td>
-                  <td className="py-2.5 pr-4 text-xs text-muted">
-                    {p.kind === 'course' ? 'Course' : 'Webinar'}
+                  <td className="p-3.5 text-muted capitalize">
+                    {p.kind === 'course' ? 'Course Offer' : 'Webinar Admission'}
                   </td>
-                  <td className="py-2.5 pr-4">
-                    <span
-                      className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${
-                        STATUS_STYLES[p.status] ?? 'bg-panel-2 text-muted'
-                      }`}
-                    >
+                  <td className="p-3.5">
+                    <Badge size="sm" variant={statusBadgeVariant(p.status)}>
                       {p.status}
-                    </span>
+                    </Badge>
                   </td>
-                  <td className="py-2.5 pr-4 text-xs text-subtle">{formatDate(p.createdAt)}</td>
-                  <td className="py-2.5 text-right">
+                  <td className="p-3.5 text-muted">{formatDate(p.createdAt)}</td>
+                  <td className="p-3.5 text-right">
                     {p.status === 'PAID' && (
-                      <button
+                      <Button
+                        size="xs"
+                        variant="danger"
                         onClick={() => refund(p)}
-                        disabled={busy === p.id}
-                        className="btn-danger px-3 py-1.5 text-xs disabled:opacity-50"
+                        isLoading={busy === p.id}
                       >
-                        {busy === p.id ? 'Refunding…' : 'Refund'}
-                      </button>
+                        Refund
+                      </Button>
                     )}
                   </td>
                 </tr>

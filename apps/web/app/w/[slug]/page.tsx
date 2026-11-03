@@ -7,6 +7,7 @@ import { Countdown } from '@/components/Countdown';
 import { CustomFieldsForm } from '@/components/CustomFieldsForm';
 import { Logo } from '@/components/Logo';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import { Button, Input, Badge, Card } from '@/components/ui';
 import { endpoints, ApiError, API_URL, type PublicWebinar } from '@/lib/api';
 import { writeSession } from '@/lib/session';
 
@@ -60,11 +61,6 @@ export default function WebinarLandingPage() {
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [passcode, setPasscode] = useState('');
-  /**
-   * Answers to the host's custom questions, keyed by field id. Held here rather
-   * than inside the field component so the submit handler can post them with
-   * the rest of the registration in one request.
-   */
   const [customResponses, setCustomResponses] = useState<Record<string, unknown>>({});
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -83,8 +79,6 @@ export default function WebinarLandingPage() {
     setFormError(null);
     setSubmitting(true);
     try {
-      // A webinar with registration switched off only asks for a name — the
-      // server mints a temporary guest identity instead of a real account.
       const res = webinar?.requireRegistration
         ? await endpoints.register(slug, {
             name: name.trim(),
@@ -98,9 +92,6 @@ export default function WebinarLandingPage() {
       writeSession('participant', res.token, res.user);
       localStorage.setItem(`join:${slug}`, res.joinToken);
 
-      // A webinar that requires approval parks the registration in PENDING. The
-      // room page shows the waiting state; sending them there is correct, but
-      // they must not be told they are in.
       if ('pendingApproval' in res && res.pendingApproval) {
         router.push(`/room/${slug}?pending=1`);
       } else if (res.requiresPayment) {
@@ -117,10 +108,10 @@ export default function WebinarLandingPage() {
 
   if (loading) {
     return (
-      <main className="grid min-h-screen place-items-center">
+      <main className="grid min-h-screen place-items-center bg-surface text-fg">
         <div className="flex flex-col items-center gap-4">
-          <div className="h-10 w-10 animate-spin rounded-full border-2 border-white/10 border-t-brand-400" />
-          <p className="text-sm text-slate-500">Loading webinar…</p>
+          <div className="h-10 w-10 animate-spin rounded-full border-2 border-line border-t-brand-500" />
+          <p className="text-sm text-muted">Loading webinar details…</p>
         </div>
       </main>
     );
@@ -128,20 +119,22 @@ export default function WebinarLandingPage() {
 
   if (error || !webinar) {
     return (
-      <main className="grid min-h-screen place-items-center px-6">
-        <div className="card max-w-md p-8 text-center">
-          <div className="mx-auto mb-4 grid h-12 w-12 place-items-center rounded-full bg-red-500/15 text-red-400">
+      <main className="grid min-h-screen place-items-center px-6 bg-surface text-fg">
+        <Card className="max-w-md p-8 text-center">
+          <div className="mx-auto mb-4 grid h-12 w-12 place-items-center rounded-2xl bg-red-500/15 text-red-500">
             <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="1.8">
               <path d="M12 8v5m0 3.5v.5" strokeLinecap="round" />
               <circle cx="12" cy="12" r="9" />
             </svg>
           </div>
-          <h1 className="text-lg font-semibold text-white">Webinar unavailable</h1>
-          <p className="mt-2 text-sm text-slate-400">{error ?? 'This webinar does not exist.'}</p>
-          <Link href="/" className="btn-ghost mt-6">
-            Back home
-          </Link>
-        </div>
+          <h1 className="text-lg font-bold text-fg">Webinar unavailable</h1>
+          <p className="mt-2 text-sm text-muted leading-relaxed">{error ?? 'This webinar does not exist or has been removed.'}</p>
+          <div className="mt-6">
+            <Link href="/">
+              <Button variant="outline">Back to Homepage</Button>
+            </Link>
+          </div>
+        </Card>
       </main>
     );
   }
@@ -151,8 +144,9 @@ export default function WebinarLandingPage() {
   const startsInFuture = new Date(webinar.startsAt).getTime() > Date.now();
 
   return (
-    <main className="relative min-h-screen">
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-[480px] overflow-hidden opacity-30 dark:opacity-20">
+    <main className="relative min-h-screen bg-surface text-fg transition-colors duration-200">
+      {/* Ambient background glows */}
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-[480px] overflow-hidden opacity-25">
         {webinar.bannerUrl && (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -161,25 +155,25 @@ export default function WebinarLandingPage() {
             className="h-full w-full scale-110 object-cover blur-3xl"
           />
         )}
-        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-ink-950/80 to-ink-950" />
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-surface/80 to-surface" />
       </div>
 
       <header className="relative z-10 mx-auto flex max-w-6xl items-center justify-between px-6 py-6">
         <Logo />
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2.5">
           <ThemeToggle />
-          <Link href="/admin/login" className="btn-ghost text-xs">
-            Host sign in
+          <Link href="/admin/login">
+            <Button size="xs" variant="ghost">Host sign in</Button>
           </Link>
         </div>
       </header>
 
-      <div className="relative z-10 mx-auto grid max-w-6xl gap-10 px-6 pb-20 pt-6 lg:grid-cols-[1.35fr_1fr]">
+      <div className="relative z-10 mx-auto grid max-w-6xl gap-10 px-6 pb-20 pt-4 lg:grid-cols-[1.35fr_1fr]">
         {/* ── left: details ─────────────────────────────── */}
         <div className="animate-fade-up">
           {/* Prominent Foreground Banner Image */}
           {webinar.bannerUrl && (
-            <div className="relative mb-6 overflow-hidden rounded-2xl border border-slate-200/80 dark:border-white/10 bg-slate-900 shadow-2xl aspect-[16/9] w-full max-h-[400px]">
+            <div className="relative mb-6 overflow-hidden rounded-2xl border border-line bg-panel-2 shadow-pop aspect-[16/9] w-full max-h-[400px]">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={getBannerSrc(webinar.bannerUrl)}
@@ -191,54 +185,46 @@ export default function WebinarLandingPage() {
 
           <div className="flex flex-wrap items-center gap-2">
             {isLive ? (
-              <span className="chip border-red-500/30 bg-red-500/15 text-red-300">
-                <span className="relative flex h-1.5 w-1.5">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400" />
-                  <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-red-400" />
-                </span>
-                Live now
-              </span>
+              <Badge variant="live" dot>Live now</Badge>
             ) : isEnded ? (
-              <span className="chip">Ended</span>
+              <Badge variant="default">Ended</Badge>
             ) : (
-              <span className="chip border-brand-400/30 bg-brand-500/15 text-brand-200">
-                Upcoming
-              </span>
+              <Badge variant="brand">Upcoming</Badge>
             )}
-            <span className="chip">{webinar.durationMins} min</span>
+            <Badge variant="default">{webinar.durationMins} min</Badge>
             {webinar.requirePayment && (
-              <span className="chip border-accent-500/30 bg-accent-500/15 text-accent-400">
+              <Badge variant="warning">
                 {formatPrice(webinar.priceInPaise, webinar.currency)}
-              </span>
+              </Badge>
             )}
             {webinar.seatsLeft !== null && webinar.seatsLeft <= 50 && (
-              <span className="chip border-accent-500/30 text-accent-400">
-                {webinar.seatsLeft} seats left
-              </span>
+              <Badge variant="danger">{webinar.seatsLeft} seats left</Badge>
             )}
           </div>
 
-          <h1 className="mt-5 text-3xl font-extrabold leading-tight tracking-tight text-white sm:text-4xl lg:text-[2.75rem]">
+          <h1 className="mt-5 text-3xl font-extrabold leading-tight tracking-tight text-fg sm:text-4xl lg:text-[2.75rem]">
             {webinar.title}
           </h1>
 
-          <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-slate-400">
-            <span className="inline-flex items-center gap-2">
-              <svg viewBox="0 0 24 24" className="h-4 w-4 text-brand-300" fill="none" stroke="currentColor" strokeWidth="1.7">
+          <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-muted">
+            <span className="inline-flex items-center gap-2 font-medium">
+              <svg viewBox="0 0 24 24" className="h-4 w-4 text-brand-500" fill="none" stroke="currentColor" strokeWidth="1.8">
                 <circle cx="12" cy="12" r="9" />
                 <path d="M12 7.5V12l3 2" strokeLinecap="round" />
               </svg>
               {formatDate(webinar.startsAt, webinar.timezone)}
             </span>
-            <span className="inline-flex items-center gap-2">
-              <svg viewBox="0 0 24 24" className="h-4 w-4 text-brand-300" fill="none" stroke="currentColor" strokeWidth="1.7">
+            <span className="inline-flex items-center gap-2 font-medium">
+              <svg viewBox="0 0 24 24" className="h-4 w-4 text-brand-500" fill="none" stroke="currentColor" strokeWidth="1.8">
                 <circle cx="12" cy="8.5" r="3.5" />
                 <path d="M5 19.5c0-3.3 3.1-5.5 7-5.5s7 2.2 7 5.5" strokeLinecap="round" />
               </svg>
               Hosted by {webinar.hostName}
             </span>
-            <button
+            <Button
               type="button"
+              size="xs"
+              variant="outline"
               onClick={() => {
                 const regUrl = typeof window !== 'undefined'
                   ? `${window.location.origin}/w/${slug}/register`
@@ -247,37 +233,36 @@ export default function WebinarLandingPage() {
                 setCopiedLink(true);
                 setTimeout(() => setCopiedLink(false), 2500);
               }}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-medium text-slate-300 hover:bg-white/10 transition"
-              title="Copy registration link to share on YouTube and social media"
+              title="Copy registration link to share"
             >
-              <span>{copiedLink ? '✓ Link Copied!' : '🔗 Copy Registration Link'}</span>
-            </button>
+              {copiedLink ? '✓ Link Copied!' : '🔗 Copy Registration Link'}
+            </Button>
           </div>
 
           {startsInFuture && !isEnded && (
             <div className="mt-8">
-              <p className="label">Starts in</p>
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted mb-2">Starts in</p>
               <Countdown target={webinar.startsAt} />
               <a
                 href={`${API_URL}/api/webinars/${slug}/calendar.ics`}
                 download
-                className="mt-4 inline-flex items-center gap-2 text-xs font-medium text-slate-400 transition hover:text-brand-300"
+                className="mt-4 inline-flex items-center gap-2 text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline"
               >
                 <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.8">
                   <rect x="3" y="5" width="18" height="16" rx="2" />
                   <path d="M8 3v4M16 3v4M3 11h18" strokeLinecap="round" />
                 </svg>
-                Add to calendar
+                Add to calendar (.ics)
               </a>
             </div>
           )}
 
           {webinar.description && (
             <div className="mt-8">
-              <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-400">
+              <h2 className="text-sm font-bold uppercase tracking-wider text-muted">
                 About this session
               </h2>
-              <p className="mt-3 whitespace-pre-line text-[15px] leading-relaxed text-slate-300">
+              <p className="mt-3 whitespace-pre-line text-sm leading-relaxed text-fg">
                 {webinar.description}
               </p>
             </div>
@@ -285,13 +270,13 @@ export default function WebinarLandingPage() {
 
           <div className="mt-8 grid gap-3 sm:grid-cols-3">
             {[
-              ['HD video', 'Up to 720p adaptive'],
-              ['Live chat', 'Moderated in real time'],
-              ['Quizzes', 'Timed with live results'],
+              ['HD WebRTC Video', 'Adaptive up to 1080p60'],
+              ['Interactive Chat', 'Real-time moderated questions'],
+              ['Timed Quizzes', 'Live polls with instant scoreboards'],
             ].map(([title, sub]) => (
-              <div key={title} className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3">
-                <div className="text-sm font-semibold text-white">{title}</div>
-                <div className="mt-0.5 text-xs text-slate-500">{sub}</div>
+              <div key={title} className="rounded-2xl border border-line bg-panel p-4 shadow-sm">
+                <div className="text-xs font-bold text-fg">{title}</div>
+                <div className="mt-0.5 text-[11px] text-muted">{sub}</div>
               </div>
             ))}
           </div>
@@ -299,94 +284,74 @@ export default function WebinarLandingPage() {
 
         {/* ── right: registration card ──────────────────── */}
         <div className="animate-fade-up animate-delay-200">
-          <div className="card sticky top-6 overflow-hidden p-6">
-            <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-brand-400/60 to-transparent" />
-
-            <h2 className="text-lg font-semibold text-white">
-              {isEnded ? 'This webinar has ended' : 'Reserve your seat'}
+          <Card className="sticky top-6 overflow-hidden p-6 sm:p-7">
+            <h2 className="text-lg font-bold text-fg">
+              {isEnded ? 'This session has ended' : 'Reserve your seat'}
             </h2>
-            <p className="mt-1 text-sm text-slate-400">
+            <p className="mt-1 text-xs text-muted">
               {webinar.requirePayment
-                ? `Secure checkout · ${formatPrice(webinar.priceInPaise, webinar.currency)}`
-                : 'Free to attend · instant access'}
+                ? `Secure checkout · ${formatPrice(webinar.priceInPaise, webinar.currency)} via Razorpay`
+                : 'Free to attend · instant room access'}
             </p>
 
             {isEnded ? (
-              <Link href="/" className="btn-ghost mt-6 w-full">
-                Browse other webinars
-              </Link>
+              <div className="mt-6">
+                <Link href="/">
+                  <Button variant="outline" className="w-full">
+                    Browse other live sessions
+                  </Button>
+                </Link>
+              </div>
             ) : (
               <form onSubmit={handleRegister} className="mt-6 space-y-4">
-                <div>
-                  <label className="label" htmlFor="name">
-                    Full name
-                  </label>
-                  <input
-                    id="name"
-                    className="input"
-                    placeholder="Ada Lovelace"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    required
-                    minLength={2}
-                  />
-                </div>
+                <Input
+                  label="Full Name"
+                  id="name"
+                  placeholder="e.g. Ada Lovelace"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  required
+                  minLength={2}
+                />
+
                 {webinar.requireRegistration && (
                   <>
-                    <div>
-                      <label className="label" htmlFor="email">
-                        Email
-                      </label>
-                      <input
-                        id="email"
-                        type="email"
-                        className="input"
-                        placeholder="you@company.com"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="label" htmlFor="phone">
-                        Mobile number
-                      </label>
-                      <input
-                        id="phone"
-                        type="tel"
-                        className="input"
-                        placeholder="+91 98765 43210"
-                        value={phone}
-                        onChange={(e) => setPhone(e.target.value)}
-                        required
-                        minLength={6}
-                        maxLength={20}
-                        pattern="[+]?[0-9\s\(\)\-]{6,20}"
-                        title="Enter a valid mobile number"
-                        autoComplete="tel"
-                      />
-                      <p className="mt-1.5 text-[11px] text-slate-500">
-                        We use this only for reminders about this session.
-                      </p>
-                    </div>
+                    <Input
+                      label="Email Address"
+                      id="email"
+                      type="email"
+                      placeholder="you@company.com"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      required
+                    />
+
+                    <Input
+                      label="Mobile Number"
+                      id="phone"
+                      type="tel"
+                      placeholder="+91 98765 43210"
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                      required
+                      minLength={6}
+                      maxLength={20}
+                      pattern="[+]?[0-9\s\(\)\-]{6,20}"
+                      helperText="Used only for event reminders and login link"
+                    />
                   </>
                 )}
 
                 {webinar.passcodeRequired && (
-                  <div>
-                    <label className="label" htmlFor="passcode">
-                      Room passcode
-                    </label>
-                    <input
-                      id="passcode"
-                      className="input"
-                      placeholder="Enter the passcode shared by the host"
-                      value={passcode}
-                      onChange={(e) => setPasscode(e.target.value)}
-                      required
-                      autoComplete="off"
-                    />
-                  </div>
+                  <Input
+                    label="Room Passcode"
+                    id="passcode"
+                    type="password"
+                    placeholder="Enter passcode shared by host"
+                    value={passcode}
+                    onChange={(e) => setPasscode(e.target.value)}
+                    required
+                  />
                 )}
 
                 {webinar.requireRegistration && (
@@ -399,40 +364,26 @@ export default function WebinarLandingPage() {
                 )}
 
                 {formError && (
-                  <div className="rounded-xl border border-red-500/25 bg-red-500/10 px-3 py-2 text-xs text-red-300">
+                  <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-xs font-medium text-red-600 dark:text-red-400">
                     {formError}
                   </div>
                 )}
 
-                <button type="submit" className="btn-primary w-full py-3" disabled={submitting}>
-                  {submitting ? (
-                    <>
-                      <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-                      Preparing…
-                    </>
-                  ) : webinar.requirePayment ? (
-                    `Pay ${formatPrice(webinar.priceInPaise, webinar.currency)} & join`
-                  ) : webinar.requireRegistration ? (
-                    'Register & join'
-                  ) : (
-                    'Join now'
-                  )}
-                </button>
-
-                <p className="text-center text-[11px] leading-relaxed text-slate-500">
-                  {webinar.requireRegistration
-                    ? 'By registering you agree to receive session reminders. No spam, ever.'
-                    : 'No account needed — you will join as a guest.'}
-                </p>
+                <Button
+                  type="submit"
+                  variant="primary"
+                  isLoading={submitting}
+                  className="w-full py-3 text-sm font-bold shadow-glow"
+                >
+                  {webinar.requirePayment
+                    ? `Pay ${formatPrice(webinar.priceInPaise, webinar.currency)} & Join`
+                    : webinar.requireRegistration
+                    ? 'Register & Join Room'
+                    : 'Join Now'}
+                </Button>
               </form>
             )}
-
-            {isLive && (
-              <div className="mt-4 rounded-xl border border-red-500/25 bg-red-500/10 px-3 py-2.5 text-center text-xs font-medium text-red-300">
-                Session is live — you can join immediately after registering.
-              </div>
-            )}
-          </div>
+          </Card>
         </div>
       </div>
     </main>

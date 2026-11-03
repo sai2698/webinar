@@ -18,6 +18,7 @@ import type {
 import { Logo } from '@/components/Logo';
 import { useFullscreen } from '@/lib/useRoomUi';
 import { API_URL, endpoints } from '@/lib/api';
+import { useReplayLayout } from '@/lib/useReplayLayout';
 
 /** Playback speeds offered in the transport bar. */
 const SPEEDS = [0.5, 1, 1.5, 2] as const;
@@ -57,6 +58,7 @@ export default function ReplayPage() {
   const [speed, setSpeed] = useState(1);
   const [tab, setTab] = useState<Tab>('chat');
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [isMuted, setIsMuted] = useState(true);
 
   /**
    * Premiere mode. A pre-recorded webinar is the same recording presented as a
@@ -68,6 +70,7 @@ export default function ReplayPage() {
   const [liveStartedAt, setLiveStartedAt] = useState<number | null>(null);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const camVideoRef = useRef<HTMLVideoElement | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
   const rafRef = useRef<number | null>(null);
   const lastTickRef = useRef<number>(0);
@@ -110,6 +113,7 @@ export default function ReplayPage() {
 
   const durationMs = data?.durationMs ?? 0;
   const hasVideo = data?.mediaKind === 'video';
+  const layout = useReplayLayout(data?.timeline ?? [], positionMs);
 
   /* ── clock ────────────────────────────────────────────────── */
 
@@ -126,6 +130,19 @@ export default function ReplayPage() {
       const delta = now - lastTickRef.current;
       lastTickRef.current = now;
       setPositionMs((prev) => Math.min(prev + delta * speed, durationMs));
+    }
+
+    // Sync secondary host camera stream
+    const camVideo = camVideoRef.current;
+    if (video && camVideo) {
+      if (!video.paused && camVideo.paused) {
+        camVideo.play().catch(() => undefined);
+      } else if (video.paused && !camVideo.paused) {
+        camVideo.pause();
+      }
+      if (Math.abs(camVideo.currentTime - video.currentTime) > 0.25) {
+        camVideo.currentTime = video.currentTime;
+      }
     }
 
     rafRef.current = requestAnimationFrame(tick);
@@ -162,6 +179,7 @@ export default function ReplayPage() {
   // the wall clock multiplies its delta in `tick`.
   useEffect(() => {
     if (videoRef.current) videoRef.current.playbackRate = speed;
+    if (camVideoRef.current) camVideoRef.current.playbackRate = speed;
   }, [speed, hasVideo]);
 
   const togglePlay = useCallback(() => {
@@ -176,9 +194,23 @@ export default function ReplayPage() {
       setPositionMs(0);
       if (video) video.currentTime = 0;
     }
+    // Unmute on the first explicit play click — autoplay requires muted start,
+    // but the user clicking play indicates intent to hear audio.
+    if (video && video.muted) {
+      video.muted = false;
+      setIsMuted(false);
+    }
     void video?.play().catch(() => undefined);
     setPlaying(true);
   }, [playing, positionMs, durationMs]);
+
+  const toggleMute = useCallback(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    const next = !isMuted;
+    video.muted = next;
+    setIsMuted(next);
+  }, [isMuted]);
 
   const seek = useCallback(
     (ms: number) => {
@@ -186,6 +218,7 @@ export default function ReplayPage() {
       setPositionMs(clamped);
       const video = videoRef.current;
       if (video) video.currentTime = clamped / 1000;
+      if (camVideoRef.current) camVideoRef.current.currentTime = clamped / 1000;
     },
     [durationMs]
   );
@@ -339,9 +372,10 @@ export default function ReplayPage() {
   }, [applied]);
 
   const presenter = useMemo(() => {
+    if (layout.presenterName) return layout.presenterName;
     const host = people.find((p) => p.role === 'HOST' || p.role === 'ADMIN');
     return host?.name ?? 'Presenter';
-  }, [people]);
+  }, [layout.presenterName, people]);
 
   // The Q&A queue as it stood at this point in the session. Questions arrive
   // over time and get answered later, so the panel has to replay both the
@@ -472,13 +506,63 @@ export default function ReplayPage() {
                   src={mediaUrl}
                   className="h-full w-full bg-black object-contain"
                   playsInline
+                  muted
                   onEnded={() => setPlaying(false)}
                 />
               ) : (
                 <PresenterCard
                   title={data.webinar?.title ?? 'Recorded session'}
                   presenter={presenter}
+                  layout={layout}
                 />
+              )}
+
+              {/* Dedicated Host Camera Tile when screen share is active */}
+              {layout.screenShareActive && data?.hasCamMedia && (
+                <div className="absolute right-4 top-4 z-10 h-28 w-44 rounded-xl overflow-hidden border border-white/20 bg-slate-900 shadow-2xl">
+                  <video
+                    ref={camVideoRef}
+                    src={`${mediaUrl}?track=cam`}
+                    muted
+                    playsInline
+                    className="h-full w-full object-cover"
+                  />
+                  <div className="absolute bottom-1.5 left-1.5 z-10 flex items-center gap-1 max-w-[85%] rounded-md bg-black/70 px-1.5 py-0.5 text-[10px] text-white backdrop-blur">
+                    <span className="truncate font-semibold">{presenter || 'Host'}</span>
+                    <span className="shrink-0 rounded bg-brand-500/30 px-1 text-[8px] font-bold text-brand-300">
+                      HOST
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* live layout indicator badges */}
+              {layout.screenShareActive && (
+                <div className="pointer-events-none absolute left-4 top-4 z-10 flex items-center gap-2 rounded-full border border-sky-400/30 bg-slate-950/80 px-3 py-1.5 text-xs font-medium text-sky-200 shadow-xl backdrop-blur-md">
+                  <span className="relative flex h-2 w-2">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-sky-400 opacity-75" />
+                    <span className="relative inline-flex h-2 w-2 rounded-full bg-sky-500" />
+                  </span>
+                  <span>Screen Share • {presenter}</span>
+                </div>
+              )}
+
+              {layout.spotlightName && !layout.screenShareActive && (
+                <div className="pointer-events-none absolute left-4 top-4 z-10 flex items-center gap-2 rounded-full border border-amber-400/30 bg-slate-950/80 px-3 py-1.5 text-xs font-medium text-amber-200 shadow-xl backdrop-blur-md">
+                  <span className="h-2 w-2 rounded-full bg-amber-400" />
+                  <span>Spotlight: {layout.spotlightName}</span>
+                </div>
+              )}
+
+              {/* presenter pill bottom-left */}
+              {playing && presenter && (
+                <div className="pointer-events-none absolute bottom-4 left-4 z-10 flex items-center gap-2 rounded-xl border border-white/10 bg-black/60 px-3 py-1.5 text-xs text-slate-200 backdrop-blur-md">
+                  <span className="h-2 w-2 rounded-full bg-emerald-400" />
+                  <span className="font-medium text-slate-100">{presenter}</span>
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                    {layout.screenShareActive ? 'Presenting' : 'Host'}
+                  </span>
+                </div>
               )}
 
               {/* overlays */}
@@ -585,6 +669,29 @@ export default function ReplayPage() {
                   </svg>
                 )}
               </button>
+
+              {/* Mute/Unmute toggle — video starts muted for autoplay compliance */}
+              {hasVideo && (
+                <button
+                  onClick={toggleMute}
+                  className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-white/10 bg-white/[0.06] text-slate-400 transition hover:bg-white/[0.12] hover:text-white"
+                  aria-label={isMuted ? 'Unmute' : 'Mute'}
+                  title={isMuted ? 'Click to unmute audio' : 'Mute'}
+                >
+                  {isMuted ? (
+                    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M11 5 6 9H2v6h4l5 4V5z" />
+                      <line x1="23" y1="9" x2="17" y2="15" strokeLinecap="round" />
+                      <line x1="17" y1="9" x2="23" y2="15" strokeLinecap="round" />
+                    </svg>
+                  ) : (
+                    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M11 5 6 9H2v6h4l5 4V5z" />
+                      <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07" strokeLinecap="round" />
+                    </svg>
+                  )}
+                </button>
+              )}
 
               <span className="shrink-0 font-mono text-[11px] text-slate-400">
                 {formatClock(positionMs)}
@@ -921,7 +1028,15 @@ function ReplayPolls({ polls }: { polls: { poll: PublicPoll; results: PollResult
  * A black rectangle reads as "broken"; a presenter card reads as "camera off",
  * which is what actually happened.
  */
-function PresenterCard({ title, presenter }: { title: string; presenter: string }) {
+function PresenterCard({
+  title,
+  presenter,
+  layout,
+}: {
+  title: string;
+  presenter: string;
+  layout?: import('@/lib/useReplayLayout').ReplayLayoutState;
+}) {
   return (
     <div className="relative grid h-full w-full place-items-center overflow-hidden bg-gradient-to-br from-ink-900 via-ink-950 to-black">
       <div
@@ -940,16 +1055,34 @@ function PresenterCard({ title, presenter }: { title: string; presenter: string 
           <p className="text-sm font-semibold text-white">{presenter}</p>
           <p className="mt-1 max-w-md text-xs text-slate-400">{title}</p>
         </div>
-        <span className="chip py-1 text-[10px] text-slate-400">
-          <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2">
-            <path
-              d="M15 10l4.5-2.5v9L15 14M4 6h9a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2Z"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-          Camera off
-        </span>
+        <div className="flex items-center gap-2">
+          {layout?.screenShareActive ? (
+            <span className="chip border border-sky-500/20 bg-sky-500/10 py-1 text-[10px] text-sky-400">
+              <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="2" y="3" width="20" height="14" rx="2" />
+                <line x1="8" y1="21" x2="16" y2="21" />
+                <line x1="12" y1="17" x2="12" y2="21" />
+              </svg>
+              Sharing screen
+            </span>
+          ) : layout?.hostCamActive ? (
+            <span className="chip border border-emerald-500/20 bg-emerald-500/10 py-1 text-[10px] text-emerald-400">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              Stage feed active
+            </span>
+          ) : (
+            <span className="chip py-1 text-[10px] text-slate-400">
+              <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2">
+                <path
+                  d="M15 10l4.5-2.5v9L15 14M4 6h9a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2Z"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+              Camera off
+            </span>
+          )}
+        </div>
       </div>
     </div>
   );

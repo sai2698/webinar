@@ -5,12 +5,19 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { AdminShell, type NavItem } from '@/components/admin/AdminShell';
 import {
+  IconArrowRight,
+  IconCalendar,
   IconCard,
   IconChart,
+  IconCheck,
   IconChevron,
+  IconClock,
+  IconCopy,
   IconDisc,
   IconEdit,
   IconExternal,
+  IconGrid,
+  IconList,
   IconPlay,
   IconPlus,
   IconSearch,
@@ -20,6 +27,16 @@ import {
   IconUsers,
   IconVideo,
 } from '@/components/admin/icons';
+import {
+  Button,
+  Input,
+  Badge,
+  Card,
+  StatCard,
+  EmptyState,
+  Tabs,
+  Dialog,
+} from '@/components/ui';
 import { WebinarForm, emptyWebinar, fromWebinar, type WebinarFormValues } from '@/components/WebinarForm';
 import { EngagementPanel } from '@/components/EngagementPanel';
 import { PaymentsPanel } from '@/components/PaymentsPanel';
@@ -41,7 +58,6 @@ import {
   clearSession,
   getToken,
   getUser,
-  writeSession,
 } from '@/lib/session';
 
 interface AdminWebinar {
@@ -115,7 +131,7 @@ const TAB_TITLES: Record<Tab, string> = {
 };
 
 const TAB_BLURBS: Record<Tab, string> = {
-  webinars: 'Create, publish and run your sessions.',
+  webinars: 'Create, publish and run your high-converting sessions.',
   registrations: 'Everyone who signed up, and whether they showed up.',
   analytics: 'Attendance, revenue and quiz performance.',
   engagement: 'Quizzes, offers and polls for the room.',
@@ -127,19 +143,33 @@ const TAB_BLURBS: Record<Tab, string> = {
   integrations: 'Webhooks, tracking tags, automation and API tokens.',
 };
 
-/** Status pill colours, tuned for both palettes. */
-const statusStyles: Record<string, string> = {
-  LIVE: 'bg-red-500/12 text-red-600 ring-red-500/30 dark:text-red-300',
-  SCHEDULED: 'bg-brand-500/12 text-brand-600 ring-brand-500/30 dark:text-brand-300',
-  DRAFT: 'bg-panel-2 text-muted ring-line',
-  ENDED: 'bg-panel-2 text-subtle ring-line',
-};
+const DETAIL_TABS: { key: Tab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
+  { key: 'registrations', label: 'Registrations', icon: IconUsers },
+  { key: 'analytics', label: 'Analytics', icon: IconChart },
+  { key: 'engagement', label: 'Engagement', icon: IconSpark },
+  { key: 'payments', label: 'Payments', icon: IconCard },
+  { key: 'recordings', label: 'Recordings', icon: IconDisc },
+  { key: 'audience', label: 'Audience', icon: IconSend },
+  { key: 'team', label: 'Team', icon: IconUsers },
+  { key: 'distribution', label: 'Distribution', icon: IconExternal },
+  { key: 'integrations', label: 'Integrations', icon: IconSpark },
+];
+
+function statusToBadgeVariant(status: string): 'live' | 'brand' | 'default' {
+  if (status === 'LIVE') return 'live';
+  if (status === 'SCHEDULED') return 'brand';
+  return 'default';
+}
 
 function formatDate(iso: string) {
-  return new Date(iso).toLocaleString('en-IN', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  });
+  try {
+    return new Date(iso).toLocaleString('en-IN', {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    });
+  } catch {
+    return iso;
+  }
 }
 
 function formatPrice(paise: number) {
@@ -150,13 +180,26 @@ function formatPrice(paise: number) {
   }).format(paise / 100);
 }
 
+function getBannerSrc(url?: string | null): string {
+  if (!url) return '';
+  if (url.startsWith('/uploads/')) {
+    const apiOrigin =
+      typeof window !== 'undefined'
+        ? window.location.origin.replace(':3000', ':4000')
+        : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000');
+    return `${apiOrigin}${url}`;
+  }
+  return url;
+}
+
 export default function AdminPage() {
   const router = useRouter();
   const [user, setUser] = useState<AuthUser | null>(null);
   const [webinars, setWebinars] = useState<AdminWebinar[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  /** Slug currently being joined, so only that row's button shows a spinner. */
+  const [toast, setToast] = useState<{ message: string; tone?: 'success' | 'info' } | null>(null);
+  /** Slug currently being joined, so only that button shows a spinner. */
   const [joiningSlug, setJoiningSlug] = useState<string | null>(null);
 
   const [tab, setTab] = useState<Tab>('webinars');
@@ -164,11 +207,20 @@ export default function AdminPage() {
   const [registrations, setRegistrations] = useState<Registration[]>([]);
   const [analytics, setAnalytics] = useState<Analytics | null>(null);
   const [query, setQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'live' | 'scheduled' | 'draft' | 'ended'>('all');
+  const [viewMode, setViewMode] = useState<'cards' | 'list'>('cards');
 
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<AdminWebinar | null>(null);
   const [formBusy, setFormBusy] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+
+  const showToast = useCallback((message: string, tone: 'success' | 'info' = 'success') => {
+    setToast({ message, tone });
+    setTimeout(() => {
+      setToast((curr) => (curr?.message === message ? null : curr));
+    }, 2800);
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -187,20 +239,12 @@ export default function AdminPage() {
     }
   }, [router]);
 
-  /**
-   * Sends the console back to sign-in and forgets the dead session.
-   *
-   * Clearing first matters: a redirect that leaves the token behind loops
-   * straight back here on the next visit, and the user is never told why.
-   */
   const signOutLocally = useCallback(() => {
     clearSession('admin');
     router.replace('/admin/login');
   }, [router]);
 
   useEffect(() => {
-    // `getToken` reports an expired JWT as no session at all, so a stale token
-    // lands on the sign-in page instead of a console that cannot load anything.
     if (!getToken('admin')) {
       router.replace('/admin/login');
       return;
@@ -210,24 +254,11 @@ export default function AdminPage() {
     void load();
   }, [load, router]);
 
-  /**
-   * A 401 from any admin request means the session is gone — expired, revoked,
-   * or signed out in another tab. The API client announces it once, and this is
-   * the single place that reacts, so every panel gets the same behaviour
-   * without each one having to handle it.
-   */
   useEffect(() => {
     window.addEventListener(ADMIN_UNAUTHORIZED_EVENT, signOutLocally);
     return () => window.removeEventListener(ADMIN_UNAUTHORIZED_EVENT, signOutLocally);
   }, [signOutLocally]);
 
-  /**
-   * Keeps two tabs in step.
-   *
-   * Signing out in one tab must not leave the other showing a console whose
-   * every request now fails. `storage` only fires in *other* tabs, which is
-   * exactly the scope needed here.
-   */
   useEffect(() => {
     function onStorage(e: StorageEvent) {
       if (e.key === null || e.key.startsWith('nexa:admin:')) {
@@ -238,12 +269,6 @@ export default function AdminPage() {
     return () => window.removeEventListener('storage', onStorage);
   }, [signOutLocally]);
 
-  /**
-   * Re-reads the selected webinar after a mutation that happens inside a tab.
-   *
-   * The premiere controls live in the recordings tab but change webinar-level
-   * state, so the detail view has to re-fetch rather than trust its snapshot.
-   */
   const refreshSelected = useCallback(async () => {
     if (!selected) return;
     try {
@@ -261,7 +286,6 @@ export default function AdminPage() {
     setTab(nextTab);
     setAnalytics(null);
     setRegistrations([]);
-    // These tabs load their own data, so there is nothing to prefetch.
     if (nextTab === 'engagement' || nextTab === 'payments' || nextTab === 'recordings') return;
     try {
       if (nextTab === 'registrations') {
@@ -276,14 +300,6 @@ export default function AdminPage() {
     }
   }
 
-  /**
-   * Walks staff straight into the room.
-   *
-   * The room page authenticates its socket with the participant session, and a
-   * host has none — they never registered. `host-join` mints a join token
-   * server-side without charging or registering them, and the room page falls
-   * back to the console token for the socket itself.
-   */
   async function joinRoom(slug: string) {
     setJoiningSlug(slug);
     setError(null);
@@ -328,16 +344,16 @@ export default function AdminPage() {
           watermarkEnabled: values.watermarkEnabled,
           showLiveUsersCount: values.showLiveUsersCount,
           cohostStartWithoutHost: values.cohostStartWithoutHost,
-          // Only send the passcode when the host typed one, so editing an
-          // unrelated field cannot wipe an existing passcode.
           ...(values.passcode.trim() ? { passcode: values.passcode.trim() } : {}),
         },
       };
 
       if (editing) {
         await endpoints.updateWebinar(editing.id, payload);
+        showToast('Webinar settings saved');
       } else {
         await endpoints.createWebinar(payload);
+        showToast('New webinar created successfully');
       }
       setShowForm(false);
       setEditing(null);
@@ -352,6 +368,7 @@ export default function AdminPage() {
   async function publish(w: AdminWebinar) {
     try {
       await endpoints.publishWebinar(w.id);
+      showToast(`Published "${w.title}"`);
       await load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not publish');
@@ -362,6 +379,7 @@ export default function AdminPage() {
     if (!confirm(`Delete "${w.title}"? This cannot be undone.`)) return;
     try {
       await endpoints.deleteWebinar(w.id);
+      showToast(`Deleted "${w.title}"`, 'info');
       if (selected?.id === w.id) setSelected(null);
       await load();
     } catch (err) {
@@ -369,20 +387,11 @@ export default function AdminPage() {
     }
   }
 
-  /**
-   * Signs out for real.
-   *
-   * Clearing local storage alone leaves the httpOnly cookie in place, so the
-   * next request is still authenticated — the user appears signed out and then
-   * silently is not. The server call revokes the cookie; the local clear runs
-   * regardless so a network failure cannot trap someone in a session they
-   * asked to leave.
-   */
   async function logout() {
     try {
       await endpoints.logout();
     } catch {
-      /* A failed revoke must not block the local sign-out. */
+      /* ignore */
     }
     clearSession('admin');
     router.push('/admin/login');
@@ -391,17 +400,35 @@ export default function AdminPage() {
   const stats = useMemo(() => {
     const total = webinars.length;
     const live = webinars.filter((w) => w.status === 'LIVE').length;
+    const scheduled = webinars.filter((w) => w.status === 'SCHEDULED').length;
+    const drafts = webinars.filter((w) => w.status === 'DRAFT').length;
+    const ended = webinars.filter((w) => w.status === 'ENDED').length;
     const regs = webinars.reduce((sum, w) => sum + (w.registrationCount ?? 0), 0);
-    return { total, live, regs };
+    return { total, live, scheduled, drafts, ended, regs };
   }, [webinars]);
 
   const filtered = useMemo(() => {
+    let list = webinars;
+
+    if (statusFilter === 'live') {
+      list = list.filter((w) => w.status === 'LIVE');
+    } else if (statusFilter === 'scheduled') {
+      list = list.filter((w) => w.status === 'SCHEDULED');
+    } else if (statusFilter === 'draft') {
+      list = list.filter((w) => w.status === 'DRAFT');
+    } else if (statusFilter === 'ended') {
+      list = list.filter((w) => w.status === 'ENDED');
+    }
+
     const q = query.trim().toLowerCase();
-    if (!q) return webinars;
-    return webinars.filter(
-      (w) => w.title.toLowerCase().includes(q) || w.slug.toLowerCase().includes(q)
-    );
-  }, [webinars, query]);
+    if (q) {
+      list = list.filter(
+        (w) => w.title.toLowerCase().includes(q) || w.slug.toLowerCase().includes(q)
+      );
+    }
+
+    return list;
+  }, [webinars, query, statusFilter]);
 
   const initialForm = useMemo<WebinarFormValues>(
     () => (editing ? fromWebinar(editing) : emptyWebinar),
@@ -428,26 +455,39 @@ export default function AdminPage() {
       user={user ? { name: user.name, role: user.role } : null}
       onSignOut={logout}
       actions={
-        <button
+        <Button
+          variant="primary"
+          size="sm"
           onClick={() => {
             setEditing(null);
             setFormError(null);
             setShowForm(true);
           }}
-          className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-brand-500 px-3 text-xs font-semibold text-white shadow-sm transition hover:bg-brand-600 active:scale-[0.98]"
+          leftIcon={<IconPlus className="h-4 w-4" />}
         >
-          <IconPlus className="h-4 w-4" />
-          <span className="hidden sm:inline">New webinar</span>
-        </button>
+          New webinar
+        </Button>
       }
     >
+      {/* Toast Notification */}
+      {toast && (
+        <div className="fixed bottom-6 right-6 z-50 animate-fade-up">
+          <div className="flex items-center gap-2.5 rounded-xl border border-line bg-panel-2 px-4 py-2.5 text-xs font-semibold text-fg shadow-pop">
+            <span className="grid h-5 w-5 place-items-center rounded-full bg-mint-500/20 text-mint-500">
+              <IconCheck className="h-3.5 w-3.5" />
+            </span>
+            <span>{toast.message}</span>
+          </div>
+        </div>
+      )}
+
       {error && (
-        <div className="mb-5 flex items-start gap-3 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-600 dark:text-red-300">
-          <span className="mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full bg-red-500" />
+        <div className="mb-6 flex items-start gap-3 rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3.5 text-sm text-red-600 dark:text-red-300">
+          <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-red-500" />
           <span className="flex-1">{error}</span>
           <button
             onClick={() => setError(null)}
-            className="text-xs font-medium opacity-70 transition hover:opacity-100"
+            className="text-xs font-semibold opacity-70 transition hover:opacity-100"
           >
             Dismiss
           </button>
@@ -461,6 +501,10 @@ export default function AdminPage() {
           total={webinars.length}
           query={query}
           onQuery={setQuery}
+          statusFilter={statusFilter}
+          onStatusFilter={setStatusFilter}
+          viewMode={viewMode}
+          onViewMode={setViewMode}
           stats={stats}
           joiningSlug={joiningSlug}
           onJoin={joinRoom}
@@ -477,59 +521,62 @@ export default function AdminPage() {
             setFormError(null);
             setShowForm(true);
           }}
+          onToast={showToast}
         />
       ) : (
         <DetailView
           tab={tab}
+          onTabChange={(nextTab) => {
+            if (selected) {
+              void openDetail(selected, nextTab);
+            } else {
+              setTab(nextTab);
+            }
+          }}
           webinars={webinars}
           selected={selected}
           onSelect={(w) => void openDetail(w, tab)}
-          onClear={() => setSelected(null)}
+          onClear={() => {
+            setSelected(null);
+            setTab('webinars');
+          }}
           onRefresh={() => void refreshSelected()}
+          joiningSlug={joiningSlug}
+          onJoin={joinRoom}
           registrations={registrations}
           analytics={analytics}
+          onToast={showToast}
         />
       )}
 
-      {showForm && (
-        <div className="fixed inset-0 z-[60] grid place-items-center overflow-y-auto bg-black/60 p-4 backdrop-blur-sm">
-          <div className="my-8 w-full max-w-2xl rounded-2xl border border-line bg-panel p-6 shadow-pop">
-            <div className="mb-5 flex items-center justify-between">
-              <h2 className="text-base font-semibold text-fg">
-                {editing ? 'Edit webinar' : 'New webinar'}
-              </h2>
-              <button
-                onClick={() => {
-                  setShowForm(false);
-                  setEditing(null);
-                }}
-                className="grid h-8 w-8 place-items-center rounded-lg text-subtle transition hover:bg-panel-2 hover:text-fg"
-                aria-label="Close"
-              >
-                <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" />
-                </svg>
-              </button>
-            </div>
-            <WebinarForm
-              initial={initialForm}
-              submitLabel={editing ? 'Save changes' : 'Create webinar'}
-              busy={formBusy}
-              error={formError}
-              onSubmit={submitForm}
-              onCancel={() => {
-                setShowForm(false);
-                setEditing(null);
-              }}
-            />
-          </div>
-        </div>
-      )}
+      {/* Modal Dialog for Webinar Create / Edit */}
+      <Dialog
+        open={showForm}
+        onClose={() => {
+          setShowForm(false);
+          setEditing(null);
+        }}
+        title={editing ? 'Edit webinar' : 'Create new webinar'}
+        description="Configure streaming options, access controls, and ticketing."
+        maxWidth="2xl"
+      >
+        <WebinarForm
+          initial={initialForm}
+          submitLabel={editing ? 'Save changes' : 'Create webinar'}
+          busy={formBusy}
+          error={formError}
+          onSubmit={submitForm}
+          onCancel={() => {
+            setShowForm(false);
+            setEditing(null);
+          }}
+        />
+      </Dialog>
     </AdminShell>
   );
 }
 
-/* ─────────────────────────── webinars list ─────────────────────────── */
+/* ─────────────────────────── webinars list view ─────────────────────────── */
 
 function WebinarsView({
   loading,
@@ -537,6 +584,10 @@ function WebinarsView({
   total,
   query,
   onQuery,
+  statusFilter,
+  onStatusFilter,
+  viewMode,
+  onViewMode,
   stats,
   joiningSlug,
   onJoin,
@@ -545,13 +596,18 @@ function WebinarsView({
   onPublish,
   onDelete,
   onCreate,
+  onToast,
 }: {
   loading: boolean;
   webinars: AdminWebinar[];
   total: number;
   query: string;
   onQuery: (v: string) => void;
-  stats: { total: number; live: number; regs: number };
+  statusFilter: 'all' | 'live' | 'scheduled' | 'draft' | 'ended';
+  onStatusFilter: (f: 'all' | 'live' | 'scheduled' | 'draft' | 'ended') => void;
+  viewMode: 'cards' | 'list';
+  onViewMode: (m: 'cards' | 'list') => void;
+  stats: { total: number; live: number; scheduled: number; drafts: number; ended: number; regs: number };
   joiningSlug: string | null;
   onJoin: (slug: string) => void;
   onOpen: (w: AdminWebinar, tab: Tab) => void;
@@ -559,68 +615,126 @@ function WebinarsView({
   onPublish: (w: AdminWebinar) => void;
   onDelete: (w: AdminWebinar) => void;
   onCreate: () => void;
+  onToast: (msg: string, tone?: 'success' | 'info') => void;
 }) {
   return (
     <div className="space-y-6">
+      {/* 4 Metric Stats Grid */}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Webinars" value={String(stats.total)} icon={IconVideo} />
-        <StatCard label="Live now" value={String(stats.live)} icon={IconPlay} tone="live" />
-        <StatCard label="Registrations" value={String(stats.regs)} icon={IconUsers} tone="mint" />
         <StatCard
-          label="Avg. per webinar"
+          label="Total Webinars"
+          value={String(stats.total)}
+          sub="All sessions created"
+          icon={IconVideo}
+          tone="default"
+        />
+        <StatCard
+          label="Live Broadcasts"
+          value={String(stats.live)}
+          sub={stats.live > 0 ? 'Active streaming room' : 'None live currently'}
+          icon={IconPlay}
+          tone="live"
+        />
+        <StatCard
+          label="Total Registrations"
+          value={String(stats.regs)}
+          sub="Cumulative attendees signed up"
+          icon={IconUsers}
+          tone="mint"
+        />
+        <StatCard
+          label="Avg. Per Session"
           value={String(stats.total ? Math.round(stats.regs / stats.total) : 0)}
+          sub="Average attendee interest"
           icon={IconChart}
+          tone="default"
         />
       </div>
 
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="relative min-w-0 flex-1 sm:max-w-xs">
-          <IconSearch className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-subtle" />
-          <input
-            value={query}
-            onChange={(e) => onQuery(e.target.value)}
-            placeholder="Search webinars…"
-            className="h-10 w-full rounded-xl border border-line bg-panel pl-9 pr-3 text-sm text-fg placeholder:text-subtle outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-500/20"
-          />
+      {/* Filter and Search Bar */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <Tabs
+          tabs={[
+            { id: 'all', label: 'All', count: stats.total },
+            { id: 'live', label: 'Live Now', count: stats.live },
+            { id: 'scheduled', label: 'Scheduled', count: stats.scheduled },
+            { id: 'draft', label: 'Drafts', count: stats.drafts },
+            { id: 'ended', label: 'Ended', count: stats.ended },
+          ]}
+          active={statusFilter}
+          onChange={onStatusFilter}
+        />
+
+        {/* Search & View Mode Switcher */}
+        <div className="flex items-center gap-2">
+          <div className="relative min-w-0 flex-1 sm:w-64">
+            <Input
+              value={query}
+              onChange={(e) => onQuery(e.target.value)}
+              placeholder="Search webinars…"
+              leftIcon={<IconSearch className="h-4 w-4" />}
+            />
+          </div>
+
+          <div className="flex items-center rounded-xl border border-line bg-panel p-1">
+            <button
+              onClick={() => onViewMode('cards')}
+              className={`grid h-7 w-7 place-items-center rounded-lg transition ${
+                viewMode === 'cards' ? 'bg-brand-500 text-white' : 'text-subtle hover:text-fg'
+              }`}
+              title="Card grid view"
+              aria-label="Card grid view"
+            >
+              <IconGrid className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => onViewMode('list')}
+              className={`grid h-7 w-7 place-items-center rounded-lg transition ${
+                viewMode === 'list' ? 'bg-brand-500 text-white' : 'text-subtle hover:text-fg'
+              }`}
+              title="Compact list view"
+              aria-label="Compact list view"
+            >
+              <IconList className="h-4 w-4" />
+            </button>
+          </div>
         </div>
-        <span className="text-xs text-subtle">
-          {webinars.length} of {total}
-        </span>
       </div>
 
       {loading ? (
-        <div className="space-y-3">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {[0, 1, 2].map((i) => (
             <div
               key={i}
-              className="h-[104px] animate-pulse rounded-2xl border border-line bg-panel"
+              className="h-72 animate-pulse rounded-2xl border border-line bg-panel"
             />
           ))}
         </div>
       ) : webinars.length === 0 ? (
         <EmptyState
-          title={total === 0 ? 'No webinars yet' : 'Nothing matches that search'}
-          body={
+          icon={IconVideo}
+          title={total === 0 ? 'No webinars created yet' : 'No webinars match your filter'}
+          description={
             total === 0
-              ? 'Create your first session and it will show up here.'
-              : 'Try a different title or slug.'
+              ? 'Create your first live session to start accepting registrations and broadcasting.'
+              : 'Try clearing the search query or selecting a different status filter tab.'
           }
           action={
             total === 0 ? (
-              <button
+              <Button
+                variant="primary"
                 onClick={onCreate}
-                className="inline-flex items-center gap-1.5 rounded-xl bg-brand-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-600"
+                leftIcon={<IconPlus className="h-4 w-4" />}
               >
-                <IconPlus className="h-4 w-4" />
                 Create webinar
-              </button>
+              </Button>
             ) : undefined
           }
         />
-      ) : (
-        <div className="space-y-3">
+      ) : viewMode === 'cards' ? (
+        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
           {webinars.map((w) => (
-            <WebinarRow
+            <WebinarCard
               key={w.id}
               webinar={w}
               joining={joiningSlug === w.slug}
@@ -629,6 +743,23 @@ function WebinarsView({
               onEdit={onEdit}
               onPublish={onPublish}
               onDelete={onDelete}
+              onToast={onToast}
+            />
+          ))}
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {webinars.map((w) => (
+            <WebinarListRow
+              key={w.id}
+              webinar={w}
+              joining={joiningSlug === w.slug}
+              onJoin={onJoin}
+              onOpen={onOpen}
+              onEdit={onEdit}
+              onPublish={onPublish}
+              onDelete={onDelete}
+              onToast={onToast}
             />
           ))}
         </div>
@@ -637,7 +768,9 @@ function WebinarsView({
   );
 }
 
-function WebinarRow({
+/* ─────────────────────────── modern webinar card ─────────────────────────── */
+
+function WebinarCard({
   webinar: w,
   joining,
   onJoin,
@@ -645,6 +778,7 @@ function WebinarRow({
   onEdit,
   onPublish,
   onDelete,
+  onToast,
 }: {
   webinar: AdminWebinar;
   joining: boolean;
@@ -653,135 +787,336 @@ function WebinarRow({
   onEdit: (w: AdminWebinar) => void;
   onPublish: (w: AdminWebinar) => void;
   onDelete: (w: AdminWebinar) => void;
+  onToast: (msg: string, tone?: 'success' | 'info') => void;
 }) {
+  const [copied, setCopied] = useState(false);
   const paid = Boolean(w.settings?.requirePayment);
+  const isLive = w.status === 'LIVE';
+  const bannerSrc = getBannerSrc(w.bannerUrl);
+
+  const copyPublicLink = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const url = typeof window !== 'undefined'
+      ? `${window.location.origin}/w/${w.slug}`
+      : `/w/${w.slug}`;
+    navigator.clipboard.writeText(url);
+    setCopied(true);
+    onToast('Webinar public link copied to clipboard');
+    setTimeout(() => setCopied(false), 2000);
+  };
+
   return (
-    <div className="group rounded-2xl border border-line bg-panel p-4 shadow-card transition hover:border-brand-300/60 hover:shadow-pop sm:p-5">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <span
-              className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ring-1 ring-inset ${
-                statusStyles[w.status] ?? statusStyles.DRAFT
-              }`}
-            >
-              {w.status === 'LIVE' && (
-                <span className="relative flex h-1.5 w-1.5">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-500 opacity-75" />
-                  <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-red-500" />
-                </span>
-              )}
-              {w.status}
-            </span>
-            {paid && (
-              <span className="rounded-full bg-accent-500/15 px-2 py-0.5 text-[10px] font-semibold text-accent-600 dark:text-accent-400">
-                {formatPrice(Number(w.settings?.priceInPaise ?? 0))}
-              </span>
-            )}
-          </div>
-
-          <h3 className="mt-1.5 text-[15px] font-semibold leading-snug text-fg">{w.title}</h3>
-
-          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
-            <span>{formatDate(w.startsAt)}</span>
-            <span className="text-line">•</span>
-            <span>{w.durationMins} min</span>
-            <span className="text-line">•</span>
-            <span className="inline-flex items-center gap-1">
-              <IconUsers className="h-3.5 w-3.5" />
-              {w.registrationCount ?? 0} registered
+    <Card className="group relative flex flex-col overflow-hidden hover:border-brand-500/40 hover:shadow-pop">
+      {/* 16:9 Banner Header */}
+      <div className="relative aspect-[16/9] w-full overflow-hidden bg-panel-2">
+        {bannerSrc ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={bannerSrc}
+            alt={w.title}
+            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+          />
+        ) : (
+          <div className="flex h-full w-full flex-col items-center justify-center bg-gradient-to-br from-brand-600/20 via-panel-2 to-panel p-4 text-center">
+            <IconVideo className="h-8 w-8 text-brand-400 opacity-60" />
+            <span className="mt-2 text-[11px] font-semibold text-subtle">
+              {w.title.slice(0, 32)}
             </span>
           </div>
+        )}
 
-          <p className="mt-1.5 font-mono text-[11px] text-subtle">/w/{w.slug}</p>
+        {/* Gradient Overlay for Top Badges */}
+        <div className="absolute inset-x-0 top-0 flex items-center justify-between p-3 bg-gradient-to-b from-black/70 via-black/30 to-transparent">
+          <Badge
+            variant={statusToBadgeVariant(w.status)}
+            size="sm"
+            dot
+            className="backdrop-blur-md"
+          >
+            {w.status}
+          </Badge>
+
+          {paid ? (
+            <span className="rounded-full bg-accent-500/90 px-2 py-0.5 text-[10px] font-bold text-ink-950 shadow-sm backdrop-blur-md">
+              {formatPrice(Number(w.settings?.priceInPaise ?? 0))}
+            </span>
+          ) : (
+            <span className="rounded-full bg-white/20 px-2 py-0.5 text-[10px] font-semibold text-white backdrop-blur-md">
+              Free
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Card Content */}
+      <div className="flex flex-1 flex-col p-4 sm:p-5">
+        <h3
+          onClick={() => onOpen(w, 'registrations')}
+          className="cursor-pointer text-[15px] font-bold leading-snug text-fg transition hover:text-brand-500 line-clamp-2"
+          title={w.title}
+        >
+          {w.title}
+        </h3>
+
+        <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
+          <span className="inline-flex items-center gap-1.5">
+            <IconCalendar className="h-3.5 w-3.5 text-subtle" />
+            {formatDate(w.startsAt)}
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <IconClock className="h-3.5 w-3.5 text-subtle" />
+            {w.durationMins}m
+          </span>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 lg:shrink-0">
+        {/* Attendees Meter */}
+        <div className="mt-3.5 flex items-center justify-between rounded-xl border border-line bg-panel-2 px-3 py-2">
+          <div className="flex items-center gap-2">
+            <span className="grid h-6 w-6 place-items-center rounded-lg bg-brand-500/10 text-brand-500">
+              <IconUsers className="h-3.5 w-3.5" />
+            </span>
+            <span className="text-xs font-semibold text-fg">
+              {w.registrationCount ?? 0}
+            </span>
+            <span className="text-[11px] text-muted">registered</span>
+          </div>
           <button
-            onClick={() => onJoin(w.slug)}
-            disabled={joining}
-            className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-brand-500 px-3 text-xs font-semibold text-white transition hover:bg-brand-600 disabled:opacity-60"
+            onClick={() => onOpen(w, 'registrations')}
+            className="text-[11px] font-bold text-brand-600 dark:text-brand-400 transition hover:underline"
           >
-            <IconPlay className="h-3.5 w-3.5" />
-            {joining ? 'Joining…' : 'Join room'}
+            View list →
           </button>
+        </div>
 
-          <div className="flex items-center gap-1 rounded-lg border border-line bg-panel-2 p-1">
-            <IconButton label="Registrations" onClick={() => onOpen(w, 'registrations')}>
-              <IconUsers className="h-4 w-4" />
-            </IconButton>
-            <IconButton label="Analytics" onClick={() => onOpen(w, 'analytics')}>
-              <IconChart className="h-4 w-4" />
-            </IconButton>
-            <IconButton label="Engagement" onClick={() => onOpen(w, 'engagement')}>
-              <IconSpark className="h-4 w-4" />
-            </IconButton>
-            <IconButton label="Payments" onClick={() => onOpen(w, 'payments')}>
-              <IconCard className="h-4 w-4" />
-            </IconButton>
-            <IconButton label="Recordings" onClick={() => onOpen(w, 'recordings')}>
-              <IconDisc className="h-4 w-4" />
-            </IconButton>
+        {/* Primary Action Button Cluster */}
+        <div className="mt-4 flex items-center gap-2">
+          <Button
+            variant={isLive ? 'danger' : 'primary'}
+            size="sm"
+            onClick={() => onJoin(w.slug)}
+            isLoading={joining}
+            leftIcon={<IconPlay className="h-3.5 w-3.5" />}
+            className="flex-1"
+          >
+            {isLive ? 'Enter Live Studio' : 'Host Studio'}
+          </Button>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={copyPublicLink}
+            title="Copy public link"
+            className="px-2.5"
+          >
+            {copied ? (
+              <IconCheck className="h-4 w-4 text-mint-500" />
+            ) : (
+              <IconCopy className="h-4 w-4" />
+            )}
+          </Button>
+
+          <Link href={`/w/${w.slug}`}>
+            <Button
+              variant="outline"
+              size="sm"
+              title="Preview public registration page"
+              className="px-2.5"
+            >
+              <IconExternal className="h-4 w-4" />
+            </Button>
+          </Link>
+        </div>
+
+        {/* Secondary Tool Toolbar */}
+        <div className="mt-3 flex items-center justify-between border-t border-line/60 pt-3">
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => onOpen(w, 'analytics')}
+              title="Analytics"
+              className="grid h-7 w-7 place-items-center rounded-lg text-muted hover:text-fg hover:bg-panel-2 transition"
+            >
+              <IconChart className="h-3.5 w-3.5" />
+            </button>
+            <button
+              onClick={() => onOpen(w, 'engagement')}
+              title="Engagement"
+              className="grid h-7 w-7 place-items-center rounded-lg text-muted hover:text-fg hover:bg-panel-2 transition"
+            >
+              <IconSpark className="h-3.5 w-3.5" />
+            </button>
+            <button
+              onClick={() => onOpen(w, 'payments')}
+              title="Payments"
+              className="grid h-7 w-7 place-items-center rounded-lg text-muted hover:text-fg hover:bg-panel-2 transition"
+            >
+              <IconCard className="h-3.5 w-3.5" />
+            </button>
+            <button
+              onClick={() => onOpen(w, 'recordings')}
+              title="Recordings"
+              className="grid h-7 w-7 place-items-center rounded-lg text-muted hover:text-fg hover:bg-panel-2 transition"
+            >
+              <IconDisc className="h-3.5 w-3.5" />
+            </button>
           </div>
 
           <div className="flex items-center gap-1">
-            <Link
-              href={`/w/${w.slug}`}
-              className="grid h-9 w-9 place-items-center rounded-lg border border-line text-muted transition hover:bg-panel-2 hover:text-fg"
-              aria-label="View public page"
-              title="View public page"
-            >
-              <IconExternal className="h-4 w-4" />
-            </Link>
-            <IconButton label="Edit" bordered onClick={() => onEdit(w)}>
-              <IconEdit className="h-4 w-4" />
-            </IconButton>
             {w.status === 'DRAFT' && (
-              <button
+              <Button
+                size="xs"
+                variant="accent"
                 onClick={() => onPublish(w)}
-                className="h-9 rounded-lg bg-accent-500 px-3 text-xs font-semibold text-ink-950 transition hover:bg-accent-400"
               >
                 Publish
-              </button>
+              </Button>
             )}
-            <IconButton label="Delete" bordered danger onClick={() => onDelete(w)}>
-              <IconTrash className="h-4 w-4" />
-            </IconButton>
+            <button
+              onClick={() => onEdit(w)}
+              title="Edit Settings"
+              className="grid h-7 w-7 place-items-center rounded-lg text-muted hover:text-fg hover:bg-panel-2 transition"
+            >
+              <IconEdit className="h-3.5 w-3.5" />
+            </button>
+            <button
+              onClick={() => onDelete(w)}
+              title="Delete Webinar"
+              className="grid h-7 w-7 place-items-center rounded-lg text-muted hover:text-red-500 hover:bg-red-500/10 transition"
+            >
+              <IconTrash className="h-3.5 w-3.5" />
+            </button>
           </div>
         </div>
       </div>
-    </div>
+    </Card>
   );
 }
 
-function IconButton({
-  label,
-  onClick,
-  children,
-  bordered,
-  danger,
+/* ─────────────────────────── compact webinar row ─────────────────────────── */
+
+function WebinarListRow({
+  webinar: w,
+  joining,
+  onJoin,
+  onOpen,
+  onEdit,
+  onPublish,
+  onDelete,
+  onToast,
 }: {
-  label: string;
-  onClick: () => void;
-  children: React.ReactNode;
-  bordered?: boolean;
-  danger?: boolean;
+  webinar: AdminWebinar;
+  joining: boolean;
+  onJoin: (slug: string) => void;
+  onOpen: (w: AdminWebinar, tab: Tab) => void;
+  onEdit: (w: AdminWebinar) => void;
+  onPublish: (w: AdminWebinar) => void;
+  onDelete: (w: AdminWebinar) => void;
+  onToast: (msg: string, tone?: 'success' | 'info') => void;
 }) {
+  const [copied, setCopied] = useState(false);
+  const paid = Boolean(w.settings?.requirePayment);
+  const isLive = w.status === 'LIVE';
+  const bannerSrc = getBannerSrc(w.bannerUrl);
+
+  const copyPublicLink = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const url = typeof window !== 'undefined'
+      ? `${window.location.origin}/w/${w.slug}`
+      : `/w/${w.slug}`;
+    navigator.clipboard.writeText(url);
+    setCopied(true);
+    onToast('Webinar public link copied');
+    setTimeout(() => setCopied(false), 2000);
+  };
+
   return (
-    <button
-      onClick={onClick}
-      aria-label={label}
-      title={label}
-      className={`grid place-items-center transition ${
-        bordered ? 'h-9 w-9 rounded-lg border border-line' : 'h-8 w-8 rounded-md'
-      } ${
-        danger
-          ? 'text-muted hover:bg-red-500/10 hover:text-red-500'
-          : 'text-muted hover:bg-panel hover:text-fg'
-      }`}
-    >
-      {children}
-    </button>
+    <Card className="flex flex-col gap-3 p-3.5 transition hover:border-brand-400/50 hover:shadow-pop md:flex-row md:items-center md:justify-between">
+      <div className="flex items-center gap-3.5 min-w-0">
+        <div className="relative h-12 w-16 shrink-0 overflow-hidden rounded-xl bg-panel-2 border border-line">
+          {bannerSrc ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={bannerSrc} alt="" className="h-full w-full object-cover" />
+          ) : (
+            <div className="grid h-full w-full place-items-center bg-brand-500/10 text-brand-500">
+              <IconVideo className="h-5 w-5" />
+            </div>
+          )}
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <Badge variant={statusToBadgeVariant(w.status)} size="sm" dot>
+              {w.status}
+            </Badge>
+            {paid && (
+              <span className="rounded-full bg-accent-500/15 px-1.5 py-0.5 text-[9px] font-bold text-accent-500">
+                {formatPrice(Number(w.settings?.priceInPaise ?? 0))}
+              </span>
+            )}
+            <h4
+              onClick={() => onOpen(w, 'registrations')}
+              className="cursor-pointer truncate text-sm font-bold text-fg hover:text-brand-500"
+            >
+              {w.title}
+            </h4>
+          </div>
+          <div className="mt-1 flex items-center gap-2 text-xs text-muted">
+            <span>{formatDate(w.startsAt)}</span>
+            <span>•</span>
+            <span>{w.durationMins}m</span>
+            <span>•</span>
+            <span className="font-semibold text-fg">{w.registrationCount ?? 0} registered</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-1.5 self-end md:self-auto shrink-0">
+        <Button
+          size="xs"
+          variant={isLive ? 'danger' : 'primary'}
+          onClick={() => onJoin(w.slug)}
+          isLoading={joining}
+          leftIcon={<IconPlay className="h-3 w-3" />}
+        >
+          {isLive ? 'Live Studio' : 'Host Studio'}
+        </Button>
+
+        <Button
+          size="xs"
+          variant="outline"
+          onClick={copyPublicLink}
+          title="Copy link"
+          className="px-2"
+        >
+          {copied ? <IconCheck className="h-3.5 w-3.5 text-mint-500" /> : <IconCopy className="h-3.5 w-3.5" />}
+        </Button>
+
+        <Button
+          size="xs"
+          variant="outline"
+          onClick={() => onOpen(w, 'registrations')}
+          title="Manage webinar"
+          className="px-2"
+        >
+          <IconUsers className="h-3.5 w-3.5" />
+        </Button>
+
+        <button
+          onClick={() => onEdit(w)}
+          title="Edit"
+          className="grid h-7 w-7 place-items-center rounded-lg text-muted hover:text-fg hover:bg-panel-2 transition"
+        >
+          <IconEdit className="h-3.5 w-3.5" />
+        </button>
+
+        <button
+          onClick={() => onDelete(w)}
+          title="Delete"
+          className="grid h-7 w-7 place-items-center rounded-lg text-muted hover:text-red-500 hover:bg-red-500/10 transition"
+        >
+          <IconTrash className="h-3.5 w-3.5" />
+        </button>
+      </div>
+    </Card>
   );
 }
 
@@ -789,30 +1124,41 @@ function IconButton({
 
 function DetailView({
   tab,
+  onTabChange,
   webinars,
   selected,
   onSelect,
   onClear,
   onRefresh,
+  joiningSlug,
+  onJoin,
   registrations,
   analytics,
+  onToast,
 }: {
   tab: Tab;
+  onTabChange: (nextTab: Tab) => void;
   webinars: AdminWebinar[];
   selected: AdminWebinar | null;
   onSelect: (w: AdminWebinar) => void;
   onClear: () => void;
   onRefresh: () => void;
+  joiningSlug: string | null;
+  onJoin: (slug: string) => void;
   registrations: Registration[];
   analytics: Analytics | null;
+  onToast: (msg: string, tone?: 'success' | 'info') => void;
 }) {
+  const [copiedLink, setCopiedLink] = useState(false);
+
+  // If no webinar is selected, provide the picker
   if (!selected) {
     if (tab === 'payments' || tab === 'integrations') {
       return (
         <div className="space-y-6">
           <GatewayConfigPanel />
-          <div className="rounded-2xl border border-line bg-panel p-6 shadow-card">
-            <h2 className="text-sm font-semibold text-fg">
+          <Card className="p-6">
+            <h2 className="text-sm font-bold text-fg">
               {tab === 'payments' ? 'Webinar Payments & Refunds' : 'Integrations & Webhooks'}
             </h2>
             <p className="mt-1 text-xs text-muted">
@@ -821,26 +1167,22 @@ function DetailView({
                 : 'Choose a webinar below to configure webhooks, automation cues, and tracking pixels.'}
             </p>
             {webinars.length === 0 ? (
-              <p className="py-10 text-center text-sm text-subtle">No webinars yet.</p>
+              <EmptyState title="No webinars created yet" className="mt-4" />
             ) : (
               <div className="mt-4 divide-y divide-line">
                 {webinars.map((w) => (
                   <button
                     key={w.id}
                     onClick={() => onSelect(w)}
-                    className="flex w-full items-center gap-3 py-3 text-left transition hover:opacity-80"
+                    className="flex w-full items-center gap-3 py-3 text-left transition hover:bg-panel-2 rounded-xl px-2"
                   >
-                    <span
-                      className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ring-1 ring-inset ${
-                        statusStyles[w.status] ?? statusStyles.DRAFT
-                      }`}
-                    >
+                    <Badge variant={statusToBadgeVariant(w.status)} size="sm">
                       {w.status}
-                    </span>
-                    <span className="min-w-0 flex-1 truncate text-sm font-medium text-fg">
+                    </Badge>
+                    <span className="min-w-0 flex-1 truncate text-sm font-semibold text-fg">
                       {w.title}
                     </span>
-                    <span className="shrink-0 text-xs text-subtle">
+                    <span className="shrink-0 text-xs text-muted">
                       {w.registrationCount ?? 0} regs
                     </span>
                     <IconChevron className="h-4 w-4 shrink-0 text-subtle" />
@@ -848,65 +1190,150 @@ function DetailView({
                 ))}
               </div>
             )}
-          </div>
+          </Card>
         </div>
       );
     }
 
     return (
-      <div className="rounded-2xl border border-line bg-panel p-6 shadow-card">
-        <h2 className="text-sm font-semibold text-fg">Choose a webinar</h2>
+      <Card className="p-6">
+        <h2 className="text-sm font-bold text-fg">Choose a webinar to view {TAB_TITLES[tab]}</h2>
         <p className="mt-1 text-xs text-muted">
-          {TAB_TITLES[tab]} data is scoped to a single session — pick one to continue.
+          {TAB_TITLES[tab]} data is scoped to a single session — pick one below to open its dashboard.
         </p>
         {webinars.length === 0 ? (
-          <p className="py-10 text-center text-sm text-subtle">No webinars yet.</p>
+          <EmptyState title="No webinars created yet" className="mt-4" />
         ) : (
           <div className="mt-4 divide-y divide-line">
             {webinars.map((w) => (
               <button
                 key={w.id}
                 onClick={() => onSelect(w)}
-                className="flex w-full items-center gap-3 py-3 text-left transition hover:opacity-80"
+                className="flex w-full items-center gap-3 py-3.5 text-left transition hover:bg-panel-2 rounded-xl px-2"
               >
-                <span
-                  className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ring-1 ring-inset ${
-                    statusStyles[w.status] ?? statusStyles.DRAFT
-                  }`}
-                >
+                <Badge variant={statusToBadgeVariant(w.status)} size="sm">
                   {w.status}
-                </span>
-                <span className="min-w-0 flex-1 truncate text-sm font-medium text-fg">
+                </Badge>
+                <span className="min-w-0 flex-1 truncate text-sm font-semibold text-fg">
                   {w.title}
                 </span>
-                <span className="shrink-0 text-xs text-subtle">
-                  {w.registrationCount ?? 0} regs
+                <span className="shrink-0 text-xs text-muted">
+                  {w.registrationCount ?? 0} registrations
                 </span>
                 <IconChevron className="h-4 w-4 shrink-0 text-subtle" />
               </button>
             ))}
           </div>
         )}
-      </div>
+      </Card>
     );
   }
 
-  return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <button
-          onClick={onClear}
-          className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-line px-2.5 text-xs font-medium text-muted transition hover:bg-panel-2 hover:text-fg"
-        >
-          <IconChevron className="h-3.5 w-3.5 rotate-180" />
-          All webinars
-        </button>
-        <span className="text-xs text-subtle">
-          {TAB_TITLES[tab]} · {selected.title}
-        </span>
-      </div>
+  const copyLink = () => {
+    const url = typeof window !== 'undefined'
+      ? `${window.location.origin}/w/${selected.slug}`
+      : `/w/${selected.slug}`;
+    navigator.clipboard.writeText(url);
+    setCopiedLink(true);
+    onToast('Webinar public link copied');
+    setTimeout(() => setCopiedLink(false), 2000);
+  };
 
-      <div className="rounded-2xl border border-line bg-panel p-5 shadow-card sm:p-6">
+  return (
+    <div className="space-y-5">
+      {/* ── Scoped Webinar Context Header ── */}
+      <Card className="p-5 sm:p-6">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <button
+                onClick={onClear}
+                className="inline-flex items-center gap-1 text-xs font-semibold text-brand-600 dark:text-brand-400 transition hover:underline"
+              >
+                <IconChevron className="h-3 w-3 rotate-180" />
+                All webinars
+              </button>
+              <span className="text-subtle">/</span>
+              <span className="truncate text-xs font-medium text-muted">
+                {selected.title}
+              </span>
+            </div>
+
+            <div className="mt-2 flex flex-wrap items-center gap-2.5">
+              <h2 className="text-lg font-bold text-fg">{selected.title}</h2>
+              <Badge variant={statusToBadgeVariant(selected.status)} size="sm" dot>
+                {selected.status}
+              </Badge>
+            </div>
+
+            <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted">
+              <span>{formatDate(selected.startsAt)}</span>
+              <span>•</span>
+              <span>{selected.durationMins} minutes</span>
+              <span>•</span>
+              <span className="font-semibold text-fg">{selected.registrationCount ?? 0} registered</span>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              size="sm"
+              variant="primary"
+              onClick={() => onJoin(selected.slug)}
+              isLoading={joiningSlug === selected.slug}
+              leftIcon={<IconPlay className="h-3.5 w-3.5" />}
+            >
+              Host Studio
+            </Button>
+
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={copyLink}
+              leftIcon={
+                copiedLink ? (
+                  <IconCheck className="h-3.5 w-3.5 text-mint-500" />
+                ) : (
+                  <IconCopy className="h-3.5 w-3.5 text-subtle" />
+                )
+              }
+            >
+              {copiedLink ? 'Copied' : 'Copy link'}
+            </Button>
+
+            <Link href={`/w/${selected.slug}`}>
+              <Button size="sm" variant="outline" title="Preview public page">
+                <IconExternal className="h-4 w-4" />
+              </Button>
+            </Link>
+          </div>
+        </div>
+
+        {/* Horizontal Detail Sub-Tabs Bar */}
+        <div className="mt-5 flex gap-1.5 overflow-x-auto border-t border-line/60 pt-4">
+          {DETAIL_TABS.map((subItem) => {
+            const Icon = subItem.icon;
+            const active = tab === subItem.key;
+            return (
+              <button
+                key={subItem.key}
+                onClick={() => onTabChange(subItem.key)}
+                className={`inline-flex shrink-0 items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-semibold transition ${
+                  active
+                    ? 'bg-brand-500 text-white shadow-sm'
+                    : 'text-muted hover:bg-panel-2 hover:text-fg'
+                }`}
+              >
+                <Icon className={`h-3.5 w-3.5 ${active ? 'text-white' : 'text-subtle'}`} />
+                <span>{subItem.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </Card>
+
+      {/* Main Scoped Tab Content Panel */}
+      <Card className="p-5 sm:p-6">
         {tab === 'registrations' ? (
           <RegistrationsTable registrations={registrations} />
         ) : tab === 'engagement' ? (
@@ -920,6 +1347,7 @@ function DetailView({
         ) : tab === 'recordings' ? (
           <RecordingsPanel
             webinarId={selected.id}
+            slug={selected.slug}
             premiereRecordingId={
               (selected.settings.premiereRecordingId as string | null | undefined) ?? null
             }
@@ -961,41 +1389,51 @@ function DetailView({
         ) : (
           <AnalyticsView analytics={analytics} />
         )}
-      </div>
+      </Card>
     </div>
   );
 }
 
 function RegistrationsTable({ registrations }: { registrations: Registration[] }) {
   if (registrations.length === 0) {
-    return <p className="py-12 text-center text-sm text-subtle">No registrations yet.</p>;
+    return (
+      <EmptyState
+        icon={IconUsers}
+        title="No Registrations Yet"
+        description="Share the registration link with your audience to gather attendees for this live event."
+      />
+    );
   }
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-left text-sm">
         <thead>
           <tr className="border-b border-line text-[11px] uppercase tracking-wider text-subtle">
-            <th className="pb-2.5 pr-4 font-semibold">Name</th>
-            <th className="pb-2.5 pr-4 font-semibold">Email</th>
-            <th className="pb-2.5 pr-4 font-semibold">Phone</th>
-            <th className="pb-2.5 pr-4 font-semibold">Paid</th>
-            <th className="pb-2.5 pr-4 font-semibold">Attended</th>
-            <th className="pb-2.5 font-semibold">Registered</th>
+            <th className="pb-3 pr-4 font-semibold">Name</th>
+            <th className="pb-3 pr-4 font-semibold">Email</th>
+            <th className="pb-3 pr-4 font-semibold">Phone</th>
+            <th className="pb-3 pr-4 font-semibold">Payment</th>
+            <th className="pb-3 pr-4 font-semibold">Attended</th>
+            <th className="pb-3 font-semibold">Registered At</th>
           </tr>
         </thead>
-        <tbody>
+        <tbody className="divide-y divide-line/60">
           {registrations.map((r) => (
-            <tr key={r.id} className="border-b border-line/60 last:border-0">
-              <td className="py-3 pr-4 font-medium text-fg">{r.name}</td>
-              <td className="py-3 pr-4 text-muted">{r.email}</td>
-              <td className="py-3 pr-4 text-subtle">{r.phone ?? '—'}</td>
-              <td className="py-3 pr-4">
-                <Badge ok={r.paid} />
+            <tr key={r.id} className="transition hover:bg-panel-2/40">
+              <td className="py-3.5 pr-4 font-medium text-fg">{r.name}</td>
+              <td className="py-3.5 pr-4 text-muted">{r.email}</td>
+              <td className="py-3.5 pr-4 text-subtle font-mono text-xs">{r.phone ?? '—'}</td>
+              <td className="py-3.5 pr-4">
+                <Badge variant={r.paid ? 'success' : 'default'} size="sm">
+                  {r.paid ? 'Paid' : 'Free'}
+                </Badge>
               </td>
-              <td className="py-3 pr-4">
-                <Badge ok={r.attended} />
+              <td className="py-3.5 pr-4">
+                <Badge variant={r.attended ? 'brand' : 'default'} size="sm">
+                  {r.attended ? 'Attended' : 'Absent'}
+                </Badge>
               </td>
-              <td className="py-3 text-xs text-subtle">{formatDate(r.createdAt)}</td>
+              <td className="py-3.5 text-xs text-subtle">{formatDate(r.createdAt)}</td>
             </tr>
           ))}
         </tbody>
@@ -1015,37 +1453,52 @@ function AnalyticsView({ analytics }: { analytics: Analytics | null }) {
   return (
     <div className="space-y-6">
       <div className="grid gap-4 sm:grid-cols-3">
-        <StatCard label="Registrations" value={String(analytics.registrations)} icon={IconUsers} />
         <StatCard
-          label="Paid"
+          label="Total Registrations"
+          value={String(analytics.registrations)}
+          sub="All registered attendees"
+          icon={IconUsers}
+          tone="default"
+        />
+        <StatCard
+          label="Paid Attendees"
           value={String(analytics.paidRegistrations)}
+          sub="Verified payments"
           icon={IconCard}
           tone="mint"
         />
-        <StatCard label="Revenue" value={formatPrice(analytics.revenuePaise)} icon={IconChart} />
+        <StatCard
+          label="Total Revenue"
+          value={formatPrice(analytics.revenuePaise)}
+          sub="Gross ticket sales"
+          icon={IconChart}
+          tone="default"
+        />
       </div>
 
       <div>
-        <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-subtle">
-          Quiz performance
-        </p>
+        <h4 className="mb-3 text-xs font-semibold uppercase tracking-wider text-subtle">
+          Quiz & Poll Performance
+        </h4>
         {analytics.quizzes.length === 0 ? (
-          <p className="text-sm text-subtle">No quizzes configured.</p>
+          <p className="rounded-xl border border-dashed border-line p-8 text-center text-xs text-subtle">
+            No quizzes configured or answered for this session.
+          </p>
         ) : (
-          <div className="space-y-2">
+          <div className="space-y-3">
             {analytics.quizzes.map((q) => {
               const pct = q.answers > 0 ? Math.round((q.correct / q.answers) * 100) : 0;
               return (
-                <div key={q.id} className="rounded-xl border border-line bg-panel-2 p-3">
+                <div key={q.id} className="rounded-xl border border-line bg-panel-2 p-3.5">
                   <div className="flex items-center justify-between gap-3">
-                    <span className="truncate text-sm text-fg">{q.question}</span>
-                    <span className="shrink-0 text-xs tabular-nums text-muted">
-                      {q.correct}/{q.answers} correct
+                    <span className="truncate text-sm font-medium text-fg">{q.question}</span>
+                    <span className="shrink-0 text-xs tabular-nums text-muted font-semibold">
+                      {q.correct}/{q.answers} correct ({pct}%)
                     </span>
                   </div>
-                  <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-line">
+                  <div className="mt-2.5 h-2 overflow-hidden rounded-full bg-line">
                     <div
-                      className="h-full rounded-full bg-mint-500 transition-all"
+                      className="h-full rounded-full bg-mint-500 transition-all duration-500"
                       style={{ width: `${pct}%` }}
                     />
                   </div>
@@ -1056,72 +1509,5 @@ function AnalyticsView({ analytics }: { analytics: Analytics | null }) {
         )}
       </div>
     </div>
-  );
-}
-
-/* ─────────────────────────── primitives ─────────────────────────── */
-
-function StatCard({
-  label,
-  value,
-  icon: Icon,
-  tone,
-}: {
-  label: string;
-  value: string;
-  icon: React.ComponentType<{ className?: string }>;
-  tone?: 'live' | 'mint';
-}) {
-  const toneClass =
-    tone === 'live'
-      ? 'bg-red-500/12 text-red-500'
-      : tone === 'mint'
-        ? 'bg-mint-500/12 text-mint-500'
-        : 'bg-brand-500/12 text-brand-500';
-  return (
-    <div className="rounded-2xl border border-line bg-panel p-4 shadow-card">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-subtle">{label}</p>
-          <p className="mt-1.5 text-2xl font-semibold tabular-nums text-fg">{value}</p>
-        </div>
-        <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl ${toneClass}`}>
-          <Icon className="h-[18px] w-[18px]" />
-        </span>
-      </div>
-    </div>
-  );
-}
-
-function EmptyState({
-  title,
-  body,
-  action,
-}: {
-  title: string;
-  body: string;
-  action?: React.ReactNode;
-}) {
-  return (
-    <div className="rounded-2xl border border-dashed border-line bg-panel/60 px-6 py-14 text-center">
-      <div className="mx-auto mb-4 grid h-12 w-12 place-items-center rounded-2xl bg-brand-500/12 text-brand-500">
-        <IconVideo className="h-6 w-6" />
-      </div>
-      <p className="text-sm font-semibold text-fg">{title}</p>
-      <p className="mx-auto mt-1 max-w-sm text-xs text-muted">{body}</p>
-      {action && <div className="mt-5">{action}</div>}
-    </div>
-  );
-}
-
-function Badge({ ok }: { ok: boolean }) {
-  return (
-    <span
-      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-        ok ? 'bg-mint-500/15 text-mint-500 dark:text-mint-400' : 'bg-panel-2 text-subtle'
-      }`}
-    >
-      {ok ? 'Yes' : 'No'}
-    </span>
   );
 }

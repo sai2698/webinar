@@ -298,6 +298,14 @@ adminWebinarRouter.post(
       },
     });
 
+    const live = roomManager.get(webinar.id);
+    if (live) {
+      live.startPremiere(
+        toSettings(updated),
+        updated.premiereStartedAt ? updated.premiereStartedAt.getTime() : Date.now()
+      );
+    }
+
     res.json({ webinar: serializeWebinar(updated) });
   })
 );
@@ -317,6 +325,11 @@ adminWebinarRouter.post(
         host: { select: { id: true, name: true, email: true } },
       },
     });
+
+    const live = roomManager.get(webinar.id);
+    if (live) {
+      live.stopPremiere(toSettings(updated));
+    }
 
     res.json({ webinar: serializeWebinar(updated) });
   })

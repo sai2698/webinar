@@ -454,6 +454,7 @@ export function registerSocketHandlers(io: Server) {
 
         c.room.announceProducer(c.peer, producer.id, payload.kind);
         c.room.broadcastPeerUpdated(c.peer);
+        void c.room.onProducerAdded(c.peer, producer);
 
         ackOk(ack, { producerId: producer.id });
       } catch (err) {
@@ -466,6 +467,9 @@ export function registerSocketHandlers(io: Server) {
       if (!c) return ackErr(ack, 'Not in a room');
       const producer = c.peer.producers.get(payload.producerId);
       if (!producer) return ackErr(ack, 'Producer not found');
+
+      const kind = producer.kind as 'audio' | 'video';
+      const source = c.peer.sourceOf(payload.producerId, kind);
 
       producer.close();
       c.peer.producers.delete(payload.producerId);
@@ -481,6 +485,7 @@ export function registerSocketHandlers(io: Server) {
 
       c.room.announceProducerClosed(c.peer, payload.producerId);
       c.room.broadcastPeerUpdated(c.peer);
+      c.room.onProducerClosed(c.peer, payload.producerId, { kind, source });
       ackOk(ack);
     });
 

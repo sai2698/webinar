@@ -197,3 +197,66 @@ export function IconChevron(props: IconProps) {
     </Base>
   );
 }
+
+
+export function IconCopy(props: IconProps) {
+  return (
+    <Base {...props}>
+      <rect x="9" y="9" width="13" height="13" rx="2" />
+      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+    </Base>
+  );
+}
+
+export function IconCheck(props: IconProps) {
+  return (
+    <Base {...props}>
+      <path d="M20 6 9 17l-5-5" />
+    </Base>
+  );
+}
+
+export function IconGrid(props: IconProps) {
+  return (
+    <Base {...props}>
+      <rect x="3" y="3" width="7" height="7" rx="1.5" />
+      <rect x="14" y="3" width="7" height="7" rx="1.5" />
+      <rect x="14" y="14" width="7" height="7" rx="1.5" />
+      <rect x="3" y="14" width="7" height="7" rx="1.5" />
+    </Base>
+  );
+}
+
+export function IconList(props: IconProps) {
+  return (
+    <Base {...props}>
+      <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" strokeWidth="2" />
+    </Base>
+  );
+}
+
+export function IconCalendar(props: IconProps) {
+  return (
+    <Base {...props}>
+      <rect x="3" y="4" width="18" height="18" rx="2" />
+      <path d="M16 2v4M8 2v4M3 10h18" />
+    </Base>
+  );
+}
+
+export function IconClock(props: IconProps) {
+  return (
+    <Base {...props}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 6v6l4 2" />
+    </Base>
+  );
+}
+
+export function IconArrowRight(props: IconProps) {
+  return (
+    <Base {...props}>
+      <path d="M5 12h14M12 5l7 7-7 7" />
+    </Base>
+  );
+}

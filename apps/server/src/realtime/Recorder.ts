@@ -20,15 +20,9 @@ export const RECORDINGS_DIR = path.resolve(process.cwd(), 'recordings');
  *    available, and is what makes the replay feel live: the quiz pops up at the
  *    same moment it did in the real session.
  *
- * 2. **The media** — an optional MP4 of the host's screen, produced by FFmpeg
- *    reading the SFU's RTP. This is best-effort. FFmpeg may be missing, the host
- *    may never publish, or the container may not have the codecs. None of that
- *    should stop the timeline from being recorded, because a replay with chat
- *    and quizzes but no video is still useful, whereas a recording that fails
- *    outright because FFmpeg is absent is not.
- *
- * The class therefore never throws from `start()`. It records what it can and
- * reports the rest through `error`.
+ * 2. **The media** — an MP4/WebM of the host's screen & camera, captured either
+ *    via SFU RTP + FFmpeg, or via client-side upload from the host's browser.
+ *    Replay plays this video in sync with the timeline.
  */
 export class Recorder {
   readonly webinarId: string;
@@ -87,12 +81,20 @@ export class Recorder {
   /**
    * Starts an FFmpeg process that writes the given RTP stream to an MP4.
    *
-   * The caller supplies the SDP because only the Room knows the PlainTransport
-   * ports. If FFmpeg is not installed this resolves with `false` and the
-   * recording continues as timeline-only.
+   * The caller supplies the SDP containing PlainTransport ports and codecs.
    */
-  async startMedia(sdp: string, port: number): Promise<boolean> {
+  async startMedia(sdp: string, port?: number): Promise<boolean> {
     if (this.stopped) return false;
+
+    // If an existing FFmpeg process was active (e.g. switching presenter or source), stop it cleanly
+    if (this.ffmpeg) {
+      try {
+        this.ffmpeg.kill('SIGINT');
+      } catch {
+        // ignore
+      }
+      this.ffmpeg = null;
+    }
 
     try {
       await mkdir(RECORDINGS_DIR, { recursive: true });
@@ -116,17 +118,21 @@ export class Recorder {
 
     // `-re` is deliberately absent: the input is a live RTP feed, so FFmpeg
     // should consume it as fast as it arrives rather than pacing it.
+    // Use optional stream mapping (`-map 0:v?`, `-map 0:a?`) so FFmpeg succeeds
+    // whether the stream is video-only, audio-only, or dual-track.
     const args = [
       '-hide_banner',
-      '-loglevel', 'error',
+      '-loglevel', 'warning',
       '-protocol_whitelist', 'file,udp,rtp',
       '-i', sdpFile,
+      '-map', '0:v?',
       '-c:v', 'libx264',
       '-preset', 'veryfast',
       '-tune', 'zerolatency',
       '-pix_fmt', 'yuv420p',
+      '-map', '0:a?',
       '-c:a', 'aac',
-      '-b:a', '96k',
+      '-b:a', '128k',
       '-movflags', '+faststart',
       '-y', file,
     ];
@@ -174,8 +180,7 @@ export class Recorder {
         done(code === 0 || code === null);
       });
 
-      // FFmpeg has no "ready" signal, so give it a moment to fail fast on a
-      // missing binary or a bad SDP before reporting success.
+      // Give FFmpeg a moment to verify startup
       setTimeout(() => done(true), 1200);
     });
   }
@@ -220,7 +225,11 @@ export class Recorder {
     // Ask FFmpeg to finish the file cleanly. SIGINT makes it flush the moov
     // atom; SIGKILL would leave an unplayable MP4.
     if (this.ffmpeg) {
-      this.ffmpeg.kill('SIGINT');
+      try {
+        this.ffmpeg.kill('SIGINT');
+      } catch {
+        // ignore
+      }
       this.ffmpeg = null;
     }
 
@@ -239,13 +248,23 @@ export class Recorder {
           this.mediaPath = null;
           this.mediaKind = 'none';
           mediaBytes = null;
-          this.mediaError ??= 'No media was captured';
+          this.mediaError ??= 'No media frames were captured by FFmpeg';
         }
       } catch {
         this.mediaPath = null;
         this.mediaKind = 'none';
       }
     }
+
+    // Check if a client upload already stored media or if this was recorded by FFmpeg
+    const existing = await prisma.recording.findUnique({
+      where: { id },
+      select: { mediaPath: true, mediaKind: true, mediaBytes: true },
+    });
+
+    const finalPath = existing?.mediaPath ?? this.mediaPath;
+    const finalKind = (existing?.mediaKind === 'video' || this.mediaKind === 'video') ? 'video' : 'none';
+    const finalBytes = existing?.mediaBytes ?? mediaBytes;
 
     await prisma.recording
       .update({
@@ -256,16 +275,16 @@ export class Recorder {
           durationMs,
           timelineJson: JSON.stringify(this.timeline),
           chatJson: JSON.stringify(this.chat),
-          mediaPath: this.mediaPath,
-          mediaBytes,
-          mediaKind: this.mediaKind,
-          error: this.mediaError,
+          mediaPath: finalPath,
+          mediaBytes: finalBytes,
+          mediaKind: finalKind,
+          error: finalPath ? null : this.mediaError,
         },
       })
       .catch((err) => log.error('Could not save recording', err));
 
     log.info(
-      `Recording ${id} finished — ${this.timeline.length} events, ${durationMs}ms, media=${this.mediaKind}`
+      `Recording ${id} finished — ${this.timeline.length} events, ${durationMs}ms, media=${finalKind}`
     );
 
     return { recordingId: id, durationMs };
@@ -278,7 +297,11 @@ export class Recorder {
   async abort(reason: string): Promise<void> {
     this.stopped = true;
     if (this.ffmpeg) {
-      this.ffmpeg.kill('SIGKILL');
+      try {
+        this.ffmpeg.kill('SIGKILL');
+      } catch {
+        // ignore
+      }
       this.ffmpeg = null;
     }
     if (!this.rowId && !this.rowReady) return;

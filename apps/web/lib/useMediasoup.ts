@@ -288,6 +288,8 @@ export function useMediasoup({ slug, token, onJoined, onError }: UseMediasoupOpt
             canPublishVideo: Boolean(snapshot.self.canPublishVideo),
             canShareScreen: Boolean(snapshot.self.canShareScreen),
             startedAt: snapshot.startedAt,
+            premiereRecordingId: snapshot.settings?.premiereRecordingId ?? null,
+            premiereStartedAt: snapshot.settings?.premiereStartedAt ?? null,
           });
 
           onJoined?.(snapshot);
@@ -540,6 +542,8 @@ export function useMediasoup({ slug, token, onJoined, onError }: UseMediasoupOpt
         showParticipantsToEachOther: enabled,
         allowMic: nextAllowMic,
         allowVideo: nextAllowVideo,
+        ...(settings?.premiereRecordingId !== undefined ? { premiereRecordingId: settings.premiereRecordingId } : {}),
+        ...(settings?.premiereStartedAt !== undefined ? { premiereStartedAt: settings.premiereStartedAt } : {}),
       });
     });
 
@@ -1171,12 +1175,16 @@ export function useMediasoup({ slug, token, onJoined, onError }: UseMediasoupOpt
           camOn: withVideo,
         });
 
-        for (const track of stream.getTracks()) {
-          if (track.kind === 'audio') {
-            const processed = await applyAudioProcessing(track, prefs);
-            await publishTrack(processed, 'audio');
-          } else {
-            await publishTrack(track, 'video');
+        // In Premiere mode, keep participant media purely local (never transmit to SFU/server)
+        const isPremiereMode = Boolean(store.getState().premiereRecordingId);
+        if (!isPremiereMode) {
+          for (const track of stream.getTracks()) {
+            if (track.kind === 'audio') {
+              const processed = await applyAudioProcessing(track, prefs);
+              await publishTrack(processed, 'audio');
+            } else {
+              await publishTrack(track, 'video');
+            }
           }
         }
 

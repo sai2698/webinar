@@ -86,7 +86,7 @@ function ShellBody({
 
   return (
     <div
-      className={`${theme === 'light' ? 'theme-light' : 'dark'} min-h-screen bg-surface text-fg`}
+      className={`${theme === 'light' ? 'theme-light' : 'dark'} min-h-screen bg-surface text-fg transition-colors duration-200`}
     >
       <div className="flex min-h-screen">
         {/* ── sidebar ─────────────────────────────────────────── */}
@@ -124,13 +124,13 @@ function ShellBody({
                   aria-current={isActive ? 'page' : undefined}
                   className={`group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${
                     isActive
-                      ? 'bg-brand-500/12 text-brand-500 ring-1 ring-inset ring-brand-500/25 dark:text-brand-300'
+                      ? 'bg-brand-500/15 text-brand-600 dark:text-brand-300 ring-1 ring-inset ring-brand-500/30 font-semibold'
                       : 'text-muted hover:bg-panel-2 hover:text-fg'
                   }`}
                 >
                   <Icon
                     className={`h-[18px] w-[18px] shrink-0 transition ${
-                      isActive ? 'text-brand-500 dark:text-brand-300' : 'text-subtle group-hover:text-fg'
+                      isActive ? 'text-brand-600 dark:text-brand-300' : 'text-subtle group-hover:text-fg'
                     }`}
                   />
                   <span className="flex-1 truncate text-left">{item.label}</span>
@@ -152,7 +152,7 @@ function ShellBody({
 
           <div className="shrink-0 border-t border-line p-3">
             <div className="mb-2 flex items-center gap-3 rounded-xl px-2 py-2">
-              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-gradient-to-br from-brand-400 to-brand-700 text-xs font-bold text-white">
+              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-gradient-to-br from-brand-400 to-brand-700 text-xs font-bold text-white shadow-xs">
                 {initials || 'A'}
               </span>
               <div className="min-w-0 flex-1">
@@ -206,14 +206,14 @@ function ShellBody({
                 {actions}
                 <button
                   onClick={toggle}
-                  className="grid h-9 w-9 place-items-center rounded-lg border border-line text-muted transition hover:bg-panel-2 hover:text-fg"
+                  className="grid h-9 w-9 place-items-center rounded-lg border border-line text-muted transition hover:bg-panel-2 hover:text-fg shadow-xs"
                   aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} theme`}
                   title={`Switch to ${theme === 'light' ? 'dark' : 'light'} theme`}
                 >
                   {theme === 'light' ? (
-                    <IconMoon className="h-4 w-4" />
+                    <IconMoon className="h-4 w-4 text-indigo-600" />
                   ) : (
-                    <IconSun className="h-4 w-4" />
+                    <IconSun className="h-4 w-4 text-amber-300" />
                   )}
                 </button>
                 <Link

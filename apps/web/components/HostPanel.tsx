@@ -8,6 +8,7 @@ import { useRoomStore } from '@/store/roomStore';
 import { endpoints } from '@/lib/api';
 import { CtaFollowUp } from './CtaFollowUp';
 import { GatewayConfigPanel } from './admin/GatewayConfigPanel';
+import { webinarRecorder, type WebinarRecorderStatus } from '@/lib/webinarRecorder';
 
 interface AdminQuiz {
   id: string;
@@ -113,6 +114,20 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
   const [recBusy, setRecBusy] = useState(false);
   const [recError, setRecError] = useState<string | null>(null);
   const [lastRecording, setLastRecording] = useState<{ id: string; durationMs: number } | null>(null);
+  const [recClientStatus, setRecClientStatus] = useState<WebinarRecorderStatus>({
+    isRecording: false,
+    recordingId: null,
+    durationMs: 0,
+    isUploading: false,
+    uploadProgress: 0,
+    uploadError: null,
+    mediaUrl: null,
+  });
+
+  useEffect(() => {
+    return webinarRecorder.subscribe((st) => setRecClientStatus(st));
+  }, []);
+
   const recording = useRoomStore((s) => s.recording);
   const peers = useRoomStore((s) => s.peers);
   const spotlightedPeerId = useRoomStore((s) => s.spotlightedPeerId);
@@ -775,7 +790,7 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
     setRecBusy(true);
     setRecError(null);
 
-    if (recording) {
+    if (recording || webinarRecorder.isRecording) {
       socket.current.emit(
         'recordingStop',
         (res: {
@@ -788,6 +803,8 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
             setRecError(res?.error ?? 'Could not stop recording');
             return;
           }
+          // Stop client recorder AFTER server confirms — this triggers the upload
+          void webinarRecorder.stop();
           if (res.data?.recordingId) {
             setLastRecording({
               id: res.data.recordingId,
@@ -808,6 +825,9 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
           return;
         }
         setLastRecording(null);
+        if (res.data?.recordingId) {
+          webinarRecorder.start(res.data.recordingId);
+        }
       }
     );
   }
@@ -815,6 +835,10 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
   function endWebinar() {
     if (!socket.current) return;
     setEnding(true);
+    // If client recorder is running, stop and upload before ending
+    if (recording || webinarRecorder.isRecording) {
+      void webinarRecorder.stop();
+    }
     socket.current.emit('webinarEnd', (res: { ok: boolean; error?: string }) => {
       setEnding(false);
       if (!res?.ok) {
@@ -1994,40 +2018,83 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
 
             {/* ── recording ───────────────────────────────── */}
             {canEndWebinar && (
-              <div className="border-t border-white/10 px-4 py-3">
+              <div className="border-t border-slate-200 dark:border-white/10 px-4 py-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="min-w-0">
-                    <p className="text-[11px] font-semibold text-slate-900 dark:text-white">Session recording</p>
+                    <p className="text-[11px] font-semibold text-slate-900 dark:text-white flex items-center gap-1.5">
+                      Session recording
+                      {recording && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-red-500/15 px-1.5 py-0.5 text-[9px] font-bold text-red-500 animate-pulse">
+                          ● REC
+                        </span>
+                      )}
+                    </p>
                     <p className="text-[10px] text-slate-500">
                       {recording
-                        ? 'Capturing chat, quizzes and offers for replay.'
-                        : 'Record this session so it can be replayed later.'}
+                        ? 'Capturing host video, screen share, and timeline events.'
+                        : 'Record this session (screen + video + audio) for replay.'}
                     </p>
                   </div>
                   <button
                     onClick={toggleRecording}
-                    disabled={recBusy}
+                    disabled={recBusy || recClientStatus.isUploading}
                     className={`shrink-0 rounded-lg px-2.5 py-1 text-[11px] font-semibold transition disabled:opacity-50 ${
                       recording
                         ? 'bg-amber-500 text-black hover:bg-amber-400'
                         : 'bg-slate-100 dark:bg-white/10 border border-slate-200 dark:border-transparent text-slate-800 dark:text-white hover:bg-slate-200 dark:hover:bg-white/15'
                     }`}
                   >
-                    {recBusy ? 'Working…' : recording ? 'Stop recording' : 'Start recording'}
+                    {recBusy
+                      ? 'Working…'
+                      : recClientStatus.isUploading
+                      ? `Uploading ${recClientStatus.uploadProgress}%`
+                      : recording
+                      ? 'Stop recording'
+                      : 'Start recording'}
                   </button>
                 </div>
+
+                {recClientStatus.isUploading && (
+                  <div className="mt-2.5 space-y-1">
+                    <div className="flex items-center justify-between text-[10px] font-medium text-brand-500 dark:text-brand-400">
+                      <span>Uploading high-definition recording...</span>
+                      <span>{recClientStatus.uploadProgress}%</span>
+                    </div>
+                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-white/10">
+                      <div
+                        className="h-full rounded-full bg-brand-500 transition-all duration-300"
+                        style={{ width: `${recClientStatus.uploadProgress}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
+
                 {recError && (
                   <p className="mt-2 rounded-lg border border-red-500/30 bg-red-500/10 px-2 py-1 text-[10px] text-red-300">
                     {recError}
                   </p>
                 )}
+
+                {recClientStatus.uploadError && (
+                  <p className="mt-2 rounded-lg border border-red-500/30 bg-red-500/10 px-2 py-1 text-[10px] text-red-300">
+                    Upload failed: {recClientStatus.uploadError}
+                  </p>
+                )}
+
                 {lastRecording && (
-                  <a
-                    href={`/replay/${lastRecording.id}`}
-                    className="mt-2 inline-block text-[10px] font-semibold text-brand-300 hover:text-brand-200"
-                  >
-                    Watch the replay ({formatDuration(lastRecording.durationMs)}) →
-                  </a>
+                  <div className="mt-2 flex items-center justify-between rounded-lg border border-brand-500/20 bg-brand-500/5 px-2.5 py-1.5">
+                    <span className="text-[10px] font-medium text-slate-600 dark:text-slate-300">
+                      Recording ready ({formatDuration(lastRecording.durationMs)})
+                    </span>
+                    <a
+                      href={`/replay/${lastRecording.id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-[11px] font-semibold text-brand-600 dark:text-brand-400 hover:underline"
+                    >
+                      Watch replay →
+                    </a>
+                  </div>
                 )}
               </div>
             )}

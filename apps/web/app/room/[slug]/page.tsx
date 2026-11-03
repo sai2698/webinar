@@ -26,6 +26,8 @@ import { ThemeToggle } from '@/components/ThemeToggle';
 import { endpoints } from '@/lib/api';
 import { roomToken } from '@/lib/session';
 import { useFullscreen } from '@/lib/useRoomUi';
+import { PremiereStage } from '@/components/PremiereStage';
+import { CtaOverlay } from '@/components/CtaOverlay';
 
 type Tab = 'chat' | 'people' | 'qa' | 'polls';
 
@@ -39,6 +41,8 @@ export default function RoomPage() {
   const [gateToken, setGateToken] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>('chat');
   const [toast, setToast] = useState<string | null>(null);
+  const [localPremiereRecordingId, setLocalPremiereRecordingId] = useState<string | null>(null);
+  const [localPremiereStartedAt, setLocalPremiereStartedAt] = useState<string | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
   const { isFullscreen, toggle: toggleFullscreen } = useFullscreen(stageRef);
 
@@ -93,18 +97,42 @@ export default function RoomPage() {
   const allowVideo = useRoomStore((s) => s.allowVideo);
   const canShareScreen = useRoomStore((s) => s.canShareScreen);
   const showParticipantsToEachOther = useRoomStore((s) => s.showParticipantsToEachOther);
-  const canPublish =
-    role !== 'PARTICIPANT' ||
-    isApprovedSpeaker ||
-    canPublishAudio ||
-    canPublishVideo ||
-    canShareScreen ||
-    showParticipantsToEachOther ||
-    allowMic ||
-    allowVideo;
 
-  const waiting = !isStaff && startedAt === null;
-  const notStarted = startedAt === null;
+  const storePremiereRecordingId = useRoomStore((s) => s.premiereRecordingId);
+  const storePremiereStartedAt = useRoomStore((s) => s.premiereStartedAt);
+  const activePremiereRecordingId = storePremiereRecordingId || localPremiereRecordingId;
+  const activePremiereStartedAt = storePremiereStartedAt || localPremiereStartedAt;
+
+  const isPremiere = Boolean(activePremiereRecordingId);
+  const premiereStartedAtMs = useMemo(() => {
+    if (!activePremiereStartedAt) return null;
+    const t = new Date(activePremiereStartedAt).getTime();
+    return Number.isFinite(t) ? t : null;
+  }, [activePremiereStartedAt]);
+
+  const isPremiereLive = Boolean(
+    isPremiere && premiereStartedAtMs !== null && Date.now() >= premiereStartedAtMs
+  );
+  const isPremiereWaiting = Boolean(
+    isPremiere && (premiereStartedAtMs === null || Date.now() < premiereStartedAtMs)
+  );
+
+  // In Premiere mode, participants are allowed to toggle their local mic/camera
+  // so they see themselves in the live room (mimicking a live session), but the
+  // media is kept local and never transmitted to the server.
+  const canPublish = isPremiere
+    ? true
+    : (role !== 'PARTICIPANT' ||
+        isApprovedSpeaker ||
+        canPublishAudio ||
+        canPublishVideo ||
+        canShareScreen ||
+        showParticipantsToEachOther ||
+        allowMic ||
+        allowVideo);
+
+  const waiting = isPremiere ? isPremiereWaiting : (!isStaff && startedAt === null);
+  const notStarted = isPremiere ? isPremiereWaiting : (startedAt === null);
 
   useEffect(() => {
     const fromQuery = new URLSearchParams(window.location.search).get('token');
@@ -177,7 +205,15 @@ export default function RoomPage() {
     endpoints
       .publicWebinar(slug)
       .then((res) => {
-        if (!cancelled) setStartsAt(res.webinar.startsAt || null);
+        if (cancelled) return;
+        setStartsAt(res.webinar.startsAt || null);
+
+        // Retain premiere configuration in the live room for seamless synchronized broadcast
+        const w = res.webinar;
+        if (w.premiereRecordingId) {
+          setLocalPremiereRecordingId(w.premiereRecordingId);
+          setLocalPremiereStartedAt(w.premiereStartedAt);
+        }
       })
       .catch(() => {
         /* the countdown is optional */
@@ -185,7 +221,7 @@ export default function RoomPage() {
     return () => {
       cancelled = true;
     };
-  }, [slug]);
+  }, [router, slug]);
 
   function leave() {
     store.getState().reset();
@@ -344,11 +380,19 @@ export default function RoomPage() {
               <div className="aspect-video w-full max-h-[39vh] sm:max-h-[44vh]">
                 <WaitingRoom title={webinarTitle ?? ''} startsAt={startsAt} />
               </div>
+            ) : isPremiereLive && activePremiereRecordingId ? (
+              <PremiereStage
+                recordingId={activePremiereRecordingId}
+                startedAtMs={premiereStartedAtMs!}
+                slug={slug}
+                onToggleFullscreen={toggleFullscreen}
+              />
             ) : (
               <VideoGrid onToggleFullscreen={toggleFullscreen} />
             )}
             <WatermarkOverlay />
             <EnrollmentBanner />
+            <CtaOverlay />
           </div>
 
           {/* Desktop Controls */}

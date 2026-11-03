@@ -106,6 +106,8 @@ export class Room {
   private recorder: Recorder | null = null;
   /** PlainTransports feeding FFmpeg, closed when recording stops. */
   private recordingTransports: import('mediasoup/types').PlainTransport[] = [];
+  private recordingConsumers: import('mediasoup/types').Consumer[] = [];
+  private mediaAttaching = false;
 
   constructor(
     private readonly io: Server,
@@ -124,8 +126,13 @@ export class Room {
     // unstarted would drop everyone back into the waiting room on the next
     // join, so the persisted start time wins. Falling back to `Date.now()`
     // covers rows written before the column existed.
-    if (ctx.startedAt) this.startedAt = ctx.startedAt.getTime();
-    else if (ctx.status === 'LIVE') this.startedAt = Date.now();
+    if (ctx.settings?.premiereStartedAt) {
+      this.startedAt = new Date(ctx.settings.premiereStartedAt).getTime();
+    } else if (ctx.startedAt) {
+      this.startedAt = ctx.startedAt.getTime();
+    } else if (ctx.status === 'LIVE') {
+      this.startedAt = Date.now();
+    }
   }
 
   /* ── lifecycle ───────────────────────────────────────────── */
@@ -175,6 +182,10 @@ export class Room {
       await this.recorder.abort('The room closed before recording finished');
       this.recorder = null;
     }
+    for (const t of this.recordingTransports) t.close();
+    this.recordingTransports = [];
+    for (const c of this.recordingConsumers) c.close();
+    this.recordingConsumers = [];
     await this.flushChat();
     for (const peer of this.peers.values()) peer.close();
     this.peers.clear();
@@ -1066,6 +1077,14 @@ export class Room {
     }
     this.spotlightedPeerId = peerId;
     this.io.to(this.roomName()).emit('spotlightChanged', { peerId });
+
+    // Record spotlight change for replay layout engine
+    const peer = peerId ? this.peers.get(peerId) : null;
+    this.recorder?.record({
+      type: 'spotlightChanged',
+      peerId: peerId ?? null,
+      peerName: peer?.name ?? null,
+    });
   }
 
   getSpotlight(): string | null {
@@ -1121,47 +1140,234 @@ export class Room {
     });
     this.pushSystemMessage('Recording started');
 
+    // Record the initial presenter state so the replay layout engine has a baseline
+    const initialPresenter = this.findPresenterPeer();
+    if (initialPresenter) {
+      const hasScreen = initialPresenter.hasScreenShare;
+      if (hasScreen) {
+        recorder.record({
+          type: 'screenShareStarted',
+          peerId: initialPresenter.peerId,
+          peerName: initialPresenter.name,
+          peerRole: initialPresenter.role,
+        });
+      } else if (initialPresenter.camOn) {
+        recorder.record({
+          type: 'hostCamOn',
+          peerId: initialPresenter.peerId,
+          peerName: initialPresenter.name,
+        });
+      }
+      recorder.record({
+        type: 'presenterChanged',
+        peerId: initialPresenter.peerId,
+        peerName: initialPresenter.name,
+        peerRole: initialPresenter.role,
+      });
+    }
+
     void this.attachMedia(recorder);
 
     return id;
   }
 
   /**
-   * Best-effort media capture. Runs detached so a slow or missing FFmpeg never
-   * delays the host's `recordingStart` acknowledgement.
+   * Media capture attached to the active presenter (screen share or camera + audio).
+   * Runs detached so a slow or missing FFmpeg never delays the host's `recordingStart` acknowledgement.
    */
-  private async attachMedia(recorder: Recorder): Promise<void> {
+  async attachMedia(recorder: Recorder): Promise<void> {
+    if (this.mediaAttaching) return;
+    this.mediaAttaching = true;
     try {
-      const host = this.peers.get(this.hostPeerId() ?? '');
-      const videoProducer = host
-        ? [...host.producers.values()].find((p) => p.kind === 'video')
-        : undefined;
-
-      if (!videoProducer) {
-        log.info(`No host video to record for "${this.slug}" — timeline only`);
+      const presenter = this.findPresenterPeer();
+      if (!presenter) {
+        log.info(`No presenter yet to record for "${this.slug}" — timeline active`);
         return;
       }
 
-      const plain = await this.createPlainTransport();
-      if (!plain) return;
+      // Prioritize screen share producer if active, otherwise camera
+      const screenProducer = [...presenter.producers.values()].find(
+        (p) => p.kind === 'video' && presenter.sourceOf(p.id, 'video') === 'screen'
+      );
+      const cameraProducer = [...presenter.producers.values()].find(
+        (p) => p.kind === 'video' && presenter.sourceOf(p.id, 'video') !== 'screen'
+      );
+      const videoProducer = screenProducer ?? cameraProducer;
 
-      await plain.transport.consume({
-        producerId: videoProducer.id,
-        rtpCapabilities: this.router!.rtpCapabilities,
-        paused: false,
+      // Find host / presenter audio
+      const audioProducer = [...presenter.producers.values()].find(
+        (p) => p.kind === 'audio'
+      );
+
+      if (!videoProducer && !audioProducer) {
+        log.info(`Presenter in "${this.slug}" has no active media producers yet`);
+        return;
+      }
+
+      // Clean up previous transports before re-attaching
+      for (const t of this.recordingTransports) t.close();
+      this.recordingTransports = [];
+      for (const c of this.recordingConsumers) c.close();
+      this.recordingConsumers = [];
+
+      let videoPort: number | undefined;
+      let videoConsumer: import('mediasoup/types').Consumer | undefined;
+      if (videoProducer && this.router) {
+        const plain = await this.createPlainTransport();
+        if (plain) {
+          videoPort = plain.port;
+          this.recordingTransports.push(plain.transport);
+          videoConsumer = await plain.transport.consume({
+            producerId: videoProducer.id,
+            rtpCapabilities: this.router.rtpCapabilities,
+            paused: false,
+          });
+          this.recordingConsumers.push(videoConsumer);
+        }
+      }
+
+      let audioPort: number | undefined;
+      let audioConsumer: import('mediasoup/types').Consumer | undefined;
+      if (audioProducer && this.router) {
+        const plain = await this.createPlainTransport();
+        if (plain) {
+          audioPort = plain.port;
+          this.recordingTransports.push(plain.transport);
+          audioConsumer = await plain.transport.consume({
+            producerId: audioProducer.id,
+            rtpCapabilities: this.router.rtpCapabilities,
+            paused: false,
+          });
+          this.recordingConsumers.push(audioConsumer);
+        }
+      }
+
+      const sdp = buildSdpFromConsumers({
+        videoPort,
+        videoConsumer,
+        audioPort,
+        audioConsumer,
       });
 
-      const sdp = buildSdp(plain.port);
-      const ok = await recorder.startMedia(sdp, plain.port);
+      const ok = await recorder.startMedia(sdp);
       if (!ok) {
-        plain.transport.close();
+        for (const t of this.recordingTransports) t.close();
+        this.recordingTransports = [];
+        for (const c of this.recordingConsumers) c.close();
+        this.recordingConsumers = [];
         return;
       }
 
-      // Keep the transport alive for the duration of the recording.
-      this.recordingTransports.push(plain.transport);
+      log.info(
+        `Media recording attached for "${this.slug}" (video=${Boolean(videoConsumer)}, audio=${Boolean(audioConsumer)})`
+      );
     } catch (err) {
       log.warn('Could not attach media recording', err);
+    } finally {
+      this.mediaAttaching = false;
+    }
+  }
+
+  findPresenterPeer(): Peer | null {
+    // 1. Look for any peer sharing screen
+    for (const peer of this.peers.values()) {
+      if (peer.hasScreenShare) return peer;
+    }
+    // 2. Look for spotlighted peer
+    if (this.spotlightedPeerId) {
+      const p = this.peers.get(this.spotlightedPeerId);
+      if (p) return p;
+    }
+    // 3. Look for host peer by hostId
+    for (const peer of this.peers.values()) {
+      if (peer.userId === this.hostId) return peer;
+    }
+    // 4. Look for any peer with HOST or ADMIN role
+    for (const peer of this.peers.values()) {
+      if (peer.role === 'HOST' || peer.role === 'ADMIN') return peer;
+    }
+    // 5. Look for any peer publishing video
+    for (const peer of this.peers.values()) {
+      const hasVid = [...peer.producers.values()].some((pr) => pr.kind === 'video');
+      if (hasVid) return peer;
+    }
+    return null;
+  }
+
+  async onProducerAdded(peer: Peer, producer: import('mediasoup/types').Producer): Promise<void> {
+    // Record layout events for replay engine (regardless of recording state for future replays)
+    if (producer.kind === 'video') {
+      const source = peer.sourceOf(producer.id, 'video');
+      if (source === 'screen') {
+        this.recorder?.record({
+          type: 'screenShareStarted',
+          peerId: peer.peerId,
+          peerName: peer.name,
+          peerRole: peer.role,
+        });
+      } else {
+        // Camera turned on — record if this is a host/staff peer
+        if (peer.isStaff) {
+          this.recorder?.record({
+            type: 'hostCamOn',
+            peerId: peer.peerId,
+            peerName: peer.name,
+          });
+        }
+      }
+      // If a screen share just started, record presenter change
+      if (source === 'screen') {
+        this.recorder?.record({
+          type: 'presenterChanged',
+          peerId: peer.peerId,
+          peerName: peer.name,
+          peerRole: peer.role,
+        });
+      }
+    }
+
+    if (!this.recorder || !this.recorder.isRecording) return;
+    if (producer.kind === 'video' || producer.kind === 'audio') {
+      log.info(`New producer in room "${this.slug}" (${producer.kind}), checking media attach`);
+      void this.attachMedia(this.recorder);
+    }
+  }
+
+  onProducerClosed(peer: Peer, producerId: string, info?: { kind?: string; source?: string }): void {
+    if (info?.source === 'screen') {
+      this.recorder?.record({
+        type: 'screenShareStopped',
+        peerId: peer.peerId,
+        peerName: peer.name,
+      });
+      // Check if any remaining screen-sharers exist; if not, find new presenter
+      const stillSharing = [...this.peers.values()].some(
+        (p) => p.peerId !== peer.peerId && p.hasScreenShare
+      );
+      if (!stillSharing) {
+        const newPresenter = this.findPresenterPeer();
+        if (newPresenter && newPresenter.peerId !== peer.peerId) {
+          this.recorder?.record({
+            type: 'presenterChanged',
+            peerId: newPresenter.peerId,
+            peerName: newPresenter.name,
+            peerRole: newPresenter.role,
+          });
+        }
+      }
+    } else if (info?.kind === 'video' && peer.isStaff && !peer.camOn) {
+      this.recorder?.record({
+        type: 'hostCamOff',
+        peerId: peer.peerId,
+        peerName: peer.name,
+      });
+    }
+
+    if (!this.recorder || !this.recorder.isRecording) return;
+    const isRecorded = this.recordingConsumers.some((c) => c.producerId === producerId);
+    if (isRecorded) {
+      log.info(`Recorded producer ${producerId} closed, re-evaluating media attach`);
+      void this.attachMedia(this.recorder);
     }
   }
 
@@ -1206,6 +1412,10 @@ export class Room {
       transport.close();
     }
     this.recordingTransports = [];
+    for (const consumer of this.recordingConsumers) {
+      consumer.close();
+    }
+    this.recordingConsumers = [];
 
     this.io.to(this.roomName()).emit('recordingState', { recording: false });
     this.pushSystemMessage('Recording stopped');
@@ -1372,6 +1582,20 @@ export class Room {
     else if (status === 'LIVE') this.startedAt ??= Date.now();
     else this.startedAt = null;
   }
+
+  startPremiere(settings: any, startedAtMs: number) {
+    this.settings = settings;
+    this.startedAt = startedAtMs;
+    this.status = 'LIVE';
+    this.io.to(this.roomName()).emit('webinarStarted', { startedAt: this.startedAt });
+    this.io.to(this.roomName()).emit('roomSettingsUpdated', { settings: this.settings });
+  }
+
+  stopPremiere(settings: any) {
+    this.settings = settings;
+    this.status = 'ENDED';
+    this.io.to(this.roomName()).emit('roomSettingsUpdated', { settings: this.settings });
+  }
 }
 
 /* ── recording helpers ─────────────────────────────────────── */
@@ -1397,22 +1621,61 @@ async function findFreeUdpPort(): Promise<number> {
 }
 
 /**
- * Builds the SDP that tells FFmpeg where to listen.
- *
- * The payload type and codec name must match what mediasoup negotiated, or
- * FFmpeg will discard every packet as an unknown format. VP8 is the codec the
- * router is configured with, so it is hard-coded here rather than guessed.
+ * Builds the SDP that tells FFmpeg where to listen for video and/or audio RTP streams.
+ * Inspects consumers' negotiated RTP parameters to guarantee codec, payload type, and SSRC match.
  */
-function buildSdp(port: number): string {
-  return [
+function buildSdpFromConsumers(opts: {
+  videoPort?: number;
+  videoConsumer?: import('mediasoup/types').Consumer;
+  audioPort?: number;
+  audioConsumer?: import('mediasoup/types').Consumer;
+}): string {
+  const lines = [
     'v=0',
     'o=- 0 0 IN IP4 127.0.0.1',
     's=NexaLive recording',
     'c=IN IP4 127.0.0.1',
     't=0 0',
-    'm=video ' + port + ' RTP/AVP 96',
-    'a=rtpmap:96 VP8/90000',
-    'a=recvonly',
-    '',
-  ].join('\r\n');
+  ];
+
+  if (opts.videoPort && opts.videoConsumer) {
+    const codec = opts.videoConsumer.rtpParameters.codecs[0];
+    const pt = codec?.payloadType ?? 96;
+    const mime = codec?.mimeType?.replace(/^video\//i, '') ?? 'VP8';
+    const clockRate = codec?.clockRate ?? 90000;
+    const ssrc = opts.videoConsumer.rtpParameters.encodings?.[0]?.ssrc;
+
+    lines.push(`m=video ${opts.videoPort} RTP/AVP ${pt}`);
+    lines.push(`a=rtpmap:${pt} ${mime}/${clockRate}`);
+    if (codec?.parameters) {
+      const fmtp = Object.entries(codec.parameters)
+        .map(([k, v]) => `${k}=${v}`)
+        .join(';');
+      if (fmtp) lines.push(`a=fmtp:${pt} ${fmtp}`);
+    }
+    if (ssrc) lines.push(`a=ssrc:${ssrc} cname:webinar-video`);
+    lines.push('a=recvonly');
+  }
+
+  if (opts.audioPort && opts.audioConsumer) {
+    const codec = opts.audioConsumer.rtpParameters.codecs[0];
+    const pt = codec?.payloadType ?? 111;
+    const mime = codec?.mimeType?.replace(/^audio\//i, '') ?? 'opus';
+    const clockRate = codec?.clockRate ?? 48000;
+    const channels = codec?.channels ?? 2;
+    const ssrc = opts.audioConsumer.rtpParameters.encodings?.[0]?.ssrc;
+
+    lines.push(`m=audio ${opts.audioPort} RTP/AVP ${pt}`);
+    lines.push(`a=rtpmap:${pt} ${mime}/${clockRate}/${channels}`);
+    if (codec?.parameters) {
+      const fmtp = Object.entries(codec.parameters)
+        .map(([k, v]) => `${k}=${v}`)
+        .join(';');
+      if (fmtp) lines.push(`a=fmtp:${pt} ${fmtp}`);
+    }
+    if (ssrc) lines.push(`a=ssrc:${ssrc} cname:webinar-audio`);
+    lines.push('a=recvonly');
+  }
+
+  return lines.join('\r\n') + '\r\n';
 }

@@ -1,5 +1,5 @@
 import type { RecordingDetail, RecordingSummary } from '@webinar/shared';
-import { getToken, notifyAdminUnauthorized, type SessionScope } from './session';
+import { getToken, notifyAdminUnauthorized, roomToken, type SessionScope } from './session';
 
 function getBaseUrl(fallbackPort = 4000): string {
   if (typeof window !== 'undefined') {
@@ -538,6 +538,25 @@ export const endpoints = {
   /** Public replay by recording id — what a shared replay link uses. */
   replayById: (id: string) =>
     api.get<{ recording: RecordingDetail }>(`/api/recordings/${encodeURIComponent(id)}`),
+  /** Uploads client-captured video/audio media for a recording session. */
+  uploadRecordingMedia: async (id: string, blob: Blob) => {
+    const token = roomToken();
+    const url = `${API_URL}/api/recordings/${encodeURIComponent(id)}/upload`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': blob.type || 'video/webm',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: blob,
+      credentials: 'include',
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`Upload failed (${res.status}): ${text}`);
+    }
+    return (await res.json()) as { ok: boolean; mediaBytes: number };
+  },
   /** Public list of watchable replays for a webinar. */
   publicRecordings: (slug: string) =>
     api.get<{ webinar: { slug: string; title: string }; recordings: RecordingSummary[] }>(

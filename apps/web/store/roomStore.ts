@@ -153,6 +153,8 @@ interface RoomState {
    * to tell "the room is empty" apart from "the session has not begun".
    */
   startedAt: number | null;
+  premiereRecordingId: string | null;
+  premiereStartedAt: string | null;
 
   /* actions */
   set: (patch: Partial<RoomState>) => void;
@@ -222,6 +224,8 @@ const initial = {
   ended: false,
   recording: false,
   startedAt: null,
+  premiereRecordingId: null,
+  premiereStartedAt: null,
 };
 
 export const useRoomStore = create<RoomState>((set) => ({

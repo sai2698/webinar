@@ -678,7 +678,14 @@ export type TimelineEvent =
   | { t: number; type: 'handLowered'; userId: string }
   | { t: number; type: 'peerJoined'; name: string; role: Role }
   | { t: number; type: 'peerLeft'; name: string }
-  | { t: number; type: 'system'; text: string };
+  | { t: number; type: 'system'; text: string }
+  // ── Layout events — recorded server-side for replay layout engine ──
+  | { t: number; type: 'screenShareStarted'; peerId: string; peerName: string; peerRole: Role }
+  | { t: number; type: 'screenShareStopped'; peerId: string; peerName: string }
+  | { t: number; type: 'spotlightChanged'; peerId: string | null; peerName: string | null }
+  | { t: number; type: 'hostCamOn'; peerId: string; peerName: string }
+  | { t: number; type: 'hostCamOff'; peerId: string; peerName: string }
+  | { t: number; type: 'presenterChanged'; peerId: string; peerName: string; peerRole: Role };
 
 /**
  * `Omit` over a union collapses to the keys every member shares, which would
@@ -705,6 +712,7 @@ export interface RecordingSummary {
   /** Number of timeline entries — a cheap proxy for "is there anything to watch". */
   eventCount: number;
   error: string | null;
+  hasCamMedia?: boolean;
 }
 
 export interface RecordingDetail extends RecordingSummary {

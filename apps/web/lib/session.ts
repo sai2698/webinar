@@ -144,7 +144,7 @@ export function clearSession(scope: SessionScope): void {
  * room page would bounce staff to the registration form for their own webinar.
  */
 export function roomToken(): string | null {
-  return getToken('participant') ?? getToken('admin');
+  return getToken('admin') ?? getToken('participant');
 }
 
 /** Tells the console that its session is gone, so it can redirect. */

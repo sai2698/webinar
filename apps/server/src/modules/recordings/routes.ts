@@ -1,12 +1,16 @@
 import { Router } from 'express';
-import { createReadStream } from 'node:fs';
-import { stat } from 'node:fs/promises';
+import { createReadStream, createWriteStream, existsSync } from 'node:fs';
+import { stat, mkdir, unlink } from 'node:fs/promises';
+import { pipeline } from 'node:stream/promises';
 import path from 'node:path';
 import type { ChatMessagePayload, RecordingStatus, TimelineEvent } from '@webinar/shared';
 import { prisma } from '../../db/prisma.js';
 import { asyncHandler, badRequest, notFound } from '../../middleware/error.js';
 import { requireAuth, requireRole } from '../../middleware/auth.js';
 import { RECORDINGS_DIR } from '../../realtime/Recorder.js';
+import { createLogger } from '../../utils/logger.js';
+
+const log = createLogger('recordings');
 
 /* ── Admin: list and inspect recordings ────────────────────── */
 
@@ -33,6 +37,10 @@ function summarize(row: {
     // A corrupt timeline should not hide the recording from the list.
   }
 
+  const hasCamMedia =
+    existsSync(path.join(RECORDINGS_DIR, `${row.webinarId}-${row.id}-cam.webm`)) ||
+    existsSync(path.join(RECORDINGS_DIR, `${row.webinarId}-${row.id}-cam.mp4`));
+
   return {
     id: row.id,
     webinarId: row.webinarId,
@@ -44,6 +52,7 @@ function summarize(row: {
     mediaBytes: row.mediaBytes,
     eventCount,
     error: row.error,
+    hasCamMedia,
   };
 }
 
@@ -88,12 +97,15 @@ adminRecordingRouter.delete(
     const row = await prisma.recording.findUnique({ where: { id: req.params.id } });
     if (!row) throw notFound('Recording not found');
 
-    // Remove the media file too, otherwise deleting a recording frees the row
-    // but leaves the MP4 on disk forever.
+    // Remove the media files too, otherwise deleting a recording frees the row
+    // but leaves the MP4/WebM on disk forever.
     if (row.mediaPath) {
-      const { unlink } = await import('node:fs/promises');
       await unlink(row.mediaPath).catch(() => undefined);
     }
+    const camWebm = path.join(RECORDINGS_DIR, `${row.webinarId}-${row.id}-cam.webm`);
+    const camMp4 = path.join(RECORDINGS_DIR, `${row.webinarId}-${row.id}-cam.mp4`);
+    await unlink(camWebm).catch(() => undefined);
+    await unlink(camMp4).catch(() => undefined);
 
     await prisma.recording.delete({ where: { id: row.id } });
     res.json({ ok: true });
@@ -159,7 +171,7 @@ publicRecordingRouter.get(
 );
 
 /**
- * Streams the recorded MP4 with range support.
+ * Streams the recorded MP4 or WebM with range support.
  *
  * Range requests are not optional here: without them a browser cannot seek,
  * and the replay scrubber — the whole point of the feature — would be dead.
@@ -178,10 +190,20 @@ publicRecordingRouter.get(
     });
     if (!row?.mediaPath) throw notFound('This recording has no media');
 
-    // Refuse to serve anything outside the recordings directory. The path comes
-    // from our own database, but a traversal bug elsewhere should not turn this
-    // into an arbitrary-file-read endpoint.
-    const resolved = path.resolve(row.mediaPath);
+    const track = typeof req.query.track === 'string' ? req.query.track : undefined;
+    let targetFile = row.mediaPath;
+
+    if (track === 'cam') {
+      const camWebm = path.join(RECORDINGS_DIR, `${row.webinarId}-${row.id}-cam.webm`);
+      const camMp4 = path.join(RECORDINGS_DIR, `${row.webinarId}-${row.id}-cam.mp4`);
+      if (existsSync(camWebm)) {
+        targetFile = camWebm;
+      } else if (existsSync(camMp4)) {
+        targetFile = camMp4;
+      }
+    }
+
+    const resolved = path.resolve(targetFile);
     if (!resolved.startsWith(RECORDINGS_DIR)) {
       throw badRequest('Invalid media path');
     }
@@ -193,9 +215,14 @@ publicRecordingRouter.get(
       throw notFound('Recording file is missing');
     }
 
+    const ext = path.extname(resolved).toLowerCase();
+    const mimeType = ext === '.webm' ? 'video/webm' : 'video/mp4';
+
     const range = req.headers.range;
-    res.setHeader('Content-Type', 'video/mp4');
+    res.setHeader('Content-Type', mimeType);
     res.setHeader('Accept-Ranges', 'bytes');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Expose-Headers', 'Content-Range, Accept-Ranges, Content-Length');
 
     if (!range) {
       res.setHeader('Content-Length', size);
@@ -271,7 +298,20 @@ publicRecordingByIdRouter.get(
     });
     if (!row?.mediaPath) throw notFound('This recording has no media');
 
-    const resolved = path.resolve(row.mediaPath);
+    const track = typeof req.query.track === 'string' ? req.query.track : undefined;
+    let targetFile = row.mediaPath;
+
+    if (track === 'cam') {
+      const camWebm = path.join(RECORDINGS_DIR, `${row.webinarId}-${row.id}-cam.webm`);
+      const camMp4 = path.join(RECORDINGS_DIR, `${row.webinarId}-${row.id}-cam.mp4`);
+      if (existsSync(camWebm)) {
+        targetFile = camWebm;
+      } else if (existsSync(camMp4)) {
+        targetFile = camMp4;
+      }
+    }
+
+    const resolved = path.resolve(targetFile);
     if (!resolved.startsWith(RECORDINGS_DIR)) throw badRequest('Invalid media path');
 
     let size: number;
@@ -281,9 +321,14 @@ publicRecordingByIdRouter.get(
       throw notFound('Recording file is missing');
     }
 
+    const ext = path.extname(resolved).toLowerCase();
+    const mimeType = ext === '.webm' ? 'video/webm' : 'video/mp4';
+
     const range = req.headers.range;
-    res.setHeader('Content-Type', 'video/mp4');
+    res.setHeader('Content-Type', mimeType);
     res.setHeader('Accept-Ranges', 'bytes');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Expose-Headers', 'Content-Range, Accept-Ranges, Content-Length');
 
     if (!range) {
       res.setHeader('Content-Length', size);
@@ -311,5 +356,65 @@ publicRecordingByIdRouter.get(
     res.setHeader('Content-Range', `bytes ${start}-${end}/${size}`);
     res.setHeader('Content-Length', end - start + 1);
     createReadStream(resolved, { start, end }).pipe(res);
+  })
+);
+
+/**
+ * Uploads high-quality client-recorded media (WebM/MP4) for a recording session.
+ * Supports multi-track uploads (e.g. main/screen stage vs host camera: ?track=cam)
+ * Streams directly from HTTP request to disk to support large recordings efficiently.
+ */
+publicRecordingByIdRouter.post(
+  '/:id/upload',
+  asyncHandler(async (req, res) => {
+    const id = req.params.id;
+    const track = typeof req.query.track === 'string' ? req.query.track : 'main';
+    const row = await prisma.recording.findUnique({
+      where: { id },
+      include: { webinar: true },
+    });
+    if (!row) throw notFound('Recording not found');
+
+    await mkdir(RECORDINGS_DIR, { recursive: true });
+
+    const contentType = req.headers['content-type'] || '';
+    const ext = contentType.includes('mp4') ? 'mp4' : 'webm';
+    const suffix = track === 'cam' ? '-cam' : '';
+    const filePath = path.join(RECORDINGS_DIR, `${row.webinarId}-${row.id}${suffix}.${ext}`);
+
+    const writeStream = createWriteStream(filePath);
+    await pipeline(req, writeStream);
+
+    let stats;
+    try {
+      stats = await stat(filePath);
+    } catch {
+      throw badRequest('Failed to write uploaded media');
+    }
+
+    if (stats.size < 1024) {
+      await unlink(filePath).catch(() => undefined);
+      throw badRequest('Uploaded recording media is too small or empty');
+    }
+
+    if (track === 'cam') {
+      log.info(`Client uploaded host camera recording for ${id} (${stats.size} bytes, ${ext})`);
+      res.json({ ok: true, mediaBytes: stats.size, track: 'cam' });
+      return;
+    }
+
+    await prisma.recording.update({
+      where: { id },
+      data: {
+        mediaPath: filePath,
+        mediaBytes: stats.size,
+        mediaKind: 'video',
+        status: 'READY',
+        error: null,
+      },
+    });
+
+    log.info(`Client uploaded main recording media for ${id} (${stats.size} bytes, ${ext})`);
+    res.json({ ok: true, mediaBytes: stats.size, track: 'main' });
   })
 );

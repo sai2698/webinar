@@ -2,13 +2,11 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { ApiError } from '@/lib/api';
+import { Button, EmptyState, Switch } from '@/components/ui';
 
 /**
- * Shared furniture for the parity panels.
- *
- * Every panel in this folder has the same three states — loading, failed,
- * loaded — and the same need to re-fetch after a mutation. Rather than repeat
- * that in eleven components, it lives here once.
+ * Shared furniture for all parity panels.
+ * Standardized on our modern UI framework for consistent aesthetics in light & dark themes.
  */
 
 export function PanelSection({
@@ -24,10 +22,10 @@ export function PanelSection({
 }) {
   return (
     <section className="space-y-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-line/60 pb-3">
         <div className="min-w-0">
-          <h3 className="text-sm font-semibold text-fg">{title}</h3>
-          {description && <p className="mt-0.5 text-xs text-subtle">{description}</p>}
+          <h3 className="text-sm font-bold text-fg">{title}</h3>
+          {description && <p className="mt-0.5 text-xs text-muted leading-relaxed">{description}</p>}
         </div>
         {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
       </div>
@@ -51,14 +49,17 @@ export function PanelNote({
   } as const;
 
   return (
-    <p className={`rounded-xl border px-3 py-2 text-xs leading-relaxed ${tones[tone]}`}>
+    <div className={`rounded-xl border px-3.5 py-2.5 text-xs leading-relaxed font-medium ${tones[tone]}`}>
       {children}
-    </p>
+    </div>
   );
 }
 
 export function PanelEmpty({ children }: { children: React.ReactNode }) {
-  return <p className="py-8 text-center text-sm text-subtle">{children}</p>;
+  if (typeof children === 'string') {
+    return <EmptyState title={children} className="py-8" />;
+  }
+  return <div className="py-8 text-center text-xs text-muted">{children}</div>;
 }
 
 export function PanelButton({
@@ -76,25 +77,23 @@ export function PanelButton({
   type?: 'button' | 'submit';
   title?: string;
 }) {
-  const styles = {
-    primary:
-      'bg-brand-500 text-white hover:bg-brand-600 disabled:bg-brand-500/50',
-    ghost:
-      'border border-line text-muted hover:bg-panel-2 hover:text-fg disabled:opacity-50',
-    danger:
-      'border border-red-500/30 text-red-600 hover:bg-red-500/10 dark:text-red-300 disabled:opacity-50',
+  const vMap = {
+    primary: 'primary',
+    ghost: 'secondary',
+    danger: 'danger',
   } as const;
 
   return (
-    <button
+    <Button
       type={type}
+      size="sm"
+      variant={vMap[variant] || 'secondary'}
       onClick={onClick}
       disabled={disabled}
       title={title}
-      className={`inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-xs font-medium transition disabled:cursor-not-allowed ${styles[variant]}`}
     >
       {children}
-    </button>
+    </Button>
   );
 }
 
@@ -120,7 +119,7 @@ export function PanelInput({
       onChange={(e) => onChange(e.target.value)}
       onKeyDown={onKeyDown}
       placeholder={placeholder}
-      className={`h-8 rounded-lg border border-line bg-panel px-2.5 text-xs text-fg outline-none transition placeholder:text-subtle focus:border-brand-500/50 focus:ring-2 focus:ring-brand-500/20 ${className}`}
+      className={`h-8.5 rounded-xl border border-line bg-panel px-3 text-xs text-fg outline-none transition placeholder:text-subtle focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 ${className}`}
     />
   );
 }
@@ -137,18 +136,12 @@ export function PanelToggle({
   hint?: string;
 }) {
   return (
-    <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-line bg-panel-2/50 px-3 py-2.5 transition hover:bg-panel-2">
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={(e) => onChange(e.target.checked)}
-        className="mt-0.5 h-4 w-4 shrink-0 accent-brand-500"
-      />
-      <span className="min-w-0">
-        <span className="block text-xs font-medium text-fg">{label}</span>
-        {hint && <span className="mt-0.5 block text-[11px] leading-relaxed text-subtle">{hint}</span>}
-      </span>
-    </label>
+    <Switch
+      checked={checked}
+      onChange={onChange}
+      label={label}
+      description={hint}
+    />
   );
 }
 

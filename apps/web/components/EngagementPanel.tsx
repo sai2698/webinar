@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { QuizOption } from '@webinar/shared';
 import { endpoints, ApiError } from '@/lib/api';
+import { Button, Input, Textarea, Tabs, Card, Badge } from '@/components/ui';
 
 interface AdminQuiz {
   id: string;
@@ -43,13 +44,6 @@ function formatPrice(paise: number) {
   }).format(paise / 100);
 }
 
-/**
- * Authoring surface for the three things a host can push into a live room:
- * quizzes, course offers (CTAs) and the courses those offers point at.
- *
- * Everything here is pre-webinar setup. Launching a quiz or showing an offer
- * happens from the room's Host tools panel, not from this page.
- */
 export function EngagementPanel({ webinarId }: { webinarId: string }) {
   const [tab, setTab] = useState<Tab>('quizzes');
   const [quizzes, setQuizzes] = useState<AdminQuiz[]>([]);
@@ -81,16 +75,16 @@ export function EngagementPanel({ webinarId }: { webinarId: string }) {
     setLoading(true);
     setError(null);
     try {
-      const [q, c, co] = await Promise.all([
-        endpoints.quizzes(webinarId) as Promise<{ quizzes: AdminQuiz[] }>,
-        endpoints.ctas(webinarId) as Promise<{ ctas: AdminCta[] }>,
-        endpoints.courses() as Promise<{ courses: AdminCourse[] }>,
+      const [qz, ct, cr] = await Promise.all([
+        endpoints.quizzes(webinarId),
+        endpoints.ctas(webinarId),
+        endpoints.courses(),
       ]);
-      setQuizzes(q.quizzes);
-      setCtas(c.ctas);
-      setCourses(co.courses);
+      setQuizzes(qz.quizzes as AdminQuiz[]);
+      setCtas(ct.ctas as AdminCta[]);
+      setCourses(cr.courses as AdminCourse[]);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not load engagement assets');
+      setError(err instanceof ApiError ? err.message : 'Could not load engagement tools');
     } finally {
       setLoading(false);
     }
@@ -100,15 +94,15 @@ export function EngagementPanel({ webinarId }: { webinarId: string }) {
     void load();
   }, [load]);
 
-  async function run(action: () => Promise<unknown>) {
+  async function run<T>(fn: () => Promise<T>) {
     setBusy(true);
     setError(null);
     try {
-      await action();
+      await fn();
       await load();
       return true;
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'That did not work');
+      setError(err instanceof ApiError ? err.message : 'Operation failed');
       return false;
     } finally {
       setBusy(false);
@@ -116,27 +110,20 @@ export function EngagementPanel({ webinarId }: { webinarId: string }) {
   }
 
   async function addQuiz() {
-    const filled = options.map((o) => o.trim()).filter(Boolean);
-    if (question.trim().length < 3 || filled.length < 2) {
-      setError('A quiz needs a question and at least two answers.');
+    if (question.trim().length < 3) {
+      setError('Please provide a valid question.');
       return;
     }
-    // The correct answer is tracked by index in the form but the API stores
-    // option ids, so the index has to survive the filtering above.
-    const kept: { id: string; text: string }[] = [];
-    let correctId: string | undefined;
-    options.forEach((text, i) => {
-      if (!text.trim()) return;
-      const id = OPTION_IDS[kept.length];
-      kept.push({ id, text: text.trim() });
-      if (i === correctIndex) correctId = id;
-    });
-
+    const cleanOptions = options.map((o) => o.trim()).filter(Boolean);
+    if (cleanOptions.length < 2) {
+      setError('A quiz needs at least two options.');
+      return;
+    }
     const ok = await run(() =>
       endpoints.createQuiz(webinarId, {
         question: question.trim(),
-        options: kept,
-        correctOptionId: correctId,
+        options: cleanOptions.map((text, i) => ({ id: OPTION_IDS[i], text })),
+        correctOptionId: OPTION_IDS[correctIndex] ?? OPTION_IDS[0],
         timeLimitSecs: timeLimit,
       })
     );
@@ -150,7 +137,7 @@ export function EngagementPanel({ webinarId }: { webinarId: string }) {
 
   async function addCta() {
     if (ctaTitle.trim().length < 2) {
-      setError('Give the offer a title.');
+      setError('Please provide an offer title.');
       return;
     }
     const ok = await run(() =>
@@ -173,7 +160,7 @@ export function EngagementPanel({ webinarId }: { webinarId: string }) {
 
   async function addCourse() {
     if (courseTitle.trim().length < 2) {
-      setError('Give the course a title.');
+      setError('Please provide a course title.');
       return;
     }
     const ok = await run(() =>
@@ -192,25 +179,19 @@ export function EngagementPanel({ webinarId }: { webinarId: string }) {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="inline-flex gap-1 rounded-xl border border-line bg-panel-2 p-1">
-        {(['quizzes', 'offers', 'courses'] as Tab[]).map((t) => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            className={`rounded-lg px-3 py-1.5 text-xs font-semibold capitalize transition ${
-              tab === t
-                ? 'bg-brand-500 text-white shadow-sm'
-                : 'text-muted hover:bg-panel hover:text-fg'
-            }`}
-          >
-            {t}
-          </button>
-        ))}
-      </div>
+    <div className="space-y-5">
+      <Tabs
+        tabs={[
+          { id: 'quizzes', label: `Quizzes (${quizzes.length})` },
+          { id: 'offers', label: `Flash Offers (${ctas.length})` },
+          { id: 'courses', label: `Courses (${courses.length})` },
+        ]}
+        active={tab}
+        onChange={setTab}
+      />
 
       {error && (
-        <div className="rounded-xl border border-red-500/25 bg-red-500/10 px-4 py-2.5 text-xs text-red-600 dark:text-red-300">
+        <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-xs font-medium text-red-600 dark:text-red-400">
           {error}
         </div>
       )}
@@ -220,284 +201,287 @@ export function EngagementPanel({ webinarId }: { webinarId: string }) {
           <span className="h-6 w-6 animate-spin rounded-full border-2 border-line border-t-brand-500" />
         </div>
       ) : tab === 'quizzes' ? (
-        <div className="grid gap-4 lg:grid-cols-2">
-          <div className="rounded-xl border border-line bg-panel-2 p-5">
-            <h3 className="mb-3 text-sm font-semibold text-fg">New quiz</h3>
-            <label className="label" htmlFor="quiz-question">
-              Question
-            </label>
-            <input
-              id="quiz-question"
-              className="input"
+        <div className="grid gap-5 lg:grid-cols-2">
+          {/* Creator form */}
+          <div className="rounded-2xl border border-line bg-panel-2/60 p-5 space-y-4">
+            <h4 className="text-sm font-bold text-fg">Create Timed Quiz</h4>
+            <Input
+              label="Question"
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
-              placeholder="Which hook runs after every render?"
+              placeholder="e.g. Which WebRTC transport routes packets over UDP?"
             />
 
-            <p className="label mt-3">Answers — pick the correct one</p>
-            <div className="space-y-2">
-              {options.map((opt, i) => (
-                <div key={i} className="flex items-center gap-2">
-                  <input
-                    type="radio"
-                    name="correct-option"
-                    checked={correctIndex === i}
-                    onChange={() => setCorrectIndex(i)}
-                    aria-label={`Mark answer ${i + 1} correct`}
-                    className="h-3.5 w-3.5 accent-brand-500"
-                  />
-                  <input
-                    className="input flex-1"
-                    value={opt}
-                    onChange={(e) =>
-                      setOptions((prev) => prev.map((o, j) => (j === i ? e.target.value : o)))
-                    }
-                    placeholder={`Answer ${OPTION_IDS[i].toUpperCase()}`}
-                  />
-                  {options.length > 2 && (
-                    <button
-                      onClick={() => setOptions((prev) => prev.filter((_, j) => j !== i))}
-                      className="text-xs text-subtle transition hover:text-red-500"
-                      aria-label={`Remove answer ${i + 1}`}
-                    >
-                      ✕
-                    </button>
-                  )}
-                </div>
-              ))}
+            <div>
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted">
+                Answers — select the correct option
+              </p>
+              <div className="space-y-2">
+                {options.map((opt, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      name="correct-option"
+                      checked={correctIndex === i}
+                      onChange={() => setCorrectIndex(i)}
+                      className="h-4 w-4 accent-brand-500 cursor-pointer"
+                      title="Mark as correct answer"
+                    />
+                    <Input
+                      value={opt}
+                      onChange={(e) =>
+                        setOptions((prev) => prev.map((o, j) => (j === i ? e.target.value : o)))
+                      }
+                      placeholder={`Option ${OPTION_IDS[i].toUpperCase()}`}
+                    />
+                    {options.length > 2 && (
+                      <button
+                        type="button"
+                        onClick={() => setOptions((prev) => prev.filter((_, j) => j !== i))}
+                        className="text-xs text-subtle hover:text-red-500 transition px-1"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {options.length < 6 && (
+                <button
+                  type="button"
+                  onClick={() => setOptions((prev) => [...prev, ''])}
+                  className="mt-2 text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline"
+                >
+                  + Add option
+                </button>
+              )}
             </div>
 
-            {options.length < 6 && (
-              <button
-                onClick={() => setOptions((prev) => [...prev, ''])}
-                className="mt-2 text-xs font-semibold text-brand-500 transition hover:text-brand-600 dark:text-brand-400"
-              >
-                + Add answer
-              </button>
-            )}
-
-            <label className="label mt-3" htmlFor="quiz-time">
-              Time limit (seconds)
-            </label>
-            <input
-              id="quiz-time"
+            <Input
               type="number"
+              label="Time limit (seconds)"
               min={5}
               max={300}
-              className="input"
               value={timeLimit}
               onChange={(e) => setTimeLimit(Number(e.target.value))}
             />
 
-            <button onClick={addQuiz} disabled={busy} className="btn-primary mt-4 w-full py-2 text-sm">
-              {busy ? 'Saving…' : 'Add quiz'}
-            </button>
+            <Button
+              type="button"
+              variant="primary"
+              onClick={addQuiz}
+              isLoading={busy}
+              className="w-full"
+            >
+              Add Quiz
+            </Button>
           </div>
 
-          <div className="rounded-xl border border-line bg-panel-2 p-5">
-            <h3 className="mb-3 text-sm font-semibold text-fg">Quizzes ({quizzes.length})</h3>
+          {/* List of quizzes */}
+          <div className="rounded-2xl border border-line bg-panel-2/60 p-5 space-y-3">
+            <h4 className="text-sm font-bold text-fg">Configured Quizzes ({quizzes.length})</h4>
             {quizzes.length === 0 ? (
-              <p className="py-8 text-center text-xs text-subtle">No quizzes yet.</p>
+              <p className="py-12 text-center text-xs text-muted">No quizzes created yet.</p>
             ) : (
-              <ul className="space-y-2">
+              <div className="space-y-2.5">
                 {quizzes.map((q) => (
-                  <li key={q.id} className="rounded-xl border border-line bg-panel px-3 py-2.5">
+                  <div key={q.id} className="rounded-xl border border-line bg-panel p-3.5 shadow-sm">
                     <div className="flex items-start justify-between gap-2">
-                      <p className="text-xs font-medium text-fg">{q.question}</p>
-                      <button
+                      <p className="text-xs font-bold text-fg">{q.question}</p>
+                      <Button
+                        size="xs"
+                        variant="ghost"
                         onClick={() => run(() => endpoints.deleteQuiz(q.id))}
-                        className="shrink-0 text-[11px] text-subtle transition hover:text-red-500"
-                        aria-label={`Delete quiz ${q.question}`}
+                        className="text-red-500 hover:text-red-600"
                       >
                         Delete
-                      </button>
+                      </Button>
                     </div>
-                    <p className="mt-1 text-[11px] text-subtle">
-                      {q.options.length} answers · {q.timeLimitSecs}s · {q.answerCount} responses
-                    </p>
-                  </li>
+                    <div className="mt-2 flex items-center gap-2 text-[11px] text-muted">
+                      <Badge size="sm">{q.options.length} options</Badge>
+                      <span>•</span>
+                      <span>{q.timeLimitSecs}s timer</span>
+                      <span>•</span>
+                      <span>{q.answerCount} responses</span>
+                    </div>
+                  </div>
                 ))}
-              </ul>
+              </div>
             )}
           </div>
         </div>
       ) : tab === 'offers' ? (
-        <div className="grid gap-4 lg:grid-cols-2">
-          <div className="rounded-xl border border-line bg-panel-2 p-5">
-            <h3 className="mb-3 text-sm font-semibold text-fg">New offer</h3>
-            <label className="label" htmlFor="cta-title">
-              Title
-            </label>
-            <input
-              id="cta-title"
-              className="input"
+        <div className="grid gap-5 lg:grid-cols-2">
+          {/* Create Offer */}
+          <div className="rounded-2xl border border-line bg-panel-2/60 p-5 space-y-4">
+            <h4 className="text-sm font-bold text-fg">Create In-Stream Flash Offer</h4>
+            <Input
+              label="Offer Title"
               value={ctaTitle}
               onChange={(e) => setCtaTitle(e.target.value)}
-              placeholder="Full-stack bootcamp — 40% off today"
+              placeholder="e.g. Masterclass Enrollment — 50% Off"
             />
 
-            <label className="label mt-3" htmlFor="cta-description">
-              Description
-            </label>
-            <textarea
-              id="cta-description"
-              className="input min-h-[70px]"
+            <Textarea
+              label="Description"
               value={ctaDescription}
               onChange={(e) => setCtaDescription(e.target.value)}
+              placeholder="Highlight bonuses, curriculum, and limited seat details."
+              rows={2}
             />
 
-            <div className="mt-3 grid grid-cols-2 gap-3">
-              <div>
-                <label className="label" htmlFor="cta-button">
-                  Button text
-                </label>
-                <input
-                  id="cta-button"
-                  className="input"
-                  value={ctaButton}
-                  onChange={(e) => setCtaButton(e.target.value)}
-                />
-              </div>
-              <div>
-                <label className="label" htmlFor="cta-price">
-                  Price override (₹)
-                </label>
-                <input
-                  id="cta-price"
-                  type="number"
-                  min={0}
-                  className="input"
-                  value={ctaPrice}
-                  onChange={(e) => setCtaPrice(e.target.value)}
-                  placeholder="Blank = course price"
-                />
-              </div>
+            <div className="grid grid-cols-2 gap-3">
+              <Input
+                label="Button Text"
+                value={ctaButton}
+                onChange={(e) => setCtaButton(e.target.value)}
+                placeholder="Enroll Now"
+              />
+              <Input
+                type="number"
+                label="Price (₹ INR)"
+                min={0}
+                value={ctaPrice}
+                onChange={(e) => setCtaPrice(e.target.value)}
+                placeholder="Leave blank for course price"
+              />
             </div>
 
-            <label className="label mt-3" htmlFor="cta-course">
-              Linked course
-            </label>
-            <select
-              id="cta-course"
-              className="input"
-              value={ctaCourseId}
-              onChange={(e) => setCtaCourseId(e.target.value)}
-            >
-              <option value="">No course (external link)</option>
-              {courses.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.title} — {formatPrice(c.pricePaise)}
-                </option>
-              ))}
-            </select>
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wider text-muted mb-1.5">
+                Linked Course (Razorpay)
+              </label>
+              <select
+                className="w-full rounded-xl border border-line bg-panel px-3.5 py-2.5 text-xs text-fg outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
+                value={ctaCourseId}
+                onChange={(e) => setCtaCourseId(e.target.value)}
+              >
+                <option value="">No course link (external action)</option>
+                {courses.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.title} — {formatPrice(c.pricePaise)}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-            <button onClick={addCta} disabled={busy} className="btn-primary mt-4 w-full py-2 text-sm">
-              {busy ? 'Saving…' : 'Add offer'}
-            </button>
+            <Button
+              type="button"
+              variant="accent"
+              onClick={addCta}
+              isLoading={busy}
+              className="w-full text-xs font-bold"
+            >
+              Add In-Stream Offer
+            </Button>
           </div>
 
-          <div className="rounded-xl border border-line bg-panel-2 p-5">
-            <h3 className="mb-3 text-sm font-semibold text-fg">Offers ({ctas.length})</h3>
+          {/* List of Offers */}
+          <div className="rounded-2xl border border-line bg-panel-2/60 p-5 space-y-3">
+            <h4 className="text-sm font-bold text-fg">Configured Offers ({ctas.length})</h4>
             {ctas.length === 0 ? (
-              <p className="py-8 text-center text-xs text-subtle">No offers yet.</p>
+              <p className="py-12 text-center text-xs text-muted">No offers configured yet.</p>
             ) : (
-              <ul className="space-y-2">
+              <div className="space-y-2.5">
                 {ctas.map((c) => (
-                  <li key={c.id} className="rounded-xl border border-line bg-panel px-3 py-2.5">
+                  <div key={c.id} className="rounded-xl border border-line bg-panel p-3.5 shadow-sm">
                     <div className="flex items-start justify-between gap-2">
-                      <p className="text-xs font-medium text-fg">{c.title}</p>
-                      <button
+                      <p className="text-xs font-bold text-fg">{c.title}</p>
+                      <Button
+                        size="xs"
+                        variant="ghost"
                         onClick={() => run(() => endpoints.deleteCta(c.id))}
-                        className="shrink-0 text-[11px] text-subtle transition hover:text-red-500"
-                        aria-label={`Delete offer ${c.title}`}
+                        className="text-red-500 hover:text-red-600"
                       >
                         Delete
-                      </button>
+                      </Button>
                     </div>
-                    <p className="mt-1 text-[11px] text-subtle">
-                      {c.course ? c.course.title : 'External link'} ·{' '}
-                      {c.priceOverridePaise != null
-                        ? formatPrice(c.priceOverridePaise)
-                        : c.course
-                          ? formatPrice(c.course.pricePaise)
-                          : 'Free'}
-                    </p>
-                  </li>
+                    {c.description && (
+                      <p className="mt-1 text-xs text-muted leading-relaxed line-clamp-2">{c.description}</p>
+                    )}
+                    <div className="mt-2.5 flex items-center justify-between text-xs pt-2 border-t border-line/60">
+                      <span className="font-semibold text-accent-600 dark:text-accent-400">
+                        {c.priceOverridePaise != null
+                          ? formatPrice(c.priceOverridePaise)
+                          : c.course
+                            ? formatPrice(c.course.pricePaise)
+                            : 'Free / External'}
+                      </span>
+                      <Badge size="sm" variant="brand">{c.buttonText}</Badge>
+                    </div>
+                  </div>
                 ))}
-              </ul>
+              </div>
             )}
           </div>
         </div>
       ) : (
-        <div className="grid gap-4 lg:grid-cols-2">
-          <div className="rounded-xl border border-line bg-panel-2 p-5">
-            <h3 className="mb-3 text-sm font-semibold text-fg">New course</h3>
-            <label className="label" htmlFor="course-title">
-              Title
-            </label>
-            <input
-              id="course-title"
-              className="input"
+        <div className="grid gap-5 lg:grid-cols-2">
+          {/* Create Course */}
+          <div className="rounded-2xl border border-line bg-panel-2/60 p-5 space-y-4">
+            <h4 className="text-sm font-bold text-fg">Add Monetized Course</h4>
+            <Input
+              label="Course Title"
               value={courseTitle}
               onChange={(e) => setCourseTitle(e.target.value)}
+              placeholder="e.g. Full-Stack WebRTC Masterclass"
             />
 
-            <label className="label mt-3" htmlFor="course-description">
-              Description
-            </label>
-            <textarea
-              id="course-description"
-              className="input min-h-[70px]"
+            <Textarea
+              label="Description"
               value={courseDescription}
               onChange={(e) => setCourseDescription(e.target.value)}
+              placeholder="Course outline and deliverables."
+              rows={2}
             />
 
-            <label className="label mt-3" htmlFor="course-price">
-              Price (₹)
-            </label>
-            <input
-              id="course-price"
+            <Input
               type="number"
+              label="Course Price (₹ INR)"
               min={0}
-              className="input"
               value={coursePrice}
               onChange={(e) => setCoursePrice(e.target.value)}
+              placeholder="e.g. 2999"
             />
 
-            <button
+            <Button
+              type="button"
+              variant="primary"
               onClick={addCourse}
-              disabled={busy}
-              className="btn-primary mt-4 w-full py-2 text-sm"
+              isLoading={busy}
+              className="w-full"
             >
-              {busy ? 'Saving…' : 'Add course'}
-            </button>
+              Save Course
+            </Button>
           </div>
 
-          <div className="rounded-xl border border-line bg-panel-2 p-5">
-            <h3 className="mb-3 text-sm font-semibold text-fg">Courses ({courses.length})</h3>
+          {/* List of Courses */}
+          <div className="rounded-2xl border border-line bg-panel-2/60 p-5 space-y-3">
+            <h4 className="text-sm font-bold text-fg">Courses ({courses.length})</h4>
             {courses.length === 0 ? (
-              <p className="py-8 text-center text-xs text-subtle">No courses yet.</p>
+              <p className="py-12 text-center text-xs text-muted">No courses created yet.</p>
             ) : (
-              <ul className="space-y-2">
+              <div className="space-y-2.5">
                 {courses.map((c) => (
-                  <li
-                    key={c.id}
-                    className="flex items-center justify-between gap-2 rounded-xl border border-line bg-panel px-3 py-2.5"
-                  >
+                  <div key={c.id} className="flex items-center justify-between gap-3 rounded-xl border border-line bg-panel p-3.5 shadow-sm">
                     <div className="min-w-0">
-                      <p className="truncate text-xs font-medium text-fg">{c.title}</p>
-                      <p className="text-[11px] text-subtle">{formatPrice(c.pricePaise)}</p>
+                      <p className="truncate text-xs font-bold text-fg">{c.title}</p>
+                      <p className="text-xs font-semibold text-mint-600 dark:text-mint-400 mt-0.5">
+                        {formatPrice(c.pricePaise)}
+                      </p>
                     </div>
-                    <button
+                    <Button
+                      size="xs"
+                      variant="ghost"
                       onClick={() => run(() => endpoints.deleteCourse(c.id))}
-                      className="shrink-0 text-[11px] text-subtle transition hover:text-red-500"
-                      aria-label={`Delete course ${c.title}`}
+                      className="text-red-500 hover:text-red-600"
                     >
                       Delete
-                    </button>
-                  </li>
+                    </Button>
+                  </div>
                 ))}
-              </ul>
+              </div>
             )}
           </div>
         </div>
