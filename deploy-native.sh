@@ -166,61 +166,31 @@ swap_total_mb() {
   echo 0
 }
 
-# A 1 vCPU / 1 GB VPS cannot build this project without swap: `next build`
-# peaks around 1.2-1.5 GB and the kernel kills it. Adding a swapfile is the
-# difference between a working deploy and an unexplained exit 137.
+# Lightweight 512 MB swap to prevent low-disk VPS saturation
 ensure_swap() {
   local mem swap want_mb
   mem="$(mem_total_mb)"
   swap="$(swap_total_mb)"
 
-  # Plenty of RAM and some swap already — nothing to do.
-  if [ "$mem" -ge 2048 ] && [ "$swap" -ge 1024 ]; then
-    return 0
-  fi
-  if [ "$mem" -ge 4096 ]; then
-    return 0
-  fi
-
-  # Target: on low-RAM VPS (1GB), aim for at least 2560 MB total swap so
-  # combined virtual memory (RAM + swap) clears ~3.5 GB for Next.js compilation.
-  want_mb=$(( 3584 - mem ))
-  [ "$want_mb" -lt 2048 ] && want_mb=2048
-  [ "$want_mb" -gt 4096 ] && want_mb=4096
+  # Target: keep swap strictly at 512 MB to conserve small VPS disk space
+  want_mb=512
 
   if [ "$swap" -ge "$want_mb" ]; then
-    ok "swap already sufficient (${swap} MB)"
+    ok "swap already active (${swap} MB)"
     return 0
   fi
 
-  # If /swapfile exists, activate it and check if sufficient
+  # If /swapfile exists, activate it
   if [ -e /swapfile ]; then
     $SUDO swapon /swapfile 2>/dev/null || true
     swap="$(swap_total_mb)"
-    if [ "$swap" -ge "$want_mb" ]; then
+    if [ "$swap" -gt 0 ]; then
       ok "swap enabled (${swap} MB)"
       return 0
     fi
-
-    # /swapfile was small (e.g. 512MB on cloud-init) — add /swapfile2 to reach target
-    local extra_mb=$(( want_mb - swap ))
-    [ "$extra_mb" -lt 1024 ] && extra_mb=1024
-    info "Existing swap is only ${swap} MB. Adding a ${extra_mb} MB secondary swapfile (/swapfile2) for build safety…"
-    if ! $SUDO fallocate -l "${extra_mb}M" /swapfile2 2>/dev/null; then
-      $SUDO dd if=/dev/zero of=/swapfile2 bs=1M count="$extra_mb" status=none
-    fi
-    $SUDO chmod 600 /swapfile2
-    $SUDO mkswap /swapfile2 >/dev/null
-    $SUDO swapon /swapfile2
-    if ! grep -qE '^/swapfile2[[:space:]]' /etc/fstab 2>/dev/null; then
-      printf '/swapfile2 none swap sw 0 0\n' | $SUDO tee -a /etc/fstab >/dev/null
-    fi
-    $SUDO sysctl -qw vm.swappiness=10 2>/dev/null || true
-    ok "additional swap enabled (total swap: $(swap_total_mb) MB)"
-    return 0
   fi
 
-  info "Adding a ${want_mb} MB swapfile (RAM is ${mem} MB — Next.js build requires swap)…"
+  info "Adding a ${want_mb} MB swapfile (preserving disk space on small VPS)…"
 
   # fallocate is instant but unsupported on some filesystems; dd always works.
   if ! $SUDO fallocate -l "${want_mb}M" /swapfile 2>/dev/null; then
@@ -238,7 +208,7 @@ ensure_swap() {
   # Prefer RAM, but let the build spill to swap instead of dying.
   $SUDO sysctl -qw vm.swappiness=10 2>/dev/null || true
 
-  ok "swap enabled ($(swap_total_mb) MB total)"
+  ok "lightweight swap enabled ($(swap_total_mb) MB total)"
 }
 
 # ── public IP detection ──────────────────────────────────────
@@ -1065,6 +1035,71 @@ cmd_backup() {
   fi
 }
 
+cmd_clean_swap() {
+  ensure_root
+
+  hr
+  printf '%s\n' "${B}CURRENT DISK USAGE & SWAP STATUS${R}"
+  hr
+  df -h /
+  printf '\n'
+  swapon --show 2>/dev/null || cat /proc/swaps 2>/dev/null || true
+  printf '\n'
+
+  printf '  This will:\n'
+  printf '    1. Turn off and delete secondary swapfiles (e.g. /swapfile2)\n'
+  printf '    2. Reset /swapfile to strictly 512 MB\n'
+  printf '    3. Clean apt cache, systemd journal logs, and npm cache\n\n'
+  read -rp "  Proceed with disk cleanup? [Y/n]: " ans
+  case "${ans,,}" in
+    n|no) die "Aborted." ;;
+  esac
+
+  info "Disabling active swap..."
+  $SUDO swapoff -a 2>/dev/null || true
+
+  # Remove secondary swapfiles
+  if [ -e /swapfile2 ]; then
+    info "Removing /swapfile2 to reclaim disk space..."
+    $SUDO rm -f /swapfile2
+    $SUDO sed -i '\|^/swapfile2[[:space:]]|d' /etc/fstab 2>/dev/null || true
+  fi
+
+  # Reset /swapfile to exactly 512MB
+  info "Re-creating /swapfile with strictly 512 MB..."
+  $SUDO rm -f /swapfile
+  if ! $SUDO fallocate -l 512M /swapfile 2>/dev/null; then
+    $SUDO dd if=/dev/zero of=/swapfile bs=1M count=512 status=none
+  fi
+  $SUDO chmod 600 /swapfile
+  $SUDO mkswap /swapfile >/dev/null
+  $SUDO swapon /swapfile
+
+  # Clean package manager cache, system logs, npm cache, tmp
+  info "Cleaning apt caches and system logs..."
+  if command -v apt-get >/dev/null 2>&1; then
+    $SUDO apt-get clean >/dev/null 2>&1 || true
+    $SUDO apt-get autoremove -y -qq >/dev/null 2>&1 || true
+  fi
+  if command -v journalctl >/dev/null 2>&1; then
+    $SUDO journalctl --vacuum-size=50M >/dev/null 2>&1 || true
+  fi
+  if command -v npm >/dev/null 2>&1; then
+    npm cache clean --force >/dev/null 2>&1 || true
+  fi
+  $SUDO rm -rf /tmp/* /var/tmp/* 2>/dev/null || true
+
+  ok "Cleanup complete! Strictly 512 MB swap is now active."
+  printf '\n'
+  hr
+  printf '%s\n' "${B}NEW DISK USAGE & SWAP STATUS${R}"
+  hr
+  df -h /
+  printf '\n'
+  swapon --show 2>/dev/null || cat /proc/swaps 2>/dev/null || true
+  hr
+}
+
 cmd_destroy() {
   ensure_root
   warn "This stops and removes the systemd units, the nginx site and the coturn config."
@@ -1097,6 +1132,7 @@ ${B}Webinar platform — native deployment (no Docker)${R}
   ./deploy-native.sh ports       Print the ports to whitelist
   ./deploy-native.sh firewall    Apply firewall rules (ufw / firewalld)
   ./deploy-native.sh env         Show the resolved configuration (secrets masked)
+  ./deploy-native.sh clean-swap  Reclaim disk space: delete extra swap, set to 512MB, clean caches
   ./deploy-native.sh backup      Dump the database to ./backups
   ./deploy-native.sh destroy     Remove the services (keeps data)
 
@@ -1119,8 +1155,9 @@ main() {
     status)   cmd_status "$@" ;;
     ports)    print_ports "$@" ;;
     firewall) apply_firewall "$@" ;;
-    env)      cmd_env "$@" ;;
-    backup)   cmd_backup "$@" ;;
+    env)        cmd_env "$@" ;;
+    clean-swap) cmd_clean_swap "$@" ;;
+    backup)     cmd_backup "$@" ;;
     destroy)  cmd_destroy "$@" ;;
     ''|-h|--help|help) usage ;;
     *) die "Unknown command: $cmd (try --help)" ;;
