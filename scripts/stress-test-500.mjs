@@ -2,7 +2,7 @@ import { io } from 'socket.io-client';
 
 const TARGET = 'https://sainaveen.in';
 const SLUG = 'advanced-sfu-masterclass';
-const TARGET_COUNT = 500;
+const TARGET_COUNT = 1000;
 const HOLD_DURATION_SEC = 300; // 5 minutes
 
 async function getHealth() {
@@ -126,8 +126,7 @@ async function main() {
 
     const connectedNow = activeSockets.filter((s) => s.connected).length;
     console.log(
-      `  [+${elapsed}s / 300s] Connected: ${connectedNow}/${activeSockets.length} | API Health: ${
-        health.ok ? `200 OK (${health.latency}ms, uptime: ${Math.round(health.data?.uptime || 0)}s)` : `DEGRADED (${health.error})`
+      `  [+${elapsed}s / 300s] Connected: ${connectedNow}/${activeSockets.length} | API Health: ${health.ok ? `200 OK (${health.latency}ms, uptime: ${Math.round(health.data?.uptime || 0)}s)` : `DEGRADED (${health.error})`
       }`
     );
   }
@@ -147,7 +146,7 @@ async function main() {
   for (const s of activeSockets) {
     try {
       s.disconnect();
-    } catch {}
+    } catch { }
   }
   await new Promise((r) => setTimeout(r, 2000));
 

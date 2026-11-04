@@ -313,8 +313,8 @@ export function registerSocketHandlers(io: Server) {
 
         socket.join(room.roomName());
 
-        // Mark attendance
-        await prisma.registration
+        // Mark attendance in background (non-blocking for SQLite concurrency)
+        void prisma.registration
           .updateMany({
             where: { webinarId: webinar.id, userId },
             data: { attended: true },

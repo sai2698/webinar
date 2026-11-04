@@ -100,6 +100,7 @@ export class Room {
   private chatPersistQueue: { webinarId: string; userId: string; text: string }[] = [];
 
   private viewerCountTimer: NodeJS.Timeout | null = null;
+  private viewerCountThrottleTimer: NodeJS.Timeout | null = null;
   private persistTimer: NodeJS.Timeout | null = null;
 
   /** Non-null while the host is capturing this session. */
@@ -181,6 +182,7 @@ export class Room {
 
   async destroy(): Promise<void> {
     if (this.viewerCountTimer) clearInterval(this.viewerCountTimer);
+    if (this.viewerCountThrottleTimer) clearTimeout(this.viewerCountThrottleTimer);
     if (this.persistTimer) clearInterval(this.persistTimer);
     if (this.activeQuiz?.timer) clearTimeout(this.activeQuiz.timer);
     if (this.activePoll?.timer) clearTimeout(this.activePoll.timer);
@@ -209,6 +211,7 @@ export class Room {
     this.socketToPeer.set(peer.socketId, peer.peerId);
     this.recorder?.record({ type: 'peerJoined', name: peer.name, role: peer.role });
     await this.getRouter();
+    this.broadcastViewerCount();
   }
 
   removePeer(peerId: string): Peer | null {
@@ -1473,20 +1476,21 @@ export class Room {
     this.io.to(peer.socketId).emit('qaList', questions);
   }
 
-  broadcastViewerCount() {
-    // A host may hide the headcount from the audience. Staff always see it —
-    // they need it to run the room — so the broadcast is split rather than
-    // suppressed.
-    if (this.settings.showLiveUsersCount) {
+  broadcastViewerCount(immediate = false) {
+    if (immediate) {
+      if (this.viewerCountThrottleTimer) {
+        clearTimeout(this.viewerCountThrottleTimer);
+        this.viewerCountThrottleTimer = null;
+      }
       this.io.to(this.roomName()).emit('viewerCount', this.peers.size);
       return;
     }
 
-    for (const peer of this.peers.values()) {
-      if (isStaffRole(peer.role)) {
-        this.io.to(peer.socketId).emit('viewerCount', this.peers.size);
-      }
-    }
+    if (this.viewerCountThrottleTimer) return;
+    this.viewerCountThrottleTimer = setTimeout(() => {
+      this.viewerCountThrottleTimer = null;
+      this.io.to(this.roomName()).emit('viewerCount', this.peers.size);
+    }, 400);
   }
 
   broadcastPeerUpdated(peer: Peer) {
