@@ -472,6 +472,27 @@ setup_nginx() {
   api_port="$(env_get API_PORT 4000)"
   web_port="$(env_get WEB_PORT 3000)"
 
+  # ── Optimize Nginx & OS limits for 1000+ high concurrency ─────
+  # Default Ubuntu nginx.conf caps worker_connections at 768.
+  # Since reverse proxying requires 2 connections per peer (client + upstream),
+  # 768 connections causes Nginx to return 500 error at exactly 380 participants!
+  info "Tuning Nginx worker connections and OS socket limits for high concurrency…"
+  if [ -f /etc/nginx/nginx.conf ]; then
+    # Increase worker_connections from 768 to 16384
+    $SUDO sed -i 's/worker_connections[[:space:]]\+[0-9]\+;/worker_connections 16384; multi_accept on;/' /etc/nginx/nginx.conf
+    # Add worker_rlimit_nofile if not present
+    if ! grep -q 'worker_rlimit_nofile' /etc/nginx/nginx.conf; then
+      $SUDO sed -i 's/^pid.*/&\nworker_rlimit_nofile 65535;/' /etc/nginx/nginx.conf 2>/dev/null \
+        || $SUDO sed -i '1i worker_rlimit_nofile 65535;' /etc/nginx/nginx.conf
+    fi
+  fi
+
+  # Optimize Linux kernel socket queue and file limits
+  $SUDO sysctl -qw fs.file-max=2097152 2>/dev/null || true
+  $SUDO sysctl -qw net.core.somaxconn=65535 2>/dev/null || true
+  $SUDO sysctl -qw net.ipv4.tcp_max_syn_backlog=65535 2>/dev/null || true
+  $SUDO sysctl -qw net.ipv4.ip_local_port_range="1024 65535" 2>/dev/null || true
+
   info "Writing the nginx site configuration on port ${http_port}…"
 
   local tpl="$SCRIPT_DIR/infra/nginx/templates/default.conf.template"
