@@ -26,6 +26,7 @@ import {
 } from './modules/quizzes/routes.js';
 import { registerSocketHandlers } from './realtime/socket.js';
 import { workerPool } from './realtime/WorkerPool.js';
+import { renderSfuMetrics } from './realtime/metrics.js';
 import { roomManager } from './realtime/RoomManager.js';
 import {
   adminRecordingRouter,
@@ -75,6 +76,10 @@ app.use(express.urlencoded({ extended: true, limit: '25mb' }));
 app.use('/uploads', express.static(getUploadsDir()));
 
 /* ── health & time ─────────────────────────────────────────── */
+app.get('/metrics', (_req, res) => {
+  res.type('text/plain; version=0.0.4; charset=utf-8').send(renderSfuMetrics());
+});
+
 app.get('/api/health', (_req, res) => {
   res.json({
     ok: true,

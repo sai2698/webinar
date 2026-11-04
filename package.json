@@ -21,7 +21,10 @@
     "setup": "npm install && npm run db:push && npm run db:seed",
     "typecheck": "npm run typecheck -w @webinar/server && npm run typecheck -w @webinar/web",
     "verify": "node scripts/verify-all.mjs",
-    "verify:reset": "node scripts/reset-demo-webinar.mjs"
+    "verify:reset": "node scripts/reset-demo-webinar.mjs",
+    "loadtest:install": "npm install --prefix loadtest",
+    "loadtest:dev": "npm run dev --prefix loadtest",
+    "loadtest:run": "npm run run --prefix loadtest"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"
