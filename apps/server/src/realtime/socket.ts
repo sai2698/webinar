@@ -1151,10 +1151,12 @@ export function registerSocketHandlers(io: Server) {
       if (role === 'MODERATOR') {
         target.canPublishAudio = true;
         target.canPublishVideo = true;
+        target.permissions = { ...DEFAULT_COHOST_PERMISSIONS };
         if (!c.room.moderatorIds.includes(target.userId)) {
           c.room.moderatorIds.push(target.userId);
         }
       } else {
+        target.permissions = null;
         c.room.moderatorIds = c.room.moderatorIds.filter((id) => id !== target.userId);
       }
 
@@ -1178,8 +1180,12 @@ export function registerSocketHandlers(io: Server) {
                 email: u.email,
                 name: u.name,
                 source: 'live',
+                permissionsJson: JSON.stringify(DEFAULT_COHOST_PERMISSIONS),
               },
-              update: { userId: target.userId },
+              update: {
+                userId: target.userId,
+                permissionsJson: JSON.stringify(DEFAULT_COHOST_PERMISSIONS),
+              },
             });
           }
         } else {
@@ -1194,7 +1200,10 @@ export function registerSocketHandlers(io: Server) {
         console.error('[socket] Failed to update moderator in DB:', err);
       }
 
-      io.to(target.socketId).emit('roleChanged', { role: target.role });
+      io.to(target.socketId).emit('roleChanged', {
+        role: target.role,
+        permissions: target.permissions,
+      });
       if (target.role === 'MODERATOR') {
         io.to(target.socketId).emit('handList', c.room.getHandList());
         io.to(target.socketId).emit('mediaPermissionUpdated', {

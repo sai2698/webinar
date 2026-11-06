@@ -21,13 +21,66 @@ function safeParse(json: string): Record<string, unknown> {
   }
 }
 
+/**
+ * Is this user allowed to manage quizzes, polls, offers, and follow-ups for this webinar?
+ *
+ * Hosts, admins, and moderators can manage room content. When a participant is
+ * promoted live to co-host, their JWT role in `localStorage` remains
+ * `PARTICIPANT`, but their authorization lives in `WebinarModerator` or
+ * `WebinarCohost`. Checking the database matches the precedence used by
+ * the socket layer so live co-hosts can author, edit, and delete room content.
+ */
+export async function canManageWebinarContent(
+  userId: string,
+  role: string,
+  webinarId: string
+): Promise<boolean> {
+  if (role === 'ADMIN') return true;
+
+  const webinar = await prisma.webinar.findUnique({
+    where: { id: webinarId },
+    select: {
+      hostId: true,
+      moderators: { where: { userId }, select: { userId: true } },
+    },
+  });
+  if (!webinar) return false;
+  if (webinar.hostId === userId) return true;
+  if (webinar.moderators.length > 0) return true;
+
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { email: true },
+  });
+  if (!user) return false;
+
+  const cohost = await prisma.webinarCohost.findFirst({
+    where: {
+      webinarId,
+      OR: [{ userId }, { email: user.email.toLowerCase() }],
+    },
+    select: { id: true },
+  });
+  return Boolean(cohost);
+}
+
+export async function requireWebinarStaff(
+  user: { id: string; role: string } | undefined,
+  webinarId: string
+) {
+  if (!user) throw forbidden('Authentication required');
+  const allowed = await canManageWebinarContent(user.id, user.role, webinarId);
+  if (!allowed) throw forbidden('Not authorized to manage this webinar');
+}
+
 export const adminQuizRouter = Router();
 
-adminQuizRouter.use(requireAuth, requireRole('ADMIN', 'HOST', 'MODERATOR'));
+adminQuizRouter.use(requireAuth);
 
 adminQuizRouter.get(
   '/:webinarId/quizzes',
   asyncHandler(async (req, res) => {
+    await requireWebinarStaff(req.user, req.params.webinarId);
     const quizzes = await prisma.quiz.findMany({
       where: { webinarId: req.params.webinarId },
       orderBy: { createdAt: 'asc' },
@@ -50,6 +103,7 @@ adminQuizRouter.get(
 adminQuizRouter.post(
   '/:webinarId/quizzes',
   asyncHandler(async (req, res) => {
+    await requireWebinarStaff(req.user, req.params.webinarId);
     const body = quizSchema.parse(req.body);
     const quiz = await prisma.quiz.create({
       data: {
@@ -74,6 +128,7 @@ adminQuizRouter.patch(
       include: { _count: { select: { answers: true } } },
     });
     if (!existing) throw notFound('Quiz not found');
+    await requireWebinarStaff(req.user, existing.webinarId);
 
     // Once people have answered, the option ids are baked into their rows.
     // Rewriting the option list would leave every stored answer pointing at an
@@ -104,6 +159,12 @@ adminQuizRouter.patch(
 adminQuizRouter.delete(
   '/quizzes/:id',
   asyncHandler(async (req, res) => {
+    const existing = await prisma.quiz.findUnique({
+      where: { id: req.params.id },
+      select: { webinarId: true },
+    });
+    if (!existing) throw notFound('Quiz not found');
+    await requireWebinarStaff(req.user, existing.webinarId);
     await prisma.quiz.delete({ where: { id: req.params.id } });
     res.json({ ok: true });
   })
@@ -113,11 +174,12 @@ adminQuizRouter.delete(
 
 export const adminPollRouter = Router();
 
-adminPollRouter.use(requireAuth, requireRole('ADMIN', 'HOST', 'MODERATOR'));
+adminPollRouter.use(requireAuth);
 
 adminPollRouter.get(
   '/:webinarId/polls',
   asyncHandler(async (req, res) => {
+    await requireWebinarStaff(req.user, req.params.webinarId);
     const polls = await prisma.poll.findMany({
       where: { webinarId: req.params.webinarId },
       orderBy: { createdAt: 'asc' },
@@ -139,6 +201,7 @@ adminPollRouter.get(
 adminPollRouter.post(
   '/:webinarId/polls',
   asyncHandler(async (req, res) => {
+    await requireWebinarStaff(req.user, req.params.webinarId);
     const body = pollSchema.parse(req.body);
     const poll = await prisma.poll.create({
       data: {
@@ -162,6 +225,7 @@ adminPollRouter.patch(
       include: { _count: { select: { votes: true } } },
     });
     if (!existing) throw notFound('Poll not found');
+    await requireWebinarStaff(req.user, existing.webinarId);
 
     // Same reasoning as a quiz: a vote stores the option id it was cast for, so
     // replacing the option list after votes exist would orphan them.
@@ -189,6 +253,12 @@ adminPollRouter.patch(
 adminPollRouter.delete(
   '/polls/:id',
   asyncHandler(async (req, res) => {
+    const existing = await prisma.poll.findUnique({
+      where: { id: req.params.id },
+      select: { webinarId: true },
+    });
+    if (!existing) throw notFound('Poll not found');
+    await requireWebinarStaff(req.user, existing.webinarId);
     await prisma.poll.delete({ where: { id: req.params.id } });
     res.json({ ok: true });
   })
@@ -198,7 +268,7 @@ adminPollRouter.delete(
 
 export const adminCtaRouter = Router();
 
-adminCtaRouter.use(requireAuth, requireRole('ADMIN', 'HOST', 'MODERATOR'));
+adminCtaRouter.use(requireAuth);
 
 /**
  * The offer list.
@@ -210,6 +280,7 @@ adminCtaRouter.use(requireAuth, requireRole('ADMIN', 'HOST', 'MODERATOR'));
 adminCtaRouter.get(
   '/:webinarId/ctas',
   asyncHandler(async (req, res) => {
+    await requireWebinarStaff(req.user, req.params.webinarId);
     const ctas = await prisma.cta.findMany({
       where: { webinarId: req.params.webinarId },
       include: {
@@ -234,6 +305,7 @@ adminCtaRouter.get(
 adminCtaRouter.post(
   '/:webinarId/ctas',
   asyncHandler(async (req, res) => {
+    await requireWebinarStaff(req.user, req.params.webinarId);
     const body = ctaSchema.parse(req.body);
     const cta = await prisma.cta.create({
       data: {
@@ -279,6 +351,7 @@ adminCtaRouter.patch(
 
     const existing = await prisma.cta.findUnique({ where: { id: req.params.id } });
     if (!existing) throw notFound('Offer not found');
+    await requireWebinarStaff(req.user, existing.webinarId);
 
     await prisma.cta.update({
       where: { id: existing.id },
@@ -340,7 +413,9 @@ ctaFollowUpRouter.use(requireAuth);
  * Mirrors the precedence the socket layer uses at join time, so a person who
  * can run the room can also read its follow-up list.
  */
-async function canFollowUp(
+const canFollowUp = canManageWebinarContent;
+
+async function _legacyCanFollowUp(
   userId: string,
   role: string,
   webinarId: string
@@ -515,6 +590,13 @@ ctaFollowUpRouter.get(
 adminCtaRouter.get(
   '/ctas/:id/clicks',
   asyncHandler(async (req, res) => {
+    const existing = await prisma.cta.findUnique({
+      where: { id: req.params.id },
+      select: { webinarId: true },
+    });
+    if (!existing) throw notFound('Offer not found');
+    await requireWebinarStaff(req.user, existing.webinarId);
+
     const clicks = await prisma.ctaClick.findMany({
       where: { ctaId: req.params.id },
       orderBy: { createdAt: 'desc' },
@@ -541,6 +623,13 @@ adminCtaRouter.get(
 adminCtaRouter.delete(
   '/ctas/:id',
   asyncHandler(async (req, res) => {
+    const existing = await prisma.cta.findUnique({
+      where: { id: req.params.id },
+      select: { webinarId: true },
+    });
+    if (!existing) throw notFound('Offer not found');
+    await requireWebinarStaff(req.user, existing.webinarId);
+
     await prisma.cta.delete({ where: { id: req.params.id } });
     res.json({ ok: true });
   })
