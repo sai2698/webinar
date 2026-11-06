@@ -380,6 +380,89 @@ export function ChatPanel({
             disabled={disabled || sending}
             maxLength={1000}
           />
+
+          {/* Mobile view controls beside chat input: Mic, Video, and Three Dots (shown when NOT typing) */}
+          {!text.length && (
+            <div className="flex lg:hidden items-center gap-1 shrink-0">
+              {/* Mic enable/disable */}
+              <button
+                type="button"
+                onClick={() => onToggleMic?.()}
+                disabled={!canUseAudio}
+                aria-label={micOn ? 'Mute microphone' : 'Unmute microphone'}
+                title={micOn ? 'Mute' : 'Unmute'}
+                className={`grid h-8 w-8 shrink-0 place-items-center rounded-md transition active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-40 ${
+                  micOn
+                    ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+                    : 'bg-red-500/10 text-red-500 hover:bg-red-500/20 dark:text-red-400'
+                }`}
+              >
+                {micOn ? (
+                  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8">
+                    <rect x="9" y="3" width="6" height="11" rx="3" />
+                    <path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" strokeLinecap="round" />
+                  </svg>
+                ) : (
+                  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8">
+                    <path d="M4 4l16 16" strokeLinecap="round" />
+                    <rect x="9" y="3" width="6" height="11" rx="3" />
+                    <path d="M5.5 11a6.5 6.5 0 0 0 10.2 5.3M12 17.5V21" strokeLinecap="round" />
+                  </svg>
+                )}
+              </button>
+
+              {/* Video enable/disable */}
+              <button
+                type="button"
+                onClick={() => onToggleCam?.()}
+                disabled={!canUseVideo}
+                aria-label={camOn ? 'Stop video' : 'Start video'}
+                title={camOn ? 'Stop video' : 'Start video'}
+                className={`grid h-8 w-8 shrink-0 place-items-center rounded-md transition active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-40 ${
+                  camOn
+                    ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+                    : 'bg-red-500/10 text-red-500 hover:bg-red-500/20 dark:text-red-400'
+                }`}
+              >
+                {camOn ? (
+                  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8">
+                    <rect x="3" y="6" width="12" height="12" rx="2.5" />
+                    <path d="m15 10.5 4.5-2.5v8L15 13.5" strokeLinejoin="round" />
+                  </svg>
+                ) : (
+                  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8">
+                    <path d="M4 4l16 16" strokeLinecap="round" />
+                    <rect x="3" y="6" width="12" height="12" rx="2.5" />
+                    <path d="m15 10.5 4.5-2.5v8L15 13.5" strokeLinejoin="round" />
+                  </svg>
+                )}
+              </button>
+
+              {/* Three dots (More actions) */}
+              <button
+                type="button"
+                onClick={() => {
+                  setActionsOpen((v) => !v);
+                  setSheet(null);
+                }}
+                aria-label="More chat actions"
+                title="More actions"
+                className={`grid h-8 w-8 shrink-0 place-items-center rounded-md transition active:scale-[0.96] ${
+                  actionsOpen
+                    ? 'bg-brand-500/15 text-brand-600 dark:text-brand-300'
+                    : 'text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:text-slate-500 dark:hover:bg-white/[0.08] dark:hover:text-slate-200'
+                }`}
+              >
+                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor">
+                  <circle cx="5" cy="12" r="1.8" />
+                  <circle cx="12" cy="12" r="1.8" />
+                  <circle cx="19" cy="12" r="1.8" />
+                </svg>
+              </button>
+            </div>
+          )}
+
+          {/* Desktop Three dots (always present on desktop) */}
           <button
             type="button"
             onClick={() => {
@@ -388,7 +471,7 @@ export function ChatPanel({
             }}
             aria-label="More chat actions"
             title="More actions"
-            className={`grid h-8 w-8 shrink-0 place-items-center rounded-md transition active:scale-[0.96] ${
+            className={`hidden lg:grid h-8 w-8 shrink-0 place-items-center rounded-md transition active:scale-[0.96] ${
               actionsOpen
                 ? 'bg-brand-500/15 text-brand-600 dark:text-brand-300'
                 : 'text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:text-slate-500 dark:hover:bg-white/[0.08] dark:hover:text-slate-200'
@@ -400,9 +483,13 @@ export function ChatPanel({
               <circle cx="19" cy="12" r="1.8" />
             </svg>
           </button>
+
+          {/* Send button: Shown on mobile when typing (removes mic/video/dots), always available on desktop */}
           <button
             type="submit"
-            className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-gradient-to-b from-brand-400 to-brand-600 text-white shadow-sm transition hover:from-brand-300 hover:to-brand-500 active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-40"
+            className={`${
+              text.length > 0 ? 'grid' : 'hidden lg:grid'
+            } h-8 w-8 shrink-0 place-items-center rounded-md bg-gradient-to-b from-brand-400 to-brand-600 text-white shadow-sm transition hover:from-brand-300 hover:to-brand-500 active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-40`}
             disabled={disabled || sending || !text.trim()}
             aria-label="Send message"
             title="Send message"
