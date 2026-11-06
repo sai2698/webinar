@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { endpoints, ApiError } from '@/lib/api';
-import { Button, Input, Switch, Badge, Card } from '@/components/ui';
+import { Switch } from '@/components/ui';
 
 export interface GatewayStatus {
   configured: boolean;
@@ -78,10 +78,10 @@ export function GatewayConfigPanel({ onSaved, compact = false }: GatewayConfigPa
 
   if (loading) {
     return (
-      <div className="rounded-2xl border border-line bg-panel p-5 shadow-card">
+      <div className="rounded-lg border border-white/[0.08] bg-white/[0.02] p-4">
         <div className="flex items-center gap-2.5">
-          <span className="h-4 w-4 animate-spin rounded-full border-2 border-line border-t-brand-500" />
-          <span className="text-xs text-muted">Loading Razorpay settings…</span>
+          <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/15 border-t-brand-500" />
+          <span className="text-[11px] text-slate-500">Loading Razorpay settings…</span>
         </div>
       </div>
     );
@@ -91,62 +91,67 @@ export function GatewayConfigPanel({ onSaved, compact = false }: GatewayConfigPa
   const isTest = gateway?.mode === 'test' && gateway?.enabled;
   const isDisabled = !gateway?.enabled;
 
+  const statusLabel = isDisabled
+    ? 'Payments paused'
+    : isLive
+      ? 'Live mode'
+      : isTest
+        ? 'Test mode'
+        : 'Mock mode';
+  const statusTone = isDisabled
+    ? 'bg-red-500/15 text-red-600 ring-red-500/25 dark:text-red-400'
+    : isLive
+      ? 'bg-mint-500/15 text-mint-600 ring-mint-500/25 dark:text-mint-400'
+      : isTest
+        ? 'bg-amber-500/15 text-amber-600 ring-amber-500/25 dark:text-amber-400'
+        : 'bg-slate-500/15 text-slate-600 ring-slate-500/25 dark:text-slate-300';
+
   return (
-    <div className={`rounded-2xl border border-line bg-panel shadow-card space-y-4 sm:space-y-5 ${compact ? 'p-4' : 'p-5 sm:p-6'}`}>
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-line pb-4">
-        <div>
-          <div className="flex items-center gap-2.5 flex-wrap">
-            <h3 className="text-sm font-bold text-fg">Razorpay Gateway Configuration</h3>
-            <Badge
-              variant={
-                isDisabled
-                  ? 'danger'
-                  : isLive
-                  ? 'success'
-                  : isTest
-                  ? 'warning'
-                  : 'default'
-              }
-              dot
+    <div className={`space-y-4 rounded-lg border border-white/[0.08] bg-white/[0.02] ${compact ? 'p-3.5' : 'p-4 sm:p-5'}`}>
+      <div className="flex flex-col justify-between gap-2.5 border-b border-white/[0.07] pb-3.5 sm:flex-row sm:items-center">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="text-[12px] font-semibold tracking-tight text-slate-900 dark:text-white">
+              Razorpay gateway configuration
+            </h3>
+            <span
+              className={`rounded px-1.5 py-px text-[9px] font-bold uppercase tracking-wider ring-1 ${statusTone}`}
             >
-              {isDisabled
-                ? 'Payments Paused'
-                : isLive
-                ? 'Live Mode (Production)'
-                : isTest
-                ? 'Test Mode (Sandboxed)'
-                : 'Mock Mode (Auto-Enroll)'}
-            </Badge>
+              {statusLabel}
+            </span>
           </div>
-          <p className="mt-1 text-xs text-muted">
+          <p className="mt-1 text-[10px] leading-relaxed text-slate-500 dark:text-slate-400">
             Configure your Razorpay Key ID and Secret to collect ticket fees and flash offers in real time.
           </p>
         </div>
 
         {gateway?.updatedAt && (
-          <span className="text-[11px] text-subtle shrink-0">
-            Updated: {new Date(gateway.updatedAt).toLocaleDateString()}
+          <span className="shrink-0 text-[9px] tabular-nums text-slate-500">
+            Updated {new Date(gateway.updatedAt).toLocaleDateString()}
           </span>
         )}
       </div>
 
       {error && (
-        <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-xs font-medium text-red-500 dark:text-red-400">
+        <div className="rounded-md border border-red-500/25 bg-red-500/[0.08] px-2.5 py-1.5 text-[10px] font-medium text-red-600 dark:text-red-300">
           {error}
         </div>
       )}
 
       {success && (
-        <div className="rounded-xl border border-mint-500/30 bg-mint-500/10 p-3 text-xs font-semibold text-mint-600 dark:text-mint-400">
-          ✓ {success}
+        <div className="flex items-center gap-1.5 rounded-md border border-mint-500/25 bg-mint-500/[0.08] px-2.5 py-1.5 text-[10px] font-semibold text-mint-600 dark:text-mint-400">
+          <svg viewBox="0 0 24 24" className="h-3 w-3 shrink-0" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <path d="M4 12.5l5 5L20 6.5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          {success}
         </div>
       )}
 
-      <form onSubmit={handleSave} className="space-y-4 max-w-xl">
+      <form onSubmit={handleSave} className="max-w-xl space-y-3.5">
         <Switch
           checked={enabled}
           onChange={setEnabled}
-          label="Enable Razorpay In-Stream Payments"
+          label="Enable Razorpay in-stream payments"
           description={
             enabled
               ? 'Attendees can purchase offers & enroll in paid sessions.'
@@ -154,49 +159,75 @@ export function GatewayConfigPanel({ onSaved, compact = false }: GatewayConfigPa
           }
         />
 
-        <Input
-          label="Razorpay Key ID"
-          id="rzp-key-id"
-          type="text"
-          value={keyId}
-          onChange={(e) => setKeyId(e.target.value)}
-          placeholder="rzp_test_... or rzp_live_..."
-          helperText="Available in Razorpay Dashboard → Settings → API Keys"
-        />
-
         <div>
-          <Input
-            label="Razorpay Key Secret"
-            id="rzp-key-secret"
-            type={showSecret ? 'text' : 'password'}
-            value={keySecret}
-            onChange={(e) => setKeySecret(e.target.value)}
-            placeholder={gateway?.hasSecret ? '••••••••••••••••••••••••' : 'Paste Key Secret'}
-            rightElement={
-              <button
-                type="button"
-                onClick={() => setShowSecret(!showSecret)}
-                className="text-xs font-medium text-subtle hover:text-fg transition"
-              >
-                {showSecret ? 'Hide' : 'Show'}
-              </button>
-            }
-            helperText={
-              gateway?.hasSecret
-                ? 'A secret is currently active. Enter a new secret only to replace it.'
-                : 'Required to securely authenticate Razorpay webhook events.'
-            }
+          <label
+            htmlFor="rzp-key-id"
+            className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-slate-500"
+          >
+            Razorpay Key ID
+          </label>
+          <input
+            id="rzp-key-id"
+            type="text"
+            value={keyId}
+            onChange={(e) => setKeyId(e.target.value)}
+            placeholder="rzp_test_... or rzp_live_..."
+            className="w-full rounded-md border border-white/[0.08] bg-white/[0.03] px-2.5 py-1.5 font-mono text-xs text-slate-900 placeholder:text-slate-400 outline-none transition focus:border-brand-500/50 focus:ring-2 focus:ring-brand-500/20 dark:bg-ink-900/70 dark:text-slate-100"
           />
+          <p className="mt-1 text-[10px] text-slate-500">
+            Available in Razorpay Dashboard → Settings → API Keys
+          </p>
         </div>
 
-        <div className="pt-2 flex items-center gap-3">
-          <Button type="submit" variant="primary" isLoading={saving}>
-            Save Razorpay Settings
-          </Button>
+        <div>
+          <label
+            htmlFor="rzp-key-secret"
+            className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-slate-500"
+          >
+            Razorpay Key Secret
+          </label>
+          <div className="relative">
+            <input
+              id="rzp-key-secret"
+              type={showSecret ? 'text' : 'password'}
+              value={keySecret}
+              onChange={(e) => setKeySecret(e.target.value)}
+              placeholder={gateway?.hasSecret ? '••••••••••••••••••••••••' : 'Paste Key Secret'}
+              className="w-full rounded-md border border-white/[0.08] bg-white/[0.03] py-1.5 pl-2.5 pr-14 font-mono text-xs text-slate-900 placeholder:text-slate-400 outline-none transition focus:border-brand-500/50 focus:ring-2 focus:ring-brand-500/20 dark:bg-ink-900/70 dark:text-slate-100"
+            />
+            <button
+              type="button"
+              onClick={() => setShowSecret(!showSecret)}
+              className="absolute right-1 top-1/2 -translate-y-1/2 rounded px-1.5 py-1 text-[10px] font-semibold tracking-tight text-slate-500 transition hover:bg-white/[0.08] hover:text-slate-700 dark:hover:text-slate-200"
+            >
+              {showSecret ? 'Hide' : 'Show'}
+            </button>
+          </div>
+          <p className="mt-1 text-[10px] text-slate-500">
+            {gateway?.hasSecret
+              ? 'A secret is currently active. Enter a new secret only to replace it.'
+              : 'Required to securely authenticate Razorpay webhook events.'}
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2.5 pt-1">
+          <button
+            type="submit"
+            disabled={saving}
+            className="inline-flex items-center gap-1.5 rounded-md bg-gradient-to-b from-brand-400 to-brand-600 px-3 py-1.5 text-[11px] font-semibold tracking-tight text-white shadow-sm transition hover:from-brand-300 hover:to-brand-500 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {saving && (
+              <span className="h-3 w-3 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+            )}
+            Save Razorpay settings
+          </button>
 
           {gateway?.hasSecret && (
-            <span className="text-xs text-mint-600 dark:text-mint-400 font-medium">
-              ✓ Active secret verified
+            <span className="flex items-center gap-1 text-[10px] font-semibold text-mint-600 dark:text-mint-400">
+              <svg viewBox="0 0 24 24" className="h-3 w-3 shrink-0" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path d="M4 12.5l5 5L20 6.5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              Active secret verified
             </span>
           )}
         </div>

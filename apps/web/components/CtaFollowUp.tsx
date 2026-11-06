@@ -112,7 +112,7 @@ export function CtaFollowUp({
     <div className="space-y-3">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="truncate text-xs font-semibold text-white">
+          <p className="truncate text-[11px] font-semibold tracking-tight text-slate-900 dark:text-white">
             {data?.offer.title ?? 'Offer'}
           </p>
           <p className="mt-0.5 text-[10px] text-slate-500">
@@ -122,17 +122,23 @@ export function CtaFollowUp({
           </p>
         </div>
         <div className="flex shrink-0 gap-1.5">
-          <button onClick={() => void load()} className="btn-ghost px-2 py-1 text-[10px]">
+          <button
+            onClick={() => void load()}
+            className="rounded-md border border-white/10 bg-white/[0.04] px-2 py-1 text-[10px] font-semibold tracking-tight text-slate-700 transition hover:bg-white/[0.09] dark:text-slate-200"
+          >
             Refresh
           </button>
-          <button onClick={onClose} className="btn-ghost px-2 py-1 text-[10px]">
+          <button
+            onClick={onClose}
+            className="rounded-md border border-white/10 bg-white/[0.04] px-2 py-1 text-[10px] font-semibold tracking-tight text-slate-700 transition hover:bg-white/[0.09] dark:text-slate-200"
+          >
             Back
           </button>
         </div>
       </div>
 
       {error && (
-        <p className="rounded-lg border border-red-500/30 bg-red-500/10 px-2.5 py-1.5 text-[11px] text-red-300">
+        <p className="rounded-md border border-red-500/25 bg-red-500/[0.08] px-2.5 py-1.5 text-[10px] font-medium text-red-600 dark:text-red-300">
           {error}
         </p>
       )}
@@ -153,10 +159,10 @@ export function CtaFollowUp({
             <button
               key={f.key}
               onClick={() => setFilter(f.key)}
-              className={`rounded-full px-2.5 py-1 text-[10px] transition ${
+              className={`rounded-md px-2 py-1 text-[10px] font-semibold tracking-tight transition ${
                 filter === f.key
-                  ? 'bg-brand-500/20 text-brand-200 ring-1 ring-brand-400/40'
-                  : 'bg-white/5 text-slate-400 hover:bg-white/10'
+                  ? 'bg-brand-500/15 text-brand-600 ring-1 ring-brand-500/30 dark:text-brand-200'
+                  : 'bg-white/[0.04] text-slate-500 hover:bg-white/[0.09] hover:text-slate-700 dark:hover:text-slate-300'
               }`}
             >
               {f.label} <span className="tabular-nums opacity-70">{count}</span>
@@ -165,10 +171,10 @@ export function CtaFollowUp({
         })}
       </div>
 
-      {loading && <p className="py-6 text-center text-[11px] text-slate-500">Loading…</p>}
+      {loading && <p className="py-6 text-center text-[10px] text-slate-500">Loading…</p>}
 
       {!loading && visible.length === 0 && (
-        <p className="py-6 text-center text-[11px] text-slate-500">
+        <p className="py-6 text-center text-[10px] text-slate-500">
           {people.length === 0
             ? 'Nobody has opened this offer yet.'
             : 'Nobody matches this filter.'}
@@ -182,14 +188,14 @@ export function CtaFollowUp({
           return (
             <div
               key={p.userId}
-              className="rounded-xl border border-white/10 bg-white/[0.03] p-2.5"
+              className="rounded-lg border border-white/[0.08] bg-white/[0.02] p-2.5 transition hover:border-white/[0.14]"
             >
               <button
                 onClick={() => setExpanded(open ? null : p.userId)}
                 className="flex w-full items-start justify-between gap-2 text-left"
               >
                 <div className="min-w-0">
-                  <p className="truncate text-[11px] font-medium text-slate-200">{p.name}</p>
+                  <p className="truncate text-[11px] font-semibold tracking-tight text-slate-900 dark:text-slate-100">{p.name}</p>
                   <p className="truncate text-[10px] text-slate-500">{p.email}</p>
                   {p.phone && (
                     <p className="truncate text-[10px] text-slate-500">{p.phone}</p>
@@ -197,44 +203,44 @@ export function CtaFollowUp({
                 </div>
                 <div className="flex shrink-0 flex-col items-end gap-1">
                   <span
-                    className={`rounded-full px-2 py-0.5 text-[9px] font-semibold ${
+                    className={`rounded px-1.5 py-px text-[9px] font-bold uppercase tracking-wider ${
                       paid
-                        ? 'bg-mint-500/15 text-mint-400'
+                        ? 'bg-mint-500/15 text-mint-600 dark:text-mint-400'
                         : p.paymentStatus === 'REFUNDED'
-                          ? 'bg-slate-500/15 text-slate-400'
-                          : 'bg-accent-500/15 text-accent-400'
+                          ? 'bg-slate-500/15 text-slate-500 dark:text-slate-400'
+                          : 'bg-accent-500/15 text-accent-600 dark:text-accent-400'
                     }`}
                   >
                     {paid ? 'PAID' : p.paymentStatus === 'REFUNDED' ? 'REFUNDED' : 'NOT PAID'}
                   </span>
-                  <span className="text-[9px] text-slate-500">{ago(p.clickedAt)}</span>
+                  <span className="text-[9px] tabular-nums text-slate-500">{ago(p.clickedAt)}</span>
                 </div>
               </button>
 
               <div className="mt-1.5 flex flex-wrap gap-1">
                 <span
-                  className={`rounded px-1.5 py-0.5 text-[9px] ${
+                  className={`rounded px-1.5 py-px text-[9px] font-medium ${
                     p.formFilled
-                      ? 'bg-brand-500/15 text-brand-200'
-                      : 'bg-white/5 text-slate-500'
+                      ? 'bg-brand-500/15 text-brand-600 dark:text-brand-200'
+                      : 'bg-white/[0.05] text-slate-500'
                   }`}
                 >
                   {p.formFilled ? `Form filled · ${p.answeredCount}` : 'Form not filled'}
                 </span>
                 {p.attended && (
-                  <span className="rounded bg-white/5 px-1.5 py-0.5 text-[9px] text-slate-400">
+                  <span className="rounded bg-white/[0.05] px-1.5 py-px text-[9px] font-medium text-slate-500 dark:text-slate-400">
                     Attended
                   </span>
                 )}
                 {paid && p.amountPaise !== null && (
-                  <span className="rounded bg-mint-500/10 px-1.5 py-0.5 text-[9px] text-mint-400">
+                  <span className="rounded bg-mint-500/10 px-1.5 py-px text-[9px] font-semibold tabular-nums text-mint-600 dark:text-mint-400">
                     {money(p.amountPaise, data?.offer.currency ?? 'INR')}
                   </span>
                 )}
               </div>
 
               {open && (
-                <div className="mt-2 space-y-1.5 border-t border-white/10 pt-2">
+                <div className="mt-2 space-y-1.5 border-t border-white/[0.07] pt-2">
                   {(data?.fields ?? []).length === 0 && (
                     <p className="text-[10px] text-slate-500">
                       This offer has no form, so there are no answers to show.
@@ -253,7 +259,7 @@ export function CtaFollowUp({
                     return (
                       <div key={f.id} className="flex justify-between gap-3 text-[10px]">
                         <span className="shrink-0 text-slate-500">{f.label}</span>
-                        <span className="min-w-0 break-words text-right text-slate-300">
+                        <span className="min-w-0 break-words text-right text-slate-700 dark:text-slate-300">
                           {value}
                         </span>
                       </div>
@@ -261,14 +267,14 @@ export function CtaFollowUp({
                   })}
                   <div className="flex justify-between gap-3 text-[10px]">
                     <span className="text-slate-500">Opened</span>
-                    <span className="text-slate-300">
+                    <span className="tabular-nums text-slate-700 dark:text-slate-300">
                       {new Date(p.clickedAt).toLocaleString('en-IN')}
                     </span>
                   </div>
                   {p.paidAt && (
                     <div className="flex justify-between gap-3 text-[10px]">
                       <span className="text-slate-500">Paid</span>
-                      <span className="text-slate-300">
+                      <span className="tabular-nums text-slate-700 dark:text-slate-300">
                         {new Date(p.paidAt).toLocaleString('en-IN')}
                       </span>
                     </div>
@@ -278,14 +284,14 @@ export function CtaFollowUp({
                       href={`mailto:${p.email}?subject=${encodeURIComponent(
                         `About ${data?.offer.title ?? 'the offer'}`
                       )}`}
-                      className="btn-ghost px-2 py-1 text-[10px]"
+                      className="rounded-md border border-white/10 bg-white/[0.04] px-2 py-1 text-[10px] font-semibold tracking-tight text-slate-700 transition hover:bg-white/[0.09] dark:text-slate-200"
                     >
                       Email
                     </a>
                     {p.phone && (
                       <a
                         href={`tel:${p.phone.replace(/\s/g, '')}`}
-                        className="btn-ghost px-2 py-1 text-[10px]"
+                        className="rounded-md border border-white/10 bg-white/[0.04] px-2 py-1 text-[10px] font-semibold tracking-tight text-slate-700 transition hover:bg-white/[0.09] dark:text-slate-200"
                       >
                         Call
                       </a>

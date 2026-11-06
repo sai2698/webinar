@@ -132,19 +132,28 @@ export function ChatPanel({
 
   return (
     <div className="relative flex h-full flex-col">
-      <div className="hidden lg:flex items-center justify-between border-b border-white/10 px-4 py-3 shrink-0">
-        <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Live chat</h3>
-        <span className="chip py-0.5 text-[10px]">{messages.length}</span>
+      <div className="hidden lg:flex items-center justify-between border-b border-white/[0.07] px-4 py-2.5 shrink-0">
+        <div className="flex items-center gap-1.5">
+          <span className="h-1.5 w-1.5 rounded-full bg-mint-500 dark:bg-mint-400" aria-hidden />
+          <h3 className="text-[13px] font-semibold tracking-tight text-slate-900 dark:text-white">Live chat</h3>
+        </div>
+        <span className="rounded bg-white/[0.06] px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-slate-400">{messages.length}</span>
       </div>
 
       {/* CTA notification at top of chat window for participants */}
       <ChatCtaNotification />
 
-      <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
+      <div ref={scrollRef} className="scrollbar-thin flex-1 space-y-3 overflow-y-auto px-4 py-4">
         {messages.length === 0 && (
-          <p className="pt-8 text-center text-xs text-slate-600">
-            No messages yet. Say hello 👋
-          </p>
+          <div className="flex flex-col items-center gap-2 pt-10 text-center">
+            <span className="grid h-9 w-9 place-items-center rounded-full bg-slate-100 text-slate-400 dark:bg-white/[0.06] dark:text-slate-500">
+              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M21 12a8 8 0 0 1-8 8H7l-4 3V12a8 8 0 0 1 8-8h2a8 8 0 0 1 8 8Z" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </span>
+            <p className="text-[11px] font-medium text-slate-500 dark:text-slate-500">No messages yet</p>
+            <p className="text-[10px] text-slate-400 dark:text-slate-600">Say hello to get the conversation started</p>
+          </div>
         )}
 
         {messages.map((msg) => {
@@ -167,10 +176,10 @@ export function ChatPanel({
                   <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-amber-400/25 text-sm">
                     🎉
                   </span>
-                  <p className="text-[12px] font-semibold leading-snug text-amber-200">
+                  <p className="text-[12px] font-semibold leading-snug text-amber-700 dark:text-amber-200">
                     {msg.actor ? (
                       <>
-                        Congratulations! <span className="text-amber-100">{msg.actor}</span> for
+                        Congratulations! <span className="text-amber-800 dark:text-amber-100">{msg.actor}</span> for
                         Enrolling
                       </>
                     ) : (
@@ -182,8 +191,8 @@ export function ChatPanel({
             }
 
             return (
-              <div key={msg.id} className="text-center">
-                <span className="inline-block rounded-full bg-white/[0.06] px-3 py-1 text-[11px] text-slate-400">
+              <div key={msg.id} className="flex justify-center">
+                <span className="inline-block rounded-full border border-slate-200/70 bg-slate-50 px-2.5 py-1 text-[10px] font-medium text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-400">
                   {msg.text}
                 </span>
               </div>
@@ -196,33 +205,27 @@ export function ChatPanel({
           const canModerate = isStaffRole && !msg.system;
 
           return (
-            <div key={msg.id} className={`group flex gap-2 ${mine ? 'flex-row-reverse' : ''}`}>
+            <div key={msg.id} className={`group flex gap-2.5 ${mine ? 'flex-row-reverse' : ''}`}>
               <div
-                className={`mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full text-[10px] font-bold ${
+                className={`mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full text-[10px] font-bold ring-1 ${
                   isStaff
-                    ? 'bg-gradient-to-br from-brand-400 to-brand-700 text-white'
-                    : 'bg-white/10 text-slate-300'
+                    ? 'bg-gradient-to-br from-brand-400 to-brand-700 text-white ring-brand-500/30'
+                    : 'bg-slate-100 text-slate-600 ring-slate-200 dark:bg-white/[0.08] dark:text-slate-300 dark:ring-white/10'
                 }`}
               >
                 {msg.name.slice(0, 2).toUpperCase()}
               </div>
 
-              <div className={`min-w-0 max-w-[85%] ${mine ? 'items-end text-right' : ''}`}>
-                <div className={`flex flex-wrap items-center gap-1 sm:gap-1.5 ${mine ? 'justify-end' : ''}`}>
-                  <span className="truncate text-[11px] font-semibold text-slate-800 dark:text-slate-300">
+              <div className={`min-w-0 max-w-[82%] ${mine ? 'flex flex-col items-end' : ''}`}>
+                <div className={`mb-1 flex items-center gap-1.5 ${mine ? 'flex-row-reverse' : ''}`}>
+                  <span className="truncate text-[11px] font-semibold tracking-tight text-slate-800 dark:text-slate-200">
                     {msg.name}
                   </span>
-                  <span className="text-[10px] text-slate-500">to Everyone</span>
-                  <span className="text-[10px] text-slate-500">
-                    ({new Date(msg.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})
+                  <span className="shrink-0 text-[10px] tabular-nums text-slate-400 dark:text-slate-500">
+                    {new Date(msg.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </span>
-                  {isStaff && (
-                    <span className="rounded bg-brand-500/70 px-1 py-px text-[8px] font-bold uppercase text-white">
-                      {msg.role === 'HOST' ? 'Host' : msg.role === 'ADMIN' ? 'Admin' : 'Mod'}
-                    </span>
-                  )}
                   {msg.enrolled && (
-                    <span className="rounded bg-mint-500/20 px-1 py-px text-[8px] font-bold uppercase text-mint-400">
+                    <span className="shrink-0 rounded bg-mint-500/15 px-1 py-px text-[8px] font-bold uppercase tracking-wider text-mint-700 dark:text-mint-400">
                       Enrolled
                     </span>
                   )}
@@ -231,7 +234,7 @@ export function ChatPanel({
                       onClick={() => remove(msg.id)}
                       aria-label={`Delete message from ${msg.name}`}
                       title="Delete message"
-                      className="text-[10px] text-slate-600 opacity-0 transition hover:text-red-400 group-hover:opacity-100"
+                      className="shrink-0 text-slate-400 opacity-0 transition hover:text-red-500 group-hover:opacity-100 dark:text-slate-600 dark:hover:text-red-400"
                     >
                       <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2">
                         <path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13" strokeLinecap="round" strokeLinejoin="round" />
@@ -240,10 +243,12 @@ export function ChatPanel({
                   )}
                 </div>
                 <div
-                  className={`mt-1 inline-block break-words rounded-xl px-3 py-2 text-[13px] leading-snug ${
+                  className={`inline-block break-words rounded-lg px-3 py-2 text-[13px] leading-relaxed shadow-sm ${
                     mine
-                      ? 'bg-brand-600/80 text-white'
-                      : 'bg-white/[0.06] text-slate-200'
+                      ? 'bg-gradient-to-br from-brand-500 to-brand-600 text-white'
+                      : isStaff
+                        ? 'border border-brand-500/20 bg-brand-500/[0.08] text-slate-800 dark:text-slate-100'
+                        : 'border border-slate-200/70 bg-white text-slate-800 dark:border-white/[0.06] dark:bg-white/[0.05] dark:text-slate-200'
                   }`}
                 >
                   {msg.text}
@@ -259,17 +264,17 @@ export function ChatPanel({
           chat-adjacent tools, and a full-screen sheet would hide the messages
           the participant opened the sidebar to read. */}
       {actionsOpen && (
-        <div className="border-t border-slate-200 dark:border-white/10 bg-white dark:bg-ink-900/95 p-3">
+        <div className="shrink-0 border-t border-white/[0.07] bg-slate-50/80 p-3 dark:bg-ink-900/95">
           <div className="mb-2 flex items-center justify-between">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
               Quick actions
             </p>
             <button
               onClick={() => setActionsOpen(false)}
               aria-label="Close quick actions"
-              className="text-slate-500 transition hover:text-white"
+              className="grid h-5 w-5 place-items-center rounded text-slate-400 transition hover:bg-slate-200 hover:text-slate-700 dark:hover:bg-white/10 dark:hover:text-white"
             >
-              <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2">
+              <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2.2">
                 <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" />
               </svg>
             </button>
@@ -357,20 +362,18 @@ export function ChatPanel({
         />
       )}
 
-      <form onSubmit={send} className="border-t border-white/10 p-3">
-        {error && <p className="mb-2 break-all text-[11px] text-red-400">{error}</p>}
-        <div className="mb-2 flex items-center gap-1.5 text-[11px] text-slate-400">
-          <span>Send message to:</span>
-          <span className="inline-flex items-center gap-1 font-semibold text-slate-800 dark:text-slate-200">
-            Everyone
-            <svg viewBox="0 0 24 24" className="h-3 w-3 text-slate-400" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="m6 9 6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </span>
+      <form onSubmit={send} className="shrink-0 border-t border-white/[0.07] p-3">
+        {error && <p className="mb-2 break-all text-[11px] text-red-500 dark:text-red-400">{error}</p>}
+        <div className="mb-1.5 flex items-center gap-1 px-0.5 text-[10px] text-slate-400 dark:text-slate-500">
+          <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M17 20v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2M10 10a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7M21 20v-2a4 4 0 0 0-3-3.87" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          <span>To</span>
+          <span className="font-semibold text-slate-600 dark:text-slate-300">Everyone</span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-end gap-1.5 rounded-lg border border-slate-200 bg-white p-1.5 shadow-sm transition focus-within:border-brand-400/60 focus-within:ring-2 focus-within:ring-brand-500/15 dark:border-white/[0.08] dark:bg-white/[0.03]">
           <input
-            className="input py-2 text-[13px]"
+            className="min-w-0 flex-1 bg-transparent px-2 py-1.5 text-[13px] text-slate-800 outline-none placeholder:text-slate-400 disabled:cursor-not-allowed disabled:opacity-60 dark:text-slate-100 dark:placeholder:text-slate-500"
             placeholder={disabled ? 'Chat is disabled' : 'Enter a message…'}
             value={text}
             onChange={(e) => setText(e.target.value)}
@@ -385,7 +388,11 @@ export function ChatPanel({
             }}
             aria-label="More chat actions"
             title="More actions"
-            className={`btn-ghost shrink-0 px-2.5 py-2 ${actionsOpen ? 'text-white' : ''}`}
+            className={`grid h-8 w-8 shrink-0 place-items-center rounded-md transition active:scale-[0.96] ${
+              actionsOpen
+                ? 'bg-brand-500/15 text-brand-600 dark:text-brand-300'
+                : 'text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:text-slate-500 dark:hover:bg-white/[0.08] dark:hover:text-slate-200'
+            }`}
           >
             <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor">
               <circle cx="5" cy="12" r="1.8" />
@@ -395,9 +402,10 @@ export function ChatPanel({
           </button>
           <button
             type="submit"
-            className="btn-primary shrink-0 px-3 py-2"
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-gradient-to-b from-brand-400 to-brand-600 text-white shadow-sm transition hover:from-brand-300 hover:to-brand-500 active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-40"
             disabled={disabled || sending || !text.trim()}
             aria-label="Send message"
+            title="Send message"
           >
             <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="m4 12 16-8-6 16-2.5-6.5L4 12Z" strokeLinejoin="round" />
@@ -427,16 +435,16 @@ function ActionTile({
     <button
       type="button"
       onClick={onClick}
-      className={`flex flex-col items-center justify-center gap-1.5 rounded-xl border px-1 py-3 text-center transition ${
+      className={`flex flex-col items-center justify-center gap-1.5 rounded-lg border px-1 py-2.5 text-center transition active:scale-[0.98] ${
         danger
-          ? 'border-red-500/30 bg-red-500/10 text-red-400 hover:border-red-500/50 hover:bg-red-500/20'
+          ? 'border-red-500/25 bg-red-500/[0.08] text-red-600 hover:border-red-500/40 hover:bg-red-500/15 dark:text-red-400'
           : active
-            ? 'border-amber-400 bg-amber-400/25 text-amber-600 dark:text-amber-300 shadow-sm'
-            : 'border-slate-200 dark:border-white/10 bg-white dark:bg-white/[0.04] text-slate-700 dark:text-slate-300 hover:border-brand-300 dark:hover:border-white/25 hover:bg-slate-50 dark:hover:bg-white/[0.08] hover:text-slate-900 dark:hover:text-white shadow-sm'
+            ? 'border-amber-400/60 bg-amber-400/20 text-amber-700 shadow-sm dark:text-amber-300'
+            : 'border-slate-200 bg-white text-slate-600 shadow-sm hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:border-white/20 dark:hover:bg-white/[0.07] dark:hover:text-white'
       }`}
     >
-      <span className="text-lg leading-none">{icon}</span>
-      <span className="text-[10px] font-semibold leading-tight">{label}</span>
+      <span className="text-base leading-none">{icon}</span>
+      <span className="text-[10px] font-semibold leading-tight tracking-tight">{label}</span>
     </button>
   );
 }
@@ -505,7 +513,7 @@ function ChatSheet({
         <button
           onClick={onClose}
           aria-label="Close"
-          className="text-slate-500 transition hover:text-white"
+          className="text-slate-500 transition hover:text-slate-900 dark:hover:text-white"
         >
           <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" />
@@ -513,7 +521,7 @@ function ChatSheet({
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4">
+      <div className="scrollbar-thin flex-1 overflow-y-auto p-4">
         {sheet === 'leaderboard' &&
           (quizResults && quizResults.topScorers.length > 0 ? (
             <div className="space-y-2">
@@ -523,7 +531,7 @@ function ChatSheet({
               {quizResults.topScorers.map((s, i) => (
                 <div
                   key={s.userId}
-                  className="flex items-center gap-2.5 rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-white/[0.04] px-3 py-2 shadow-sm"
+                  className="flex items-center gap-2.5 rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-white/[0.04] px-3 py-2 shadow-sm"
                 >
                   <span className="w-5 text-center text-[11px] font-bold text-slate-500">
                     {i + 1}
@@ -538,7 +546,7 @@ function ChatSheet({
               ))}
             </div>
           ) : (
-            <p className="pt-6 text-center text-[11px] text-slate-600">
+            <p className="pt-6 text-center text-[11px] text-slate-500 dark:text-slate-600">
               No quiz results yet. The board fills in once a quiz closes.
             </p>
           ))}

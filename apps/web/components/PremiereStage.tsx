@@ -27,7 +27,7 @@ interface PremiereStageProps {
 function UserCountCard({ count, vertical = false }: { count: number; vertical?: boolean }) {
   return (
     <div
-      className={`flex shrink-0 flex-col items-center justify-center gap-1 rounded-xl sm:rounded-2xl border border-slate-200 dark:border-white/10 bg-white dark:bg-ink-900/90 shadow-sm backdrop-blur ${
+      className={`flex shrink-0 flex-col items-center justify-center gap-1 rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-ink-900/90 shadow-sm backdrop-blur ${
         vertical ? 'w-full py-3 sm:py-4 aspect-video' : 'h-20 w-20 sm:h-24 sm:w-28'
       }`}
     >
@@ -49,8 +49,9 @@ function FullscreenButton({ onClick, isFs = false }: { onClick?: () => void; isF
     <button
       type="button"
       onClick={onClick}
-      className="absolute bottom-3 right-3 z-20 flex items-center gap-1.5 rounded-lg border border-slate-200 dark:border-white/20 bg-white/90 dark:bg-black/70 text-slate-800 dark:text-white px-2.5 py-1.5 text-[11px] font-semibold shadow-lg backdrop-blur-md transition hover:bg-white dark:hover:bg-black/90 active:scale-95"
+      className="absolute bottom-3 right-3 z-20 grid h-7 w-7 place-items-center rounded-md border border-slate-200 dark:border-white/20 bg-white/90 dark:bg-black/70 text-slate-800 dark:text-white shadow-lg backdrop-blur-md transition hover:bg-white dark:hover:bg-black/90 active:scale-95"
       aria-label={isFs ? 'Exit fullscreen' : 'Enter fullscreen'}
+      title={isFs ? 'Exit fullscreen' : 'Fullscreen'}
     >
       <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2.2">
         {isFs ? (
@@ -67,7 +68,6 @@ function FullscreenButton({ onClick, isFs = false }: { onClick?: () => void; isF
           />
         )}
       </svg>
-      <span>{isFs ? 'Exit' : 'Fullscreen'}</span>
     </button>
   );
 }
@@ -331,7 +331,7 @@ export function PremiereStage({
       <div className="flex h-full w-full flex-row gap-2 bg-slate-900 dark:bg-ink-950 p-2 overflow-hidden select-none">
         {/* Main Stage (Screen Share Presentation BIG on the left) */}
         <div
-          className="relative min-w-0 flex-1 h-full rounded-2xl overflow-hidden border border-slate-200 dark:border-white/10 bg-black shadow-sm group cursor-pointer"
+          className="relative min-w-0 flex-1 h-full rounded-lg overflow-hidden bg-black ring-1 ring-inset ring-slate-200 dark:ring-white/10 shadow-sm group cursor-pointer"
           onClick={() => {
             if (isMuted) unmute();
           }}
@@ -339,7 +339,7 @@ export function PremiereStage({
           <video
             ref={videoRef}
             src={mediaUrl}
-            className="h-full w-full object-contain bg-black"
+            className="clip-inherit h-full w-full object-contain bg-black"
             playsInline
             controls={false}
             disablePictureInPicture
@@ -388,7 +388,7 @@ export function PremiereStage({
 
           {/* Bottom-Left Presenter Badge */}
           {!hasEnded && (
-            <div className="pointer-events-none absolute bottom-3 left-3 z-20 flex items-center gap-2 rounded-xl border border-white/10 bg-black/70 px-3 py-1.5 text-xs text-slate-200 backdrop-blur-md shadow-lg">
+            <div className="pointer-events-none absolute bottom-2.5 left-2.5 z-20 flex items-center gap-2 rounded-md border border-white/10 bg-black/70 px-2.5 py-1.5 text-xs text-slate-200 backdrop-blur-md shadow-sm">
               <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
               <span className="font-semibold text-slate-100">{layout.presenterName || 'Host'}</span>
               <span className="rounded bg-brand-500/30 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-brand-300">
@@ -399,8 +399,8 @@ export function PremiereStage({
 
           {/* Post-Session Conclusion Screen */}
           {hasEnded && (
-            <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-ink-950/95 px-6 text-center backdrop-blur-md animate-fade-in">
-              <div className="grid h-16 w-16 place-items-center rounded-2xl bg-brand-500/20 text-brand-400 border border-brand-500/30 mb-4 shadow-xl">
+            <div className="absolute inset-0 z-30 flex flex-col items-center justify-center rounded-[inherit] bg-ink-950/95 px-6 text-center backdrop-blur-md animate-fade-in">
+              <div className="grid h-16 w-16 place-items-center rounded-lg bg-brand-500/20 text-brand-400 border border-brand-500/30 mb-4 shadow-xl">
                 <svg viewBox="0 0 24 24" className="h-8 w-8" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
@@ -413,10 +413,10 @@ export function PremiereStage({
         </div>
 
         {/* Right Vertical Filmstrip: Host Video, Participant Tile & User Count Tile */}
-        <div className="w-32 sm:w-44 lg:w-48 shrink-0 flex flex-col gap-2 overflow-y-auto h-full pr-1">
+        <div className="scrollbar-thin w-32 sm:w-44 lg:w-48 shrink-0 flex flex-col gap-2 overflow-y-auto h-full pr-1">
           {/* Host Video Tile (when screen share is active) */}
           {layout.screenShareActive && (
-            <div className="relative w-full aspect-video shrink-0 rounded-xl overflow-hidden border border-slate-200 dark:border-white/10 bg-slate-900 shadow-sm group">
+            <div className="relative w-full aspect-video shrink-0 rounded-lg overflow-hidden bg-slate-900 ring-1 ring-inset ring-slate-200 dark:ring-white/10 shadow-sm group">
               <video
                 ref={hostCamVideoRef}
                 src={`${mediaUrl}?track=cam`}
@@ -448,7 +448,7 @@ export function PremiereStage({
             camOn={camOn}
             paused={false}
             handRaised={handRaised}
-            className="w-full aspect-video shrink-0 rounded-xl"
+            className="w-full aspect-video shrink-0 rounded-lg"
           />
 
           {/* Live Viewer Count Card (Vertical) */}
@@ -465,7 +465,7 @@ export function PremiereStage({
       <div className="flex shrink-0 gap-2 overflow-x-auto pb-1 pt-0.5 scrollbar-thin">
         {/* Host Video Tile: Displayed at top when screen share is active (exact match to live webinar layout) */}
         {layout.screenShareActive && (
-          <div className="relative h-20 w-24 sm:h-24 sm:w-28 shrink-0 rounded-xl sm:rounded-2xl overflow-hidden border border-slate-200 dark:border-white/10 bg-slate-900 shadow-sm group">
+          <div className="relative h-20 w-24 sm:h-24 sm:w-28 shrink-0 rounded-lg overflow-hidden bg-slate-900 ring-1 ring-inset ring-slate-200 dark:ring-white/10 shadow-sm group">
             <video
               ref={hostCamVideoRef}
               src={`${mediaUrl}?track=cam`}
@@ -498,7 +498,7 @@ export function PremiereStage({
           camOn={camOn}
           paused={false}
           handRaised={handRaised}
-          className="h-20 w-24 sm:h-24 sm:w-28 shrink-0 rounded-xl sm:rounded-2xl"
+          className="h-20 w-24 sm:h-24 sm:w-28 shrink-0 rounded-lg"
         />
 
         {/* Live People Count Tile */}
@@ -507,7 +507,7 @@ export function PremiereStage({
 
       {/* ── Main Stage: Complete Recorded Live Presentation with Host ── */}
       <div
-        className="relative min-h-0 flex-1 aspect-video w-full max-h-[36vh] sm:max-h-[42vh] lg:max-h-none lg:aspect-auto rounded-xl sm:rounded-2xl overflow-hidden border border-slate-200 dark:border-white/10 bg-black shadow-2xl mx-auto group cursor-pointer"
+        className="relative min-h-0 flex-1 aspect-video w-full max-h-[36vh] sm:max-h-[42vh] lg:max-h-none lg:aspect-auto rounded-lg overflow-hidden bg-black ring-1 ring-inset ring-slate-200 dark:ring-white/10 shadow-2xl mx-auto group cursor-pointer"
         onClick={() => {
           if (isMuted) unmute();
         }}
@@ -516,7 +516,7 @@ export function PremiereStage({
         <video
           ref={videoRef}
           src={mediaUrl}
-          className="h-full w-full object-contain bg-black" 
+          className="clip-inherit h-full w-full object-contain bg-black" 
           playsInline
           controls={false}
           disablePictureInPicture
@@ -568,7 +568,7 @@ export function PremiereStage({
 
         {/* Bottom-Left Presenter Badge */}
         {!hasEnded && (
-          <div className="pointer-events-none absolute bottom-3 left-3 z-20 flex items-center gap-2 rounded-xl border border-white/10 bg-black/70 px-3 py-1.5 text-xs text-slate-200 backdrop-blur-md shadow-lg">
+          <div className="pointer-events-none absolute bottom-2.5 left-2.5 z-20 flex items-center gap-2 rounded-md border border-white/10 bg-black/70 px-2.5 py-1.5 text-xs text-slate-200 backdrop-blur-md shadow-sm">
             <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
             <span className="font-semibold text-slate-100">{layout.presenterName || 'Host'}</span>
             <span className="rounded bg-brand-500/30 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-brand-300">
@@ -580,7 +580,7 @@ export function PremiereStage({
         {/* Post-Session Conclusion Screen */}
         {hasEnded && (
           <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-ink-950/95 px-6 text-center backdrop-blur-md animate-fade-in">
-            <div className="grid h-16 w-16 place-items-center rounded-2xl bg-brand-500/20 text-brand-400 border border-brand-500/30 mb-4 shadow-xl">
+            <div className="grid h-16 w-16 place-items-center rounded-lg bg-brand-500/20 text-brand-400 border border-brand-500/30 mb-4 shadow-xl">
               <svg viewBox="0 0 24 24" className="h-8 w-8" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
               </svg>

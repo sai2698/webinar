@@ -119,7 +119,11 @@ export function VideoTile({
   return (
     <div
       ref={rootRef}
-      className={`group relative overflow-hidden rounded-2xl border bg-white dark:bg-ink-900 shadow-sm transition-all duration-300 ${hasVideo ? 'border-sky-500/80 shadow-[0_0_0_1px_rgba(56,189,248,0.3)]' : speaking ? 'border-mint-500 dark:border-mint-400/60 shadow-[0_0_0_1px_rgba(34,197,94,0.4),0_0_40px_-10px_rgba(34,197,94,0.3)]' : 'border-slate-200 dark:border-white/10'} ${className}`}
+      className={`group relative overflow-hidden rounded-lg bg-white ring-1 ring-inset shadow-sm transition-all duration-300 dark:bg-ink-900 ${
+        speaking
+          ? 'ring-mint-500 dark:ring-mint-400/60 shadow-[0_0_0_1px_rgba(34,197,94,0.45)]'
+          : 'ring-slate-200 dark:ring-white/10'
+      } ${className}`}
     >
       {inView ? (
         <video
@@ -128,18 +132,18 @@ export function VideoTile({
           playsInline
           muted={muted || isLocal}
           style={mirrored ? { transform: 'scaleX(-1)' } : undefined}
-          className={`h-full w-full ${objectFitClass} ${
+          className={`clip-inherit h-full w-full ${objectFitClass} ${
             hasVideo ? 'opacity-100' : 'opacity-0'
           } transition-opacity duration-300`}
         />
       ) : (
         // Placeholder keeps the tile's box so the grid does not reflow when
         // the tile scrolls into view and the real video mounts.
-        <div className="h-full w-full bg-slate-100 dark:bg-ink-950" aria-hidden />
+        <div className="h-full w-full rounded-[inherit] bg-slate-100 dark:bg-ink-950" aria-hidden />
       )}
 
       {isScreen && hasVideo && (
-        <div className="pointer-events-none absolute left-3 top-3 flex items-center gap-1.5 rounded-full bg-brand-600/90 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-white shadow-lg backdrop-blur">
+        <div className="pointer-events-none absolute left-2.5 top-2.5 flex items-center gap-1.5 rounded-md bg-brand-600/90 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-white shadow-sm backdrop-blur">
           <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2.2">
             <rect x="3" y="4" width="18" height="12" rx="2" />
             <path d="M8 20h8M12 16v4" strokeLinecap="round" />
@@ -149,9 +153,17 @@ export function VideoTile({
       )}
 
       {!hasVideo && (
-        <div className="absolute inset-0 z-10 grid place-items-center bg-white dark:bg-gradient-to-br dark:from-ink-800 dark:to-ink-950 p-2">
+        /*
+         * `bg-gradient-to-br` only sets `background-image`; it does NOT clear a
+         * `background-color` set by another class. A bare `bg-white` therefore
+         * stays painted *underneath* the dark gradient and leaks through the
+         * anti-aliased pixels of the rounded corners — invisible at 1x, but a
+         * clear white fringe at mobile DPR (3x) and on fractional tile heights.
+         * Always pair the gradient with a dark `background-color` base.
+         */
+        <div className="absolute inset-0 z-10 grid place-items-center rounded-[inherit] bg-slate-100 dark:bg-ink-900 dark:bg-gradient-to-br dark:from-ink-800 dark:to-ink-950 p-2">
           <div className="flex flex-col items-center gap-1 sm:gap-2">
-            <div className="relative grid h-9 w-9 sm:h-14 sm:w-14 place-items-center rounded-full bg-brand-50 border border-brand-200 dark:border-none dark:bg-gradient-to-br dark:from-brand-500/40 dark:to-brand-800/30 text-xs sm:text-lg font-bold text-brand-600 dark:text-white dark:ring-1 dark:ring-white/10 shadow-sm">
+            <div className="relative grid h-9 w-9 sm:h-14 sm:w-14 place-items-center rounded-full bg-brand-50 border border-brand-200 dark:border-none dark:bg-brand-800 dark:bg-gradient-to-br dark:from-brand-500/40 dark:to-brand-800/30 text-xs sm:text-lg font-bold text-brand-600 dark:text-white dark:ring-1 dark:ring-white/10 shadow-sm">
               {initials || '?'}
               {speaking && (
                 <span className="absolute inset-0 animate-pulse-ring rounded-full border-2 border-mint-500 dark:border-mint-400/60" />
@@ -164,9 +176,13 @@ export function VideoTile({
         </div>
       )}
 
-      {/* Raised hand badge */}
+      {/* Raised hand badge — icon only, no label */}
       {handRaised && (
-        <div className="pointer-events-none absolute right-2 top-2 z-20 flex items-center gap-1 rounded-full bg-amber-400 text-amber-950 font-bold px-2 py-0.5 shadow-md border border-amber-300 animate-bounce">
+        <div
+          className="pointer-events-none absolute right-2 top-2 z-20 grid h-6 w-6 place-items-center rounded-full bg-amber-400 shadow-sm ring-1 ring-amber-300/70"
+          title="Hand raised"
+          aria-label="Hand raised"
+        >
           <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 fill-amber-900 stroke-amber-950" strokeWidth="1">
             <path
               d="M8 11V5.5a1.5 1.5 0 0 1 3 0V11m0 0V4.5a1.5 1.5 0 0 1 3 0V11m0 0V6.5a1.5 1.5 0 0 1 3 0V14a6 6 0 0 1-6 6h-1a6 6 0 0 1-6-6v-2.5a1.5 1.5 0 0 1 3 0V13"
@@ -174,12 +190,11 @@ export function VideoTile({
               strokeLinejoin="round"
             />
           </svg>
-          <span className="text-[10px] tracking-wide font-extrabold">Hand Raised</span>
         </div>
       )}
 
       {/* name plate pill with mic status */}
-      <div className="pointer-events-none absolute bottom-1.5 left-1.5 z-20 flex max-w-[calc(100%-12px)] items-center gap-1 rounded-md bg-white/95 dark:bg-black/75 border border-slate-200/80 dark:border-transparent px-1.5 py-0.5 shadow-sm backdrop-blur-sm">
+      <div className="pointer-events-none absolute bottom-1.5 left-1.5 z-20 flex max-w-[calc(100%-12px)] items-center gap-1 rounded bg-white/95 dark:bg-black/70 border border-slate-200/80 dark:border-white/10 px-1.5 py-0.5 shadow-sm backdrop-blur-sm">
         {!micOn ? (
           <span className="shrink-0 text-red-500 dark:text-red-400" title="Muted">
             <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2.2">
@@ -198,15 +213,10 @@ export function VideoTile({
             </svg>
           </span>
         )}
-        <span className="truncate text-[10px] sm:text-xs font-semibold text-slate-800 dark:text-white drop-shadow-sm">
+        <span className="truncate text-[10px] font-medium text-slate-800 dark:text-white drop-shadow-sm">
           {name}
           {isLocal && <span className="ml-1 text-slate-500 dark:text-white/60">(you)</span>}
         </span>
-        {role && role !== 'PARTICIPANT' && (
-          <span className="shrink-0 rounded bg-brand-500/90 px-1 py-0.2 text-[8px] font-bold uppercase tracking-wide text-white">
-            {role === 'ADMIN' ? 'Admin' : role === 'HOST' ? 'Host' : 'Mod'}
-          </span>
-        )}
       </div>
     </div>
   );

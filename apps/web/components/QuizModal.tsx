@@ -74,7 +74,7 @@ export function QuizModal({ socket }: QuizModalProps) {
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-ink-950/80 p-4 backdrop-blur-md">
-      <div className="w-full max-w-lg animate-fade-up overflow-hidden rounded-2xl border border-white/10 bg-ink-850 shadow-2xl">
+      <div className="w-full max-w-lg animate-fade-up overflow-hidden rounded-lg border border-white/10 bg-ink-850 shadow-2xl">
         {/* timer bar */}
         <div className="h-1 w-full bg-white/5">
           <div
@@ -87,15 +87,15 @@ export function QuizModal({ socket }: QuizModalProps) {
 
         <div className="p-6">
           <div className="mb-4 flex items-center justify-between">
-            <span className="chip border-brand-400/30 bg-brand-500/15 text-brand-200">
+            <span className="chip border-brand-400/30 bg-brand-500/15 text-brand-700 dark:text-brand-200">
               {closed ? 'Quiz closed' : 'Live quiz'}
             </span>
-            <span className="font-mono text-sm font-bold tabular-nums text-slate-300">
+            <span className="font-mono text-sm font-bold tabular-nums text-slate-600 dark:text-slate-300">
               {closed ? '' : `${remaining}s`}
             </span>
           </div>
 
-          <h2 className="text-lg font-semibold leading-snug text-white">{shown.question}</h2>
+          <h2 className="text-lg font-semibold leading-snug text-slate-900 dark:text-white">{shown.question}</h2>
 
           <div className="mt-5 space-y-2">
             {shown.options.map((opt) => {
@@ -115,17 +115,17 @@ export function QuizModal({ socket }: QuizModalProps) {
                   key={opt.id}
                   onClick={() => submit(opt.id)}
                   disabled={submitted || closed || remaining === 0}
-                  className={`flex w-full items-center gap-3 rounded-xl border px-4 py-3 text-left transition-all disabled:cursor-default ${cls}`}
+                  className={`flex w-full items-center gap-3 rounded-md border px-4 py-3 text-left transition-all disabled:cursor-default ${cls}`}
                 >
                   <span
                     className={`grid h-6 w-6 shrink-0 place-items-center rounded-full text-[11px] font-bold ${
-                      isSelected ? 'bg-brand-500 text-white' : 'bg-white/10 text-slate-400'
+                      isSelected ? 'bg-brand-500 text-white' : 'bg-white/10 text-slate-500 dark:text-slate-400'
                     }`}
                   >
                     {opt.id.toUpperCase()}
                   </span>
-                  <span className="text-sm text-slate-200">{opt.text}</span>
-                  {showResult && isCorrect && <span className="ml-auto text-mint-400">✓</span>}
+                  <span className="text-sm text-slate-800 dark:text-slate-200">{opt.text}</span>
+                  {showResult && isCorrect && <span className="ml-auto text-mint-600 dark:text-mint-400">✓</span>}
                 </button>
               );
             })}
@@ -133,10 +133,10 @@ export function QuizModal({ socket }: QuizModalProps) {
 
           {feedback && (
             <div
-              className={`mt-4 rounded-xl px-4 py-3 text-sm font-medium ${
+              className={`mt-4 rounded-md px-4 py-3 text-sm font-medium ${
                 feedback.correct
-                  ? 'bg-mint-500/15 text-mint-400'
-                  : 'bg-red-500/15 text-red-400'
+                  ? 'bg-mint-500/15 text-mint-700 dark:text-mint-400'
+                  : 'bg-red-500/15 text-red-600 dark:text-red-400'
               }`}
             >
               {feedback.correct ? 'Correct! 🎉' : 'Not quite — hang tight for the answer.'}
@@ -144,9 +144,9 @@ export function QuizModal({ socket }: QuizModalProps) {
           )}
 
           {results && (
-            <div className="mt-5 rounded-xl border border-white/10 bg-white/[0.03] p-4">
+            <div className="mt-5 rounded-md border border-white/10 bg-white/[0.03] p-4">
               <div className="mb-3 flex items-center justify-between text-xs">
-                <span className="font-semibold text-slate-300">Live results</span>
+                <span className="font-semibold text-slate-700 dark:text-slate-300">Live results</span>
                 <span className="text-slate-500">
                   {results.correctCount}/{results.totalAnswers} correct
                 </span>
@@ -187,7 +187,7 @@ export function QuizModal({ socket }: QuizModalProps) {
                     {results.topScorers.map((s, i) => (
                       <li
                         key={s.userId}
-                        className="flex items-center gap-2 text-xs text-slate-300"
+                        className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300"
                       >
                         <span className="w-4 text-[10px] font-bold text-slate-500">
                           {i + 1}

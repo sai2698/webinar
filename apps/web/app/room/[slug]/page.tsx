@@ -302,14 +302,14 @@ export default function RoomPage() {
   return (
     <main className="fixed inset-0 flex h-[100dvh] max-h-[100dvh] w-full flex-col overflow-hidden overscroll-none bg-ink-950 select-none">
       {/* ── top bar ─────────────────────────────────────── */}
-      <header className="flex shrink-0 items-center justify-between gap-2 border-b border-white/10 bg-ink-900/80 px-3 py-2 sm:px-4 sm:py-2.5 backdrop-blur-xl">
+      <header className="flex shrink-0 items-center justify-between gap-2 border-b border-white/[0.07] bg-ink-900/70 px-3 py-2 sm:px-4 sm:py-2.5 backdrop-blur-xl">
         <div className="flex min-w-0 items-center gap-2 sm:gap-3">
-          {/* Red leave button matching mobile sample image */}
+          {/* Leave button — mobile only; desktop uses the bottom ControlsBar */}
           <button
             onClick={leave}
             title="Leave room"
             aria-label="Leave room"
-            className="grid h-8 w-8 place-items-center rounded-xl bg-red-500/20 text-red-400 hover:bg-red-500/30 active:scale-95 transition"
+            className="grid h-8 w-8 place-items-center rounded-md border border-red-500/25 bg-red-500/10 text-red-400 transition hover:bg-red-500/20 hover:text-red-300 active:scale-95 lg:hidden"
           >
             <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.2">
               <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" strokeLinecap="round" strokeLinejoin="round" />
@@ -318,8 +318,9 @@ export default function RoomPage() {
           <div className="hidden sm:block">
             <Logo href="/" />
           </div>
+          <div className="hidden h-5 w-px bg-white/10 sm:block" />
           <div className="min-w-0 flex-1">
-            <p className="truncate text-xs sm:text-sm font-semibold text-slate-200">
+            <p className="truncate text-xs sm:text-[13px] font-semibold tracking-tight text-slate-900 dark:text-slate-100">
               {webinarTitle || title || 'Live webinar'}
             </p>
           </div>
@@ -327,30 +328,30 @@ export default function RoomPage() {
 
         <div className="flex items-center gap-1.5 sm:gap-2">
           {notStarted ? (
-            <span className="chip border-white/15 bg-white/5 py-1 text-[10px] text-slate-400">
+            <span className="chip border-white/10 bg-white/[0.04] py-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
               <span className="h-1.5 w-1.5 rounded-full bg-slate-500" />
-              WAITING
+              Waiting
             </span>
           ) : (
-            <span className="chip border-red-500/30 bg-red-500/15 py-1 text-[10px] text-red-300">
+            <span className="chip border-red-500/25 bg-red-500/10 py-1 text-[10px] font-semibold uppercase tracking-wider text-red-300">
               <span className="relative flex h-1.5 w-1.5">
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400" />
                 <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-red-400" />
               </span>
-              LIVE
+              Live
             </span>
           )}
           {recording && (
             <span
-              className="chip border-amber-500/30 bg-amber-500/15 py-1 text-[10px] text-amber-300"
+              className="chip border-amber-500/25 bg-amber-500/10 py-1 text-[10px] font-semibold uppercase tracking-wider text-amber-300"
               title="This session is being recorded"
             >
               <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-400" />
-              REC
+              Rec
             </span>
           )}
           {(showLiveUsersCount || isStaff) && (
-            <span className="chip py-1 text-[10px]">
+            <span className="chip py-1 text-[10px] font-semibold tabular-nums">
               <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2">
                 <circle cx="12" cy="8.5" r="3.5" />
                 <path d="M5 19.5c0-3.3 3.1-5.5 7-5.5s7 2.2 7 5.5" strokeLinecap="round" />
@@ -394,7 +395,7 @@ export default function RoomPage() {
           </div>
 
           {/* Desktop Controls */}
-          <div className="hidden lg:block shrink-0 px-3 pb-3 pt-1">
+          <div className="hidden lg:block shrink-0 px-3 pb-3 pt-1.5">
             <ControlsBar
               socket={socket}
               onToggleMic={toggleMic}
@@ -419,65 +420,34 @@ export default function RoomPage() {
 
 
         {/* Chat / Interaction column: Bottom on mobile, Right sidebar on desktop */}
-        <aside className="flex flex-1 lg:flex-none lg:w-[340px] shrink-0 flex-col border-t lg:border-t-0 lg:border-l border-white/10 bg-ink-950/70 lg:bg-ink-900/50 min-h-0 overflow-hidden">
+        <aside className="flex flex-1 lg:flex-none lg:w-[340px] shrink-0 flex-col border-t lg:border-t-0 lg:border-l border-white/[0.07] bg-ink-950/60 lg:bg-ink-900/40 min-h-0 overflow-hidden">
           {(canSeePeople || canSeeQa || canSeePolls) && (
-          <div className="flex shrink-0 items-stretch border-b border-white/10 bg-ink-900/60">
-            <button
-              onClick={() => setTab('chat')}
-              className={`flex-1 px-4 py-2 text-xs font-semibold transition ${
-                activeTab === 'chat'
-                  ? 'border-b-2 border-brand-400 text-brand-500 dark:text-white font-bold'
-                  : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
-              }`}
-            >
-              Chat
-            </button>
-            {canSeePeople && (
-              <button
-                onClick={() => setTab('people')}
-                className={`flex-1 px-4 py-2 text-xs font-semibold transition ${
-                  activeTab === 'people'
-                    ? 'border-b-2 border-brand-400 text-brand-500 dark:text-white font-bold'
-                    : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
-                }`}
-              >
-                People
-                {hands.length > 0 && (
-                  <span className="ml-1.5 rounded-full bg-accent-500/25 px-1.5 py-px text-[9px] font-bold text-accent-400">
-                    {hands.length}
-                  </span>
-                )}
-              </button>
-            )}
-            {canSeeQa && (
-              <button
-                onClick={() => setTab('qa')}
-                className={`flex-1 px-3 py-2 text-xs font-semibold transition ${
-                  activeTab === 'qa'
-                    ? 'border-b-2 border-brand-400 text-brand-500 dark:text-white font-bold'
-                    : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
-                }`}
-              >
-                Q&amp;A
-                {openQuestions > 0 && (
-                  <span className="ml-1.5 rounded-full bg-brand-500/25 px-1.5 py-px text-[9px] font-bold text-brand-300">
-                    {openQuestions}
-                  </span>
-                )}
-              </button>
-            )}
-            {canSeePolls && (
-              <button
-                onClick={() => setTab('polls')}
-                className={`flex-1 px-3 py-2 text-xs font-semibold transition ${
-                  activeTab === 'polls'
-                    ? 'border-b-2 border-brand-400 text-brand-500 dark:text-white font-bold'
-                    : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
-                }`}
-              >
-                Polls
-              </button>
-            )}
+          <div className="flex shrink-0 items-center gap-1 border-b border-white/[0.07] bg-ink-900/50 p-1.5">
+            {([
+              { id: 'chat' as Tab, label: 'Chat', show: true, badge: 0 },
+              { id: 'people' as Tab, label: 'People', show: canSeePeople, badge: hands.length },
+              { id: 'qa' as Tab, label: 'Q&A', show: canSeeQa, badge: openQuestions },
+              { id: 'polls' as Tab, label: 'Polls', show: canSeePolls, badge: 0 },
+            ])
+              .filter((t) => t.show)
+              .map((t) => (
+                <button
+                  key={t.id}
+                  onClick={() => setTab(t.id)}
+                  className={`flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-[11px] font-semibold tracking-tight transition ${
+                    activeTab === t.id
+                      ? 'bg-white/[0.09] text-slate-900 shadow-sm ring-1 ring-white/10 dark:text-white'
+                      : 'text-slate-500 hover:bg-white/[0.04] hover:text-slate-700 dark:hover:text-slate-300'
+                  }`}
+                >
+                  {t.label}
+                  {t.badge > 0 && (
+                    <span className="rounded bg-brand-500/25 px-1 py-px text-[9px] font-bold tabular-nums text-brand-600 dark:text-brand-300">
+                      {t.badge}
+                    </span>
+                  )}
+                </button>
+              ))}
           </div>
           )}
 
@@ -516,7 +486,7 @@ export default function RoomPage() {
       />
 
       {toast && (
-        <div className="fixed bottom-24 left-1/2 z-50 -translate-x-1/2 animate-fade-up rounded-xl border border-white/10 bg-ink-800 px-4 py-2.5 text-xs font-medium text-slate-200 shadow-xl">
+        <div className="fixed bottom-24 left-1/2 z-50 -translate-x-1/2 animate-fade-up rounded-lg border border-white/10 bg-ink-800/95 px-4 py-2.5 text-xs font-medium text-slate-800 shadow-xl backdrop-blur-xl dark:text-slate-200">
           {toast}
         </div>
       )}

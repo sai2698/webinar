@@ -40,7 +40,7 @@ export function WaitingRoom({ title, startsAt }: WaitingRoomProps) {
   const isStaff = role === 'HOST' || role === 'ADMIN' || role === 'MODERATOR';
 
   return (
-    <div className="grid h-full place-items-center rounded-2xl border border-slate-200 dark:border-white/10 bg-white dark:bg-ink-900/60 px-6 shadow-sm">
+    <div className="grid h-full place-items-center rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-ink-900/60 px-6 shadow-sm">
       <div className="w-full max-w-md text-center">
         {/* A slow pulse rather than a spinner: nothing is loading, we are
             waiting on a person. A spinner would imply the page is stuck. */}
@@ -60,7 +60,7 @@ export function WaitingRoom({ title, startsAt }: WaitingRoomProps) {
           </span>
         </div>
 
-        <h2 className="text-lg font-semibold text-white">The webinar hasn&apos;t started yet</h2>
+        <h2 className="text-lg font-semibold text-slate-900 dark:text-white">The webinar hasn&apos;t started yet</h2>
         <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
           {isStaff
             ? 'You are in the room. Start the session when you are ready.'
@@ -76,7 +76,7 @@ export function WaitingRoom({ title, startsAt }: WaitingRoomProps) {
         {remaining !== null && (
           <div className="mt-5 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5">
             <span className="text-[10px] uppercase tracking-wide text-slate-500">Starts in</span>
-            <span className="font-mono text-sm font-semibold text-white">
+            <span className="font-mono text-sm font-semibold text-slate-900 dark:text-white">
               {formatCountdown(remaining)}
             </span>
           </div>

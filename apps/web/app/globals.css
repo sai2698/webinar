@@ -60,8 +60,8 @@ body {
 
 /* Scrollbars */
 ::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 6px;
+  height: 6px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
@@ -71,6 +71,9 @@ body {
 }
 ::-webkit-scrollbar-thumb:hover {
   @apply bg-white/20;
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
 }
 
 .theme-light ::-webkit-scrollbar-thumb {
@@ -165,21 +168,28 @@ body {
   .theme-light .bg-ink-900\/80,
   .theme-light .bg-ink-900\/70,
   .theme-light .bg-ink-900\/60,
-  .theme-light .bg-ink-900\/50 {
+  .theme-light .bg-ink-900\/50,
+  .theme-light .bg-ink-900\/40 {
     background-color: rgb(var(--panel) / 0.95) !important;
   }
 
+  .theme-light .bg-ink-950\/95,
+  .theme-light .bg-ink-950\/80,
   .theme-light .bg-ink-950\/70,
-  .theme-light .bg-ink-950\/80 {
+  .theme-light .bg-ink-950\/60,
+  .theme-light .bg-ink-950\/40 {
     background-color: rgb(var(--surface) / 0.85) !important;
   }
 
   .theme-light .bg-ink-850,
-  .theme-light .bg-ink-850\/80 {
+  .theme-light .bg-ink-850\/95,
+  .theme-light .bg-ink-850\/80,
+  .theme-light .bg-ink-850\/70 {
     background-color: rgb(var(--panel)) !important;
   }
 
-  .theme-light .bg-ink-800 {
+  .theme-light .bg-ink-800,
+  .theme-light .bg-ink-800\/95 {
     background-color: rgb(var(--panel-2)) !important;
   }
 
@@ -200,7 +210,12 @@ body {
   .theme-light .border-white\/5,
   .theme-light .border-white\/10,
   .theme-light .border-white\/15,
-  .theme-light .border-white\/20 {
+  .theme-light .border-white\/20,
+  .theme-light .border-white\/\[0\.06\],
+  .theme-light .border-white\/\[0\.07\],
+  .theme-light .border-white\/\[0\.08\],
+  .theme-light .border-white\/\[0\.12\],
+  .theme-light .border-white\/\[0\.14\] {
     border-color: rgb(var(--line)) !important;
   }
 
@@ -220,6 +235,7 @@ body {
   .theme-light .bg-white\/5,
   .theme-light .bg-white\/10,
   .theme-light .bg-white\/15,
+  .theme-light .bg-white\/\[0\.02\],
   .theme-light .bg-white\/\[0\.03\],
   .theme-light .bg-white\/\[0\.04\],
   .theme-light .bg-white\/\[0\.05\],
@@ -230,6 +246,7 @@ body {
 
   .theme-light .bg-white\/15,
   .theme-light .bg-white\/20,
+  .theme-light .bg-white\/\[0\.09\],
   .theme-light .bg-white\/\[0\.12\] {
     background-color: rgb(var(--line)) !important;
   }
@@ -282,12 +299,69 @@ body {
 }
 
 @layer utilities {
+  /*
+   * A <video> element is promoted to its own compositing layer, so the parent's
+   * `overflow: hidden` + `border-radius` does not clip it in Chromium — the
+   * square corners of the frame bleed past the rounded tile (bright video reads
+   * as white corners on dark, dark video as black corners on light).
+   * Rounding the media element itself fixes the bleed.
+   *
+   * Tiles draw their outline with an inset ring rather than a border, so the
+   * media box is flush with the tile box and `inherit` produces an arc that is
+   * exactly concentric with the tile's own.
+   *
+   * The mask is a *solid* white gradient on purpose. The older
+   * `-webkit-radial-gradient(white, black)` form is a radial fade (opaque at the
+   * centre, transparent at the edges), which lightens the corner pixels and
+   * reads as a white fringe on dark tiles. A flat mask still forces the media
+   * element onto its own layer — which is the whole point — without tinting.
+   */
+  .clip-inherit {
+    border-radius: inherit;
+    overflow: hidden;
+    -webkit-mask-image: -webkit-radial-gradient(white, white);
+    mask-image: linear-gradient(#fff, #fff);
+  }
+
   .no-scrollbar::-webkit-scrollbar {
     display: none;
   }
   .no-scrollbar {
     -ms-overflow-style: none;
     scrollbar-width: none;
+  }
+
+  /*
+   * Compact scrollbar for dense panels (host tools, chat, filmstrips).
+   * Chromium honours the ::-webkit-scrollbar rules; Firefox uses the
+   * standard `scrollbar-width` / `scrollbar-color` properties.
+   */
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(255 255 255 / 0.14) transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    border-radius: 9999px;
+    background: rgb(255 255 255 / 0.14);
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background: rgb(255 255 255 / 0.26);
+  }
+  .theme-light .scrollbar-thin {
+    scrollbar-color: rgb(15 18 32 / 0.2) transparent;
+  }
+  .theme-light .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: rgb(15 18 32 / 0.2);
+  }
+  .theme-light .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background: rgb(15 18 32 / 0.32);
   }
   .animate-delay-100 {
     animation-delay: 100ms;

@@ -20,6 +20,7 @@ export function ParticipantList({ socket }: ParticipantListProps) {
 
   const [query, setQuery] = useState('');
   const [notice, setNotice] = useState<string | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [contextMenu, setContextMenu] = useState<{
     x: number;
     y: number;
@@ -175,7 +176,7 @@ export function ParticipantList({ socket }: ParticipantListProps) {
             className={`grid h-7 w-7 place-items-center rounded-full text-[10px] font-bold ${
               peer.role !== 'PARTICIPANT'
                 ? 'bg-gradient-to-br from-brand-400 to-brand-700 text-white'
-                : 'bg-white/10 text-slate-300'
+                : 'bg-white/10 text-slate-600 dark:text-slate-300'
             }`}
           >
             {peer.name.slice(0, 2).toUpperCase()}
@@ -187,7 +188,7 @@ export function ParticipantList({ socket }: ParticipantListProps) {
 
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
-            <span className="truncate text-xs font-medium text-slate-200">
+            <span className="truncate text-xs font-medium text-slate-800 dark:text-slate-200">
               {peer.name}
               {isSelf && <span className="ml-1 text-slate-500">(you)</span>}
             </span>
@@ -236,7 +237,7 @@ export function ParticipantList({ socket }: ParticipantListProps) {
                 <button
                   type="button"
                   onClick={() => deny(peer.userId)}
-                  className="rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-semibold text-slate-300 hover:bg-white/20"
+                  className="rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600 hover:bg-white/20 dark:text-slate-300"
                 >
                   Deny
                 </button>
@@ -248,7 +249,7 @@ export function ParticipantList({ socket }: ParticipantListProps) {
                 type="button"
                 onClick={() => requestMedia(peer.userId, 'mic')}
                 title="Ask this participant to unmute"
-                className="rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-semibold text-slate-300 hover:bg-white/20"
+                className="rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600 hover:bg-white/20 dark:text-slate-300"
               >
                 Ask mic
               </button>
@@ -268,7 +269,7 @@ export function ParticipantList({ socket }: ParticipantListProps) {
                 type="button"
                 onClick={() => requestMedia(peer.userId, 'cam')}
                 title="Ask this participant to turn their camera on"
-                className="rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-semibold text-slate-300 hover:bg-white/20"
+                className="rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600 hover:bg-white/20 dark:text-slate-300"
               >
                 Ask cam
               </button>
@@ -295,7 +296,7 @@ export function ParticipantList({ socket }: ParticipantListProps) {
                 });
               }}
               title="More options (Make Co-host, remove, etc.)"
-              className="rounded bg-white/10 px-2 py-0.5 text-[11px] font-bold text-slate-300 hover:bg-white/20"
+              className="rounded bg-white/10 px-2 py-0.5 text-[11px] font-bold text-slate-600 hover:bg-white/20 dark:text-slate-300"
             >
               •••
             </button>
@@ -307,11 +308,32 @@ export function ParticipantList({ socket }: ParticipantListProps) {
 
   return (
     <div className="flex h-full flex-col relative">
-      <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
+      <div className="flex items-center justify-between gap-2 border-b border-white/10 px-4 py-3">
         <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Participants</h3>
-        <span className="chip py-0.5 text-[10px]">
-          {query ? `${list.length}/${total}` : total}
-        </span>
+        <div className="flex items-center gap-1.5">
+          <span className="chip py-0.5 text-[10px]">
+            {query ? `${list.length}/${total}` : total}
+          </span>
+          {isStaff && (
+            <button
+              type="button"
+              onClick={() => setSettingsOpen((v) => !v)}
+              aria-expanded={settingsOpen}
+              aria-label={settingsOpen ? 'Hide room settings' : 'Show room settings'}
+              title={settingsOpen ? 'Hide room settings' : 'Show room settings'}
+              className={`grid h-6 w-6 shrink-0 place-items-center rounded-md border transition active:scale-[0.96] ${
+                settingsOpen
+                  ? 'border-brand-500/40 bg-brand-500/15 text-brand-600 dark:text-brand-300'
+                  : 'border-white/10 bg-white/[0.04] text-slate-500 hover:bg-white/[0.09] hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
+              }`}
+            >
+              <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="3" />
+                <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* ── search ─────────────────────────────────────── */}
@@ -332,13 +354,13 @@ export function ParticipantList({ socket }: ParticipantListProps) {
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search participants…"
             aria-label="Search participants"
-            className="w-full rounded-lg border border-white/10 bg-white/[0.04] py-1.5 pl-8 pr-7 text-xs text-slate-200 placeholder:text-slate-600 focus:border-brand-400/50 focus:outline-none focus:ring-1 focus:ring-brand-400/30"
+            className="w-full rounded-lg border border-white/10 bg-white/[0.04] py-1.5 pl-8 pr-7 text-xs text-slate-800 placeholder:text-slate-400 focus:border-brand-400/50 focus:outline-none focus:ring-1 focus:ring-brand-400/30 dark:text-slate-200 dark:placeholder:text-slate-600"
           />
           {query && (
             <button
               onClick={() => setQuery('')}
               aria-label="Clear search"
-              className="absolute right-1.5 top-1/2 grid h-5 w-5 -translate-y-1/2 place-items-center rounded text-slate-500 hover:bg-white/10 hover:text-slate-300"
+              className="absolute right-1.5 top-1/2 grid h-5 w-5 -translate-y-1/2 place-items-center rounded text-slate-500 hover:bg-white/10 hover:text-slate-800 dark:hover:text-slate-300"
             >
               <svg
                 viewBox="0 0 24 24"
@@ -360,10 +382,10 @@ export function ParticipantList({ socket }: ParticipantListProps) {
         </p>
       )}
 
-      <div className="flex-1 space-y-4 overflow-y-auto px-2 py-3">
+      <div className="scrollbar-thin flex-1 space-y-4 overflow-y-auto px-2 py-3">
         {/* ── Host Controls card ────────────────────────── */}
-        {isStaff && (
-          <div className="space-y-2.5 rounded-xl border border-white/10 bg-white/[0.04] p-3">
+        {isStaff && settingsOpen && (
+          <div className="animate-fade-in space-y-2.5 rounded-lg border border-white/10 bg-white/[0.04] p-3">
             <div className="flex items-center justify-between">
               <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
                 Host Room Settings
@@ -482,20 +504,20 @@ export function ParticipantList({ socket }: ParticipantListProps) {
                   <svg viewBox="0 0 24 24" className="h-4 w-4 fill-amber-400 stroke-amber-600 shrink-0" strokeWidth="1.5">
                     <path d="M8 11V5.5a1.5 1.5 0 0 1 3 0V11m0 0V4.5a1.5 1.5 0 0 1 3 0V11m0 0V6.5a1.5 1.5 0 0 1 3 0V14a6 6 0 0 1-6 6h-1a6 6 0 0 1-6-6v-2.5a1.5 1.5 0 0 1 3 0V13" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
-                  <span className="min-w-0 flex-1 truncate text-xs font-medium text-slate-200">
+                  <span className="min-w-0 flex-1 truncate text-xs font-medium text-slate-800 dark:text-slate-200">
                     {h.name}
                   </span>
                   <button
                     type="button"
                     onClick={() => approve(h.userId)}
-                    className="rounded bg-mint-500/25 px-2 py-0.5 text-[10px] font-bold text-mint-400 hover:bg-mint-500/40"
+                    className="rounded bg-mint-500/25 px-2 py-0.5 text-[10px] font-bold text-mint-600 hover:bg-mint-500/40 dark:text-mint-400"
                   >
                     Allow
                   </button>
                   <button
                     type="button"
                     onClick={() => deny(h.userId)}
-                    className="rounded bg-white/10 px-2 py-0.5 text-[10px] font-bold text-slate-300 hover:bg-white/20"
+                    className="rounded bg-white/10 px-2 py-0.5 text-[10px] font-bold text-slate-600 hover:bg-white/20 dark:text-slate-300"
                   >
                     Deny
                   </button>
@@ -566,7 +588,7 @@ export function ParticipantList({ socket }: ParticipantListProps) {
             onMouseDown={(e) => e.stopPropagation()}
             onPointerDown={(e) => e.stopPropagation()}
             onContextMenu={(e) => e.preventDefault()}
-            className="fixed z-50 w-56 rounded-xl border border-white/15 bg-[#0f172a]/95 p-1.5 shadow-2xl backdrop-blur-md"
+            className="fixed z-50 w-56 rounded-lg border border-white/15 bg-[#0f172a]/95 p-1.5 shadow-2xl backdrop-blur-md"
           >
             <div className="border-b border-white/10 px-2.5 py-1.5 mb-1">
               <p className="truncate text-xs font-semibold text-slate-900 dark:text-white">{targetPeer.name}</p>
@@ -626,7 +648,7 @@ export function ParticipantList({ socket }: ParticipantListProps) {
                       mute(targetPeer.userId);
                       setContextMenu(null);
                     }}
-                    className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 transition hover:bg-white/10"
+                    className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 transition hover:bg-white/10 dark:text-slate-200"
                   >
                     <span className="text-sm">🔇</span>
                     <span>Mute Microphone</span>
@@ -639,7 +661,7 @@ export function ParticipantList({ socket }: ParticipantListProps) {
                       requestMedia(targetPeer.userId, 'mic');
                       setContextMenu(null);
                     }}
-                    className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 transition hover:bg-white/10"
+                    className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 transition hover:bg-white/10 dark:text-slate-200"
                   >
                     <span className="text-sm">🎙️</span>
                     <span>Ask to Unmute</span>
@@ -654,7 +676,7 @@ export function ParticipantList({ socket }: ParticipantListProps) {
                       stopVideo(targetPeer.userId);
                       setContextMenu(null);
                     }}
-                    className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 transition hover:bg-white/10"
+                    className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 transition hover:bg-white/10 dark:text-slate-200"
                   >
                     <span className="text-sm">🚫</span>
                     <span>Stop Video</span>
@@ -667,7 +689,7 @@ export function ParticipantList({ socket }: ParticipantListProps) {
                       requestMedia(targetPeer.userId, 'cam');
                       setContextMenu(null);
                     }}
-                    className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 transition hover:bg-white/10"
+                    className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 transition hover:bg-white/10 dark:text-slate-200"
                   >
                     <span className="text-sm">📹</span>
                     <span>Ask to Start Video</span>
@@ -684,7 +706,7 @@ export function ParticipantList({ socket }: ParticipantListProps) {
                   className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs transition ${
                     targetPeer.canShareScreen
                       ? 'text-amber-300 hover:bg-white/10'
-                      : 'text-slate-200 hover:bg-white/10'
+                      : 'text-slate-800 hover:bg-white/10 dark:text-slate-200'
                   }`}
                 >
                   <span className="text-sm">🖥️</span>

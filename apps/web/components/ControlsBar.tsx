@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useRoomStore } from '@/store/roomStore';
 import { useFullscreen, useMediaDevices } from '@/lib/useRoomUi';
 import type { AppSocket } from '@/lib/socket';
@@ -41,6 +42,7 @@ function IconButton({
   disabled,
   compact,
   className = '',
+  buttonRef,
   children,
 }: {
   active?: boolean;
@@ -50,25 +52,27 @@ function IconButton({
   disabled?: boolean;
   compact?: boolean;
   className?: string;
+  buttonRef?: React.Ref<HTMLButtonElement>;
   children: React.ReactNode;
 }) {
   return (
     <button
+      ref={buttonRef}
       type="button"
       onClick={onClick}
       disabled={disabled}
       title={label}
       aria-label={label}
-      className={`group relative grid ${compact ? 'h-8 w-8 sm:h-9 sm:w-9' : 'h-11 w-11'} place-items-center rounded-full border transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-40 ${
+      className={`group relative grid ${compact ? 'h-8 w-8 sm:h-9 sm:w-9' : 'h-10 w-10'} place-items-center rounded-lg border transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-40 ${
         danger
-          ? 'border-red-500/40 bg-red-500/90 text-white hover:bg-red-500'
+          ? 'border-red-500/30 bg-red-500/90 text-white hover:bg-red-500'
           : active
-            ? 'border-slate-300 dark:border-white/20 bg-slate-200 dark:bg-white/15 text-slate-900 dark:text-white hover:bg-slate-300 dark:hover:bg-white/25'
-            : 'border-slate-200 dark:border-white/10 bg-white dark:bg-white/[0.06] text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/[0.12] hover:text-slate-900 dark:hover:text-white shadow-sm'
+            ? 'border-slate-300 bg-slate-200 text-slate-900 hover:bg-slate-300 dark:border-white/20 dark:bg-white/15 dark:text-white dark:hover:bg-white/25'
+            : 'border-slate-200 bg-slate-50 text-slate-600 shadow-sm hover:bg-slate-100 hover:text-slate-900 dark:border-white/10 dark:bg-white/[0.06] dark:text-slate-400 dark:hover:bg-white/[0.12] dark:hover:text-white'
       } ${className}`}
     >
       {children}
-      <span className="pointer-events-none absolute -top-9 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md bg-ink-800 px-2 py-1 text-[10px] font-medium text-slate-200 opacity-0 shadow-lg ring-1 ring-white/10 transition group-hover:opacity-100">
+      <span className="pointer-events-none absolute -top-9 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md bg-ink-800 px-2 py-1 text-[10px] font-medium text-slate-200 opacity-0 shadow-lg ring-1 ring-white/10 transition group-hover:opacity-100 dark:bg-ink-800">
         {label}
       </span>
     </button>
@@ -145,12 +149,51 @@ export function ControlsBar({
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [mediaOpen, setMediaOpen] = useState(false);
   const settingsRef = useRef<HTMLDivElement>(null);
+  const settingsBtnRef = useRef<HTMLButtonElement>(null);
+  const settingsPopRef = useRef<HTMLDivElement>(null);
+  const mediaBtnRef = useRef<HTMLButtonElement>(null);
+
+  /**
+   * Both popovers are portalled to `document.body` and positioned from their
+   * trigger's rect. Every ancestor between this bar and the page root clips
+   * overflow, so an absolutely-positioned child would be cut off behind the
+   * video tile instead of floating above it.
+   */
+  const [popPos, setPopPos] = useState<{ left: number; bottom: number } | null>(null);
+
+  useLayoutEffect(() => {
+    if (!settingsOpen) return;
+    function update() {
+      const el = settingsBtnRef.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      const width = 264;
+      // A zero-size rect means the trigger is hidden (the bar is `hidden` below
+      // `lg`); fall back to a centred popover instead of anchoring to 0,0.
+      const anchored = r.width > 0 && r.height > 0;
+      const left = anchored
+        ? Math.max(8, Math.min(r.left + r.width / 2 - width / 2, window.innerWidth - width - 8))
+        : Math.max(8, window.innerWidth / 2 - width / 2);
+      const bottom = anchored ? Math.max(16, window.innerHeight - r.top + 10) : 16;
+      setPopPos({ left, bottom });
+    }
+    update();
+    window.addEventListener('resize', update);
+    window.addEventListener('scroll', update, true);
+    return () => {
+      window.removeEventListener('resize', update);
+      window.removeEventListener('scroll', update, true);
+    };
+  }, [settingsOpen]);
 
   // Close the device popover on outside click or Escape.
   useEffect(() => {
     if (!settingsOpen) return;
     function onDown(e: MouseEvent) {
-      if (!settingsRef.current?.contains(e.target as Node)) setSettingsOpen(false);
+      const target = e.target as Node;
+      if (settingsRef.current?.contains(target)) return;
+      if (settingsPopRef.current?.contains(target)) return;
+      setSettingsOpen(false);
     }
     function onKey(e: KeyboardEvent) {
       if (e.key === 'Escape') setSettingsOpen(false);
@@ -178,9 +221,9 @@ export function ControlsBar({
 
   return (
     <div
-      className={`relative flex items-center justify-center gap-1.5 sm:gap-2 rounded-2xl border border-white/10 bg-ink-850/80 ${
-        compact ? 'px-2 py-1.5' : 'px-3 py-2.5'
-      } backdrop-blur-xl ${className ?? ''}`}
+      className={`relative flex items-center justify-center gap-1.5 sm:gap-2 rounded-lg border border-white/[0.08] bg-ink-850/70 ${
+        compact ? 'px-2 py-1.5' : 'px-3 py-2'
+      } backdrop-blur-xl shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset] ${className ?? ''}`}
     >
       <IconButton compact={compact}
         label={micOn ? 'Mute' : 'Unmute'}
@@ -263,7 +306,7 @@ export function ControlsBar({
       )}
 
       {isStaff && hands.length > 0 && (
-        <span className="ml-1 rounded-full bg-accent-500/20 px-2.5 py-1 text-[11px] font-semibold text-accent-400">
+        <span className="ml-1 rounded-md bg-accent-500/15 px-2 py-1 text-[11px] font-semibold text-accent-600 dark:text-accent-400">
           {hands.length} hand{hands.length > 1 ? 's' : ''} up
         </span>
       )}
@@ -289,6 +332,7 @@ export function ControlsBar({
       {canUseMedia && onSwitchDevice && (
         <div className="relative" ref={settingsRef}>
           <IconButton compact={compact}
+            buttonRef={settingsBtnRef}
             label="Devices"
             active={settingsOpen}
             onClick={openSettings}
@@ -299,56 +343,102 @@ export function ControlsBar({
             </svg>
           </IconButton>
 
-          {settingsOpen && (
-            <div className="absolute bottom-14 right-0 z-30 w-64 rounded-xl border border-white/10 bg-ink-850/95 p-3 shadow-2xl backdrop-blur-xl">
-              <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                Microphone
-              </p>
-              <div className="mb-3 space-y-1">
-                {microphones.length === 0 && (
-                  <p className="text-[11px] text-slate-500">No microphone found</p>
-                )}
-                {microphones.map((d) => (
+          {settingsOpen && popPos && typeof document !== 'undefined' &&
+            createPortal(
+              <div
+                ref={settingsPopRef}
+                role="dialog"
+                aria-label="Devices"
+                style={{ left: popPos.left, bottom: popPos.bottom }}
+                className="fixed z-[60] w-[264px] animate-fade-up overflow-hidden rounded-lg border border-slate-200 bg-white shadow-2xl ring-1 ring-black/5 dark:border-white/[0.08] dark:bg-ink-900 dark:ring-white/[0.04]"
+              >
+                <div className="flex items-center justify-between gap-2 border-b border-slate-200/80 px-3 py-2 dark:border-white/[0.07]">
+                  <div className="flex items-center gap-1.5">
+                    <span className="grid h-5 w-5 shrink-0 place-items-center rounded bg-brand-500/15 text-brand-600 dark:text-brand-300">
+                      <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2">
+                        <rect x="4" y="4" width="16" height="12" rx="2" />
+                        <path d="M8 20h8M12 16v4" strokeLinecap="round" />
+                      </svg>
+                    </span>
+                    <p className="text-[11px] font-semibold tracking-tight text-slate-900 dark:text-white">Devices</p>
+                  </div>
                   <button
-                    key={d.deviceId}
-                    onClick={() => {
-                      onSwitchDevice('audio', d.deviceId);
-                      setSettingsOpen(false);
-                    }}
-                    className="block w-full truncate rounded-lg px-2 py-1.5 text-left text-[11px] text-slate-300 transition hover:bg-white/10 hover:text-white"
+                    onClick={() => setSettingsOpen(false)}
+                    aria-label="Close devices"
+                    className="grid h-5 w-5 place-items-center rounded text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 dark:text-slate-500 dark:hover:bg-white/[0.08] dark:hover:text-white"
                   >
-                    {d.label}
+                    <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2.2">
+                      <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" />
+                    </svg>
                   </button>
-                ))}
-              </div>
+                </div>
 
-              <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                Camera
-              </p>
-              <div className="space-y-1">
-                {cameras.length === 0 && (
-                  <p className="text-[11px] text-slate-500">No camera found</p>
-                )}
-                {cameras.map((d) => (
-                  <button
-                    key={d.deviceId}
-                    onClick={() => {
-                      onSwitchDevice('video', d.deviceId);
-                      setSettingsOpen(false);
-                    }}
-                    className="block w-full truncate rounded-lg px-2 py-1.5 text-left text-[11px] text-slate-300 transition hover:bg-white/10 hover:text-white"
-                  >
-                    {d.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
+                <div className="scrollbar-thin max-h-[min(60vh,22rem)] space-y-3 overflow-y-auto p-2.5">
+                  <div>
+                    <p className="mb-1 flex items-center gap-1 px-1 text-[9px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                      <svg viewBox="0 0 24 24" className="h-2.5 w-2.5" fill="none" stroke="currentColor" strokeWidth="2.4">
+                        <rect x="9" y="3" width="6" height="11" rx="3" />
+                        <path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" strokeLinecap="round" />
+                      </svg>
+                      Microphone
+                    </p>
+                    <div className="space-y-0.5">
+                      {microphones.length === 0 && (
+                        <p className="px-1.5 py-1 text-[10px] text-slate-400 dark:text-slate-500">No microphone found</p>
+                      )}
+                      {microphones.map((d) => (
+                        <button
+                          key={d.deviceId}
+                          onClick={() => {
+                            onSwitchDevice('audio', d.deviceId);
+                            setSettingsOpen(false);
+                          }}
+                          className="block w-full truncate rounded-md px-1.5 py-1.5 text-left text-[11px] font-medium text-slate-700 transition hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-white/[0.07] dark:hover:text-white"
+                        >
+                          {d.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="h-px bg-slate-200/80 dark:bg-white/[0.07]" />
+
+                  <div>
+                    <p className="mb-1 flex items-center gap-1 px-1 text-[9px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                      <svg viewBox="0 0 24 24" className="h-2.5 w-2.5" fill="none" stroke="currentColor" strokeWidth="2.4">
+                        <rect x="3" y="6" width="12" height="12" rx="2.5" />
+                        <path d="m15 10.5 4.5-2.5v8L15 13.5" strokeLinejoin="round" />
+                      </svg>
+                      Camera
+                    </p>
+                    <div className="space-y-0.5">
+                      {cameras.length === 0 && (
+                        <p className="px-1.5 py-1 text-[10px] text-slate-400 dark:text-slate-500">No camera found</p>
+                      )}
+                      {cameras.map((d) => (
+                        <button
+                          key={d.deviceId}
+                          onClick={() => {
+                            onSwitchDevice('video', d.deviceId);
+                            setSettingsOpen(false);
+                          }}
+                          className="block w-full truncate rounded-md px-1.5 py-1.5 text-left text-[11px] font-medium text-slate-700 transition hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-white/[0.07] dark:hover:text-white"
+                        >
+                          {d.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>,
+              document.body
+            )}
         </div>
       )}
 
       {canConfigureMedia && (
         <IconButton compact={compact}
+          buttonRef={mediaBtnRef}
           label="Media settings"
           active={mediaOpen || backgroundMode !== 'off'}
           onClick={() => setMediaOpen((v) => !v)}
@@ -368,6 +458,7 @@ export function ControlsBar({
 
       {mediaOpen && canConfigureMedia && (
         <MediaSettingsPanel
+          anchorEl={mediaBtnRef.current}
           onClose={() => setMediaOpen(false)}
           onSetBackground={onSetBackground!}
           onUploadBackground={onUploadBackground!}

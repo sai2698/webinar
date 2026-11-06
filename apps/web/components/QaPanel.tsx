@@ -60,7 +60,7 @@ export function QaPanel({ socket }: QaPanelProps) {
         </span>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 py-4">
+      <div className="scrollbar-thin flex-1 overflow-y-auto px-4 py-4">
         {questions.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center gap-2 text-center">
             <span className="grid h-10 w-10 place-items-center rounded-full bg-white/5 text-slate-500">
@@ -201,8 +201,8 @@ function QuestionCard({
           aria-label={question.upvotedByMe ? 'Remove upvote' : 'Upvote question'}
           className={`flex w-9 shrink-0 flex-col items-center rounded-md border py-1 transition-colors ${
             question.upvotedByMe
-              ? 'border-brand-400/60 bg-brand-500/20 text-brand-300'
-              : 'border-white/10 text-slate-400 hover:border-white/25 hover:text-slate-200'
+              ? 'border-brand-400/60 bg-brand-500/20 text-brand-600 dark:text-brand-300'
+              : 'border-white/10 text-slate-500 hover:border-white/25 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
           }`}
         >
           <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2.2">
@@ -213,19 +213,19 @@ function QuestionCard({
 
         <div className="min-w-0 flex-1">
           <div className="mb-1 flex flex-wrap items-center gap-1.5">
-            <span className="truncate text-[11px] font-medium text-slate-300">{question.name}</span>
+            <span className="truncate text-[11px] font-medium text-slate-600 dark:text-slate-300">{question.name}</span>
             {staff && (
-              <span className="chip border-brand-400/30 bg-brand-500/15 py-0 text-[9px] text-brand-300">
+              <span className="chip border-brand-400/30 bg-brand-500/15 py-0 text-[9px] text-brand-600 dark:text-brand-300">
                 Host
               </span>
             )}
             {question.pinned && (
-              <span className="chip border-amber-400/30 bg-amber-500/15 py-0 text-[9px] text-amber-300">
+              <span className="chip border-amber-400/30 bg-amber-500/15 py-0 text-[9px] text-amber-700 dark:text-amber-300">
                 Pinned
               </span>
             )}
             {question.answered && (
-              <span className="chip border-emerald-400/30 bg-emerald-500/15 py-0 text-[9px] text-emerald-300">
+              <span className="chip border-emerald-400/30 bg-emerald-500/15 py-0 text-[9px] text-emerald-700 dark:text-emerald-300">
                 Answered
               </span>
             )}
@@ -238,19 +238,19 @@ function QuestionCard({
             <div className="mt-1.5 flex flex-wrap gap-1">
               {isStaff && (
                 <>
-                  <button onClick={onAnswer} className="text-[10px] text-slate-400 hover:text-white">
+                  <button onClick={onAnswer} className="text-[10px] text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white">
                     {question.answered ? 'Reopen' : 'Mark answered'}
                   </button>
-                  <span className="text-[10px] text-slate-700">·</span>
-                  <button onClick={onPin} className="text-[10px] text-slate-400 hover:text-white">
+                  <span className="text-[10px] text-slate-400 dark:text-slate-700">·</span>
+                  <button onClick={onPin} className="text-[10px] text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white">
                     {question.pinned ? 'Unpin' : 'Pin'}
                   </button>
                 </>
               )}
               {isStaff && (
                 <>
-                  <span className="text-[10px] text-slate-700">·</span>
-                  <button onClick={onDelete} className="text-[10px] text-rose-400 hover:text-rose-300">
+                  <span className="text-[10px] text-slate-400 dark:text-slate-700">·</span>
+                  <button onClick={onDelete} className="text-[10px] text-rose-500 hover:text-rose-600 dark:text-rose-400 dark:hover:text-rose-300">
                     Delete
                   </button>
                 </>

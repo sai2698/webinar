@@ -46,7 +46,7 @@ export function PollsPanel({ socket }: PollsPanelProps) {
         )}
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 py-4">
+      <div className="scrollbar-thin flex-1 overflow-y-auto px-4 py-4">
         {!poll ? (
           <div className="flex h-full flex-col items-center justify-center gap-2 text-center">
             <span className="grid h-10 w-10 place-items-center rounded-full bg-white/5 text-slate-500">
@@ -94,7 +94,7 @@ export function PollsPanel({ socket }: PollsPanelProps) {
                     />
                     <span
                       className={`relative grid h-5 w-5 shrink-0 place-items-center rounded-full text-[10px] font-bold ${
-                        isSelected ? 'bg-brand-500 text-white' : 'bg-white/10 text-slate-400'
+                        isSelected ? 'bg-brand-500 text-white' : 'bg-white/10 text-slate-500 dark:text-slate-400'
                       }`}
                     >
                       {opt.id.toUpperCase()}

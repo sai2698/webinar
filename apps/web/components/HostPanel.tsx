@@ -156,6 +156,7 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
   const [secretSaved, setSecretSaved] = useState(false);
   const [showSecret, setShowSecret] = useState(false);
   const [offerSubTab, setOfferSubTab] = useState<'offers' | 'sales'>('offers');
+  const [offerSettingsOpen, setOfferSettingsOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const refreshGatewayStatus = useCallback(async () => {
@@ -874,11 +875,11 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
     <>
       <button
         onClick={() => setOpen((v) => !v)}
-        className="btn-ghost px-2.5 py-1.5 text-xs"
+        className="inline-flex items-center gap-1.5 rounded-md border border-white/10 bg-white/[0.03] px-2.5 py-1.5 text-[11px] font-semibold tracking-tight text-slate-700 transition hover:border-white/20 hover:bg-white/[0.07] hover:text-slate-900 active:scale-[0.98] dark:text-slate-300 dark:hover:text-white"
         aria-label="Host tools"
         title="Host tools"
       >
-        <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
+        <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2">
           <path d="M12 3v3m0 12v3M3 12h3m12 0h3M5.6 5.6l2.1 2.1m8.6 8.6 2.1 2.1m0-12.8-2.1 2.1M7.7 16.3l-2.1 2.1" strokeLinecap="round" />
         </svg>
         <span className="hidden sm:inline">Host tools</span>
@@ -901,12 +902,24 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
               className="absolute inset-0 cursor-default bg-black/50 backdrop-blur-sm"
             />
 
-            <aside className="relative flex h-full w-full max-w-md flex-col border-l border-slate-200 dark:border-white/10 bg-white dark:bg-ink-900 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-white/10 px-5 py-3">
-              <h2 className="text-sm font-semibold text-slate-900 dark:text-white">Host tools</h2>
+            <aside className="relative flex h-full w-full max-w-md flex-col border-l border-white/[0.07] bg-white dark:bg-ink-900 shadow-2xl">
+            <div className="flex items-center justify-between gap-3 border-b border-white/[0.07] px-4 py-3">
+              <div className="flex min-w-0 items-center gap-2.5">
+                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-brand-500/15 text-brand-500 ring-1 ring-brand-500/25 dark:text-brand-300">
+                  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M12 3v3m0 12v3M3 12h3m12 0h3M5.6 5.6l2.1 2.1m8.6 8.6 2.1 2.1m0-12.8-2.1 2.1M7.7 16.3l-2.1 2.1" strokeLinecap="round" />
+                  </svg>
+                </span>
+                <div className="min-w-0">
+                  <h2 className="text-[13px] font-semibold tracking-tight text-slate-900 dark:text-white">Host tools</h2>
+                  <p className="truncate text-[10px] text-slate-500 dark:text-slate-400">
+                    Run the room — quizzes, polls, offers, stage
+                  </p>
+                </div>
+              </div>
               <button
                 onClick={() => setOpen(false)}
-                className="rounded-lg p-1.5 text-slate-400 transition hover:bg-white/5 hover:text-white"
+                className="shrink-0 rounded-md p-1.5 text-slate-400 transition hover:bg-white/[0.07] hover:text-slate-900 dark:hover:text-white"
                 aria-label="Close host tools"
               >
                 <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
@@ -915,7 +928,7 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
               </button>
             </div>
 
-            <div className="flex border-b border-white/10">
+            <div className="flex shrink-0 items-center gap-1 border-b border-white/[0.07] bg-slate-100/80 p-1.5 dark:bg-ink-950/40">
               {(['quiz', 'poll', 'offer'] as Tab[]).map((t) => {
                 // Each tab carries its own tally and a live dot, so the host can
                 // see at a glance that a poll is still running or that an offer
@@ -938,23 +951,25 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
                       // the host was no longer looking at.
                       setFollowUpFor(null);
                     }}
-                    className={`flex flex-1 items-center justify-center gap-1.5 px-3 py-2.5 text-xs font-semibold transition ${
+                    className={`flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-[11px] font-semibold tracking-tight transition ${
                       tab === t
-                        ? 'border-b-2 border-brand-400 text-white'
-                        : 'text-slate-500 hover:text-slate-300'
+                        ? 'bg-white text-slate-900 shadow-sm ring-1 ring-slate-900/[0.08] dark:bg-white/[0.09] dark:text-white dark:ring-white/10'
+                        : 'text-slate-500 hover:bg-white hover:text-slate-700 dark:hover:bg-white/[0.04] dark:hover:text-slate-300'
                     }`}
                   >
                     <span>{t === 'quiz' ? 'Quizzes' : t === 'poll' ? 'Polls' : 'Offers'}</span>
                     <span
-                      className={`rounded-full px-1.5 py-0.5 text-[10px] tabular-nums ${
-                        tab === t ? 'bg-brand-500/15 text-brand-600 dark:bg-brand-500/25 dark:text-brand-200 font-semibold' : 'bg-slate-100 dark:bg-white/10 text-slate-600 dark:text-slate-400'
+                      className={`rounded px-1 py-px text-[9px] font-bold tabular-nums ${
+                        tab === t
+                          ? 'bg-brand-500/20 text-brand-600 dark:bg-brand-500/25 dark:text-brand-200'
+                          : 'bg-slate-200/70 text-slate-600 dark:bg-white/[0.06] dark:text-slate-400'
                       }`}
                     >
                       {count}
                     </span>
                     {live && (
                       <span
-                        className="h-1.5 w-1.5 rounded-full bg-mint-400"
+                        className="h-1.5 w-1.5 rounded-full bg-mint-500 dark:bg-mint-400"
                         title="Live right now"
                         aria-label="Live right now"
                       />
@@ -964,60 +979,118 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
               })}
             </div>
 
-            <div className="flex-1 overflow-y-auto p-4">
+            <div className="scrollbar-thin flex-1 overflow-y-auto p-3.5">
               {error && (
-                <p className="mb-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">
+                <p className="mb-3 rounded-lg border border-red-500/25 bg-red-500/[0.08] px-3 py-2 text-[11px] font-medium text-red-600 dark:text-red-300">
                   {error}
                 </p>
               )}
 
-              {loading && <p className="py-6 text-center text-xs text-slate-500">Loading…</p>}
+              {loading && <p className="py-6 text-center text-[11px] text-slate-500">Loading…</p>}
 
               {/* ── inline composer ─────────────────────── */}
               {!loading && (
                 <div className="mb-3 flex items-center justify-between gap-2">
-                  <p className="text-[11px] text-slate-500">
-                    {composing
-                      ? tab === 'offer'
-                        ? editingId
-                          ? formOnly
-                            ? 'Edit form'
-                            : 'Edit offer'
-                          : 'New offer'
-                        : editingId
-                          ? tab === 'poll'
-                            ? 'Edit poll'
-                            : 'Edit quiz'
+                  <div className="flex min-w-0 items-center gap-1.5">
+                    <span className="h-1 w-1 shrink-0 rounded-full bg-slate-400 dark:bg-slate-600" />
+                    <p className="truncate text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                      {composing
+                        ? tab === 'offer'
+                          ? editingId
+                            ? formOnly
+                              ? 'Edit form'
+                              : 'Edit offer'
+                            : 'New offer'
+                          : editingId
+                            ? tab === 'poll'
+                              ? 'Edit poll'
+                              : 'Edit quiz'
+                            : tab === 'poll'
+                              ? 'New poll'
+                              : 'New quiz'
+                        : tab === 'offer'
+                          ? `${ctas.length} offer${ctas.length === 1 ? '' : 's'}`
                           : tab === 'poll'
-                            ? 'New poll'
-                            : 'New quiz'
-                      : tab === 'offer'
-                        ? `${ctas.length} offer${ctas.length === 1 ? '' : 's'}`
-                        : tab === 'poll'
-                          ? `${polls.length} poll${polls.length === 1 ? '' : 's'}`
-                          : `${quizzes.length} quiz${quizzes.length === 1 ? '' : 'zes'}`}
-                  </p>
-                  <button
-                    onClick={() => {
-                      setComposing((v) => !v);
-                      resetDraft();
-                    }}
-                    className="btn-ghost px-2.5 py-1 text-[11px]"
-                  >
-                    {composing ? 'Cancel' : '+ New'}
-                  </button>
+                            ? `${polls.length} poll${polls.length === 1 ? '' : 's'}`
+                            : `${quizzes.length} quiz${quizzes.length === 1 ? '' : 'zes'}`}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-1">
+                    {tab === 'offer' && !composing && (
+                      <button
+                        type="button"
+                        onClick={() => setOfferSettingsOpen((v) => !v)}
+                        aria-expanded={offerSettingsOpen}
+                        aria-label={offerSettingsOpen ? 'Hide payment settings' : 'Show payment settings'}
+                        title={offerSettingsOpen ? 'Hide payment settings' : 'Show payment settings'}
+                        className={`grid h-6 w-6 shrink-0 place-items-center rounded-md border transition active:scale-[0.96] ${
+                          offerSettingsOpen
+                            ? 'border-brand-500/40 bg-brand-500/15 text-brand-600 dark:text-brand-300'
+                            : 'border-white/10 bg-white/[0.03] text-slate-500 hover:bg-white/[0.07] hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
+                        }`}
+                      >
+                        <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2">
+                          <circle cx="12" cy="12" r="3" />
+                          <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      </button>
+                    )}
+                    <button
+                      onClick={() => {
+                        setComposing((v) => !v);
+                        resetDraft();
+                      }}
+                      className={`inline-flex shrink-0 items-center gap-1 rounded-md border px-2 py-1 text-[10px] font-semibold tracking-tight transition active:scale-[0.98] ${
+                        composing
+                          ? 'border-white/10 bg-white/[0.03] text-slate-500 hover:bg-white/[0.07] hover:text-slate-700 dark:hover:text-slate-200'
+                          : 'border-brand-500/30 bg-brand-500/15 text-brand-600 shadow-sm hover:bg-brand-500/25 dark:text-brand-300'
+                      }`}
+                    >
+                      {composing ? (
+                        <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2.5">
+                          <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" />
+                        </svg>
+                      ) : (
+                        <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2.5">
+                          <path d="M12 5v14M5 12h14" strokeLinecap="round" />
+                        </svg>
+                      )}
+                      {composing ? 'Cancel' : 'New'}
+                    </button>
+                  </div>
                 </div>
               )}
 
               {!loading && composing && tab !== 'offer' && (
-                <div className="space-y-3 rounded-xl border border-white/10 bg-white/[0.03] p-3">
+                <div className="animate-fade-in space-y-3 rounded-lg border border-white/[0.08] bg-white/[0.02] p-3 shadow-sm">
+                  <div className="flex items-center gap-2 border-b border-white/[0.06] pb-2.5">
+                    <span className="grid h-6 w-6 shrink-0 place-items-center rounded-md bg-brand-500/15 text-brand-500 ring-1 ring-brand-500/25 dark:text-brand-300">
+                      <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2">
+                        {tab === 'poll' ? (
+                          <path d="M6 20V10M12 20V4M18 20v-7" strokeLinecap="round" />
+                        ) : (
+                          <path d="M9 12l2 2 4-4M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" strokeLinecap="round" strokeLinejoin="round" />
+                        )}
+                      </svg>
+                    </span>
+                    <p className="text-[11px] font-semibold tracking-tight text-slate-900 dark:text-slate-100">
+                      {editingId
+                        ? tab === 'poll'
+                          ? 'Edit poll'
+                          : 'Edit quiz'
+                        : tab === 'poll'
+                          ? 'New poll'
+                          : 'New quiz'}
+                    </p>
+                  </div>
+
                   <div>
-                    <label className="label text-[10px]" htmlFor="draft-question">
+                    <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-slate-500" htmlFor="draft-question">
                       Question
                     </label>
                     <input
                       id="draft-question"
-                      className="input py-1.5 text-xs"
+                      className="w-full rounded-md border border-white/[0.08] bg-white/[0.03] px-2.5 py-1.5 text-xs text-slate-900 placeholder:text-slate-400 outline-none transition focus:border-brand-500/50 focus:ring-2 focus:ring-brand-500/20 dark:bg-ink-900/70 dark:text-slate-100"
                       value={question}
                       onChange={(e) => setQuestion(e.target.value)}
                       placeholder="What should we cover next?"
@@ -1026,29 +1099,37 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="label text-[10px]">Options</label>
+                    <div className="flex items-center justify-between">
+                      <label className="block text-[10px] font-semibold uppercase tracking-wider text-slate-500">Options</label>
+                      <span className="text-[9px] font-medium tabular-nums text-slate-400 dark:text-slate-500">
+                        {options.length}/6
+                      </span>
+                    </div>
                     {options.map((opt, i) => (
-                      <div key={opt.id} className="flex items-center gap-1.5">
+                      <div
+                        key={opt.id}
+                        className="group/opt flex items-center gap-1.5 rounded-md border border-transparent transition hover:border-white/[0.06] hover:bg-white/[0.02]"
+                      >
                         {tab === 'quiz' ? (
                           <button
                             type="button"
                             onClick={() => setCorrect(opt.id)}
                             title="Mark as the correct answer"
-                            className={`grid h-5 w-5 shrink-0 place-items-center rounded-full text-[10px] font-bold transition ${
+                            className={`grid h-5 w-5 shrink-0 place-items-center rounded-md text-[10px] font-bold transition ${
                               correct === opt.id
-                                ? 'bg-mint-500 text-black'
-                                : 'bg-white/10 text-slate-400 hover:bg-white/20'
+                                ? 'bg-mint-500 text-ink-950 shadow-sm ring-1 ring-mint-400/50'
+                                : 'bg-white/[0.08] text-slate-400 hover:bg-white/[0.14] hover:text-slate-600 dark:hover:text-slate-200'
                             }`}
                           >
                             {opt.id.toUpperCase()}
                           </button>
                         ) : (
-                          <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-white/10 text-[10px] font-bold text-slate-400">
+                          <span className="grid h-5 w-5 shrink-0 place-items-center rounded-md bg-white/[0.08] text-[10px] font-bold text-slate-400">
                             {opt.id.toUpperCase()}
                           </span>
                         )}
                         <input
-                          className="input flex-1 py-1 text-xs"
+                          className="w-full flex-1 rounded-md border border-white/[0.08] bg-white/[0.03] px-2.5 py-1 text-xs text-slate-900 placeholder:text-slate-400 outline-none transition focus:border-brand-500/50 focus:ring-2 focus:ring-brand-500/20 dark:bg-ink-900/70 dark:text-slate-100"
                           value={opt.text}
                           onChange={(e) => setOptionText(i, e.target.value)}
                           placeholder={`Option ${opt.id.toUpperCase()}`}
@@ -1058,7 +1139,7 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
                           type="button"
                           onClick={() => removeOption(i)}
                           disabled={options.length <= 2}
-                          className="shrink-0 rounded p-1 text-slate-500 transition hover:text-red-400 disabled:opacity-30"
+                          className="shrink-0 rounded-md p-1 text-slate-400 opacity-0 transition hover:bg-red-500/10 hover:text-red-400 focus-visible:opacity-100 disabled:opacity-0 group-hover/opt:opacity-100"
                           aria-label={`Remove option ${opt.id.toUpperCase()}`}
                         >
                           <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2">
@@ -1071,21 +1152,24 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
                       <button
                         type="button"
                         onClick={addOption}
-                        className="text-[11px] font-medium text-brand-300 transition hover:text-brand-200"
+                        className="inline-flex items-center gap-1 rounded-md border border-dashed border-white/[0.12] px-2 py-1 text-[10px] font-semibold tracking-tight text-slate-500 transition hover:border-brand-500/40 hover:text-brand-500 dark:hover:text-brand-300"
                       >
-                        + Add option
+                        <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2.5">
+                          <path d="M12 5v14M5 12h14" strokeLinecap="round" />
+                        </svg>
+                        Add option
                       </button>
                     )}
                   </div>
 
                   <div>
-                    <label className="label text-[10px]" htmlFor="draft-limit">
+                    <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-slate-500" htmlFor="draft-limit">
                       {tab === 'poll' ? 'Time limit (0 = open until closed)' : 'Time limit (seconds)'}
                     </label>
                     <input
                       id="draft-limit"
                       type="number"
-                      className="input py-1.5 text-xs"
+                      className="w-full rounded-md border border-white/[0.08] bg-white/[0.03] px-2.5 py-1.5 text-xs tabular-nums text-slate-900 placeholder:text-slate-400 outline-none transition focus:border-brand-500/50 focus:ring-2 focus:ring-brand-500/20 dark:bg-ink-900/70 dark:text-slate-100"
                       value={limit}
                       onChange={(e) => setLimit(Number(e.target.value))}
                       min={tab === 'poll' ? 0 : 5}
@@ -1094,17 +1178,29 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
                   </div>
 
                   {tab === 'quiz' && (
-                    <p className="text-[10px] text-slate-500">
-                      Tap a letter to mark the correct answer — currently{' '}
-                      <span className="font-semibold text-mint-400">{correct.toUpperCase()}</span>.
+                    <p className="flex items-start gap-1.5 rounded-md border border-mint-500/20 bg-mint-500/[0.06] px-2.5 py-1.5 text-[10px] leading-relaxed text-slate-600 dark:text-slate-300">
+                      <svg viewBox="0 0 24 24" className="mt-px h-3 w-3 shrink-0 text-mint-500 dark:text-mint-400" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M9 12l2 2 4-4M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                      <span>
+                        Tap a letter to mark the correct answer — currently{' '}
+                        <span className="font-semibold text-mint-600 dark:text-mint-400">{correct.toUpperCase()}</span>.
+                      </span>
                     </p>
                   )}
 
                   <button
                     onClick={tab === 'poll' ? createPoll : createQuiz}
                     disabled={saving}
-                    className="btn-primary w-full py-1.5 text-xs disabled:opacity-50"
+                    className="inline-flex w-full items-center justify-center gap-1.5 rounded-md bg-gradient-to-b from-brand-400 to-brand-600 py-1.5 text-[11px] font-semibold tracking-tight text-white shadow-sm transition hover:from-brand-300 hover:to-brand-500 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50"
                   >
+                    {saving ? (
+                      <span className="h-3 w-3 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                    ) : (
+                      <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2.5">
+                        <path d="M5 12h14M13 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    )}
                     {saving
                       ? 'Saving…'
                       : editingId
@@ -1117,9 +1213,19 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
               )}
 
               {!loading && composing && tab === 'offer' && (
-                <div className="space-y-3 rounded-xl border border-white/10 bg-white/[0.03] p-3">
+                <div className="animate-fade-in space-y-3 rounded-lg border border-white/[0.08] bg-white/[0.02] p-3 shadow-sm">
+                  <div className="flex items-center gap-2 border-b border-white/[0.06] pb-2.5">
+                    <span className="grid h-6 w-6 shrink-0 place-items-center rounded-md bg-accent-500/15 text-accent-600 ring-1 ring-accent-500/25 dark:text-accent-400">
+                      <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M3 7h18M3 12h18M3 17h10" strokeLinecap="round" />
+                      </svg>
+                    </span>
+                    <p className="text-[11px] font-semibold tracking-tight text-slate-900 dark:text-slate-100">
+                      {editingId ? (formOnly ? 'Edit form' : 'Edit offer') : 'New offer'}
+                    </p>
+                  </div>
                   {editingId && (
-                    <p className="rounded-lg bg-brand-500/10 px-2.5 py-1.5 text-[10px] text-brand-200">
+                    <p className="rounded-md border border-brand-500/20 bg-brand-500/[0.08] px-2.5 py-1.5 text-[10px] font-medium text-brand-600 dark:text-brand-200">
                       {formOnly
                         ? 'Editing the form on an existing offer. The offer itself is unchanged.'
                         : 'Editing an existing offer. Saving updates it in place — it is not re-shown to the room.'}
@@ -1128,12 +1234,12 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
                   {!formOnly && (
                     <>
                   <div>
-                    <label className="label text-[10px]" htmlFor="draft-cta-title">
+                    <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-slate-500" htmlFor="draft-cta-title">
                       Title
                     </label>
                     <input
                       id="draft-cta-title"
-                      className="input py-1.5 text-xs"
+                      className="w-full rounded-md border border-white/[0.08] bg-white/[0.03] px-2.5 py-1.5 text-xs text-slate-900 placeholder:text-slate-400 outline-none transition focus:border-brand-500/50 focus:ring-2 focus:ring-brand-500/20 dark:bg-ink-900/70 dark:text-slate-100"
                       value={ctaTitle}
                       onChange={(e) => setCtaTitle(e.target.value)}
                       placeholder="Enroll in the full course"
@@ -1141,12 +1247,12 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
                     />
                   </div>
                   <div>
-                    <label className="label text-[10px]" htmlFor="draft-cta-desc">
+                    <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-slate-500" htmlFor="draft-cta-desc">
                       Description
                     </label>
                     <textarea
                       id="draft-cta-desc"
-                      className="input py-1.5 text-xs"
+                      className="w-full rounded-md border border-white/[0.08] bg-white/[0.03] px-2.5 py-1.5 text-xs text-slate-900 placeholder:text-slate-400 outline-none transition focus:border-brand-500/50 focus:ring-2 focus:ring-brand-500/20 dark:bg-ink-900/70 dark:text-slate-100"
                       rows={2}
                       value={ctaDesc}
                       onChange={(e) => setCtaDesc(e.target.value)}
@@ -1156,25 +1262,25 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <label className="label text-[10px]" htmlFor="draft-cta-button">
+                      <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-slate-500" htmlFor="draft-cta-button">
                         Button text
                       </label>
                       <input
                         id="draft-cta-button"
-                        className="input py-1.5 text-xs"
+                        className="w-full rounded-md border border-white/[0.08] bg-white/[0.03] px-2.5 py-1.5 text-xs text-slate-900 placeholder:text-slate-400 outline-none transition focus:border-brand-500/50 focus:ring-2 focus:ring-brand-500/20 dark:bg-ink-900/70 dark:text-slate-100"
                         value={ctaButton}
                         onChange={(e) => setCtaButton(e.target.value)}
                         maxLength={40}
                       />
                     </div>
                     <div>
-                      <label className="label text-[10px]" htmlFor="draft-cta-price">
+                      <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-slate-500" htmlFor="draft-cta-price">
                         Price (₹)
                       </label>
                       <input
                         id="draft-cta-price"
                         type="number"
-                        className="input py-1.5 text-xs"
+                        className="w-full rounded-md border border-white/[0.08] bg-white/[0.03] px-2.5 py-1.5 text-xs tabular-nums text-slate-900 placeholder:text-slate-400 outline-none transition focus:border-brand-500/50 focus:ring-2 focus:ring-brand-500/20 dark:bg-ink-900/70 dark:text-slate-100"
                         value={ctaPrice}
                         onChange={(e) => setCtaPrice(e.target.value)}
                         placeholder="4999"
@@ -1183,12 +1289,12 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
                     </div>
                   </div>
                   <div>
-                    <label className="label text-[10px]" htmlFor="draft-cta-url">
+                    <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-slate-500" htmlFor="draft-cta-url">
                       External link (optional)
                     </label>
                     <input
                       id="draft-cta-url"
-                      className="input py-1.5 text-xs"
+                      className="w-full rounded-md border border-white/[0.08] bg-white/[0.03] px-2.5 py-1.5 text-xs text-slate-900 placeholder:text-slate-400 outline-none transition focus:border-brand-500/50 focus:ring-2 focus:ring-brand-500/20 dark:bg-ink-900/70 dark:text-slate-100"
                       value={ctaUrl}
                       onChange={(e) => setCtaUrl(e.target.value)}
                       placeholder="https://…"
@@ -1198,16 +1304,16 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
                   )}
 
                   {/* ── pre-payment form ──────────────────────── */}
-                  <div className="rounded-lg border border-white/10 bg-white/[0.02] p-2.5">
+                  <div className="rounded-md border border-white/[0.08] bg-white/[0.02] p-2.5">
                     <label className="flex cursor-pointer items-center justify-between gap-2">
-                      <span className="text-[11px] font-medium text-slate-200">
+                      <span className="text-[11px] font-semibold tracking-tight text-slate-800 dark:text-slate-200">
                         Ask a form before payment
                       </span>
                       <input
                         type="checkbox"
                         checked={formEnabled}
                         onChange={(e) => setFormEnabled(e.target.checked)}
-                        className="h-4 w-4 rounded border-white/20 bg-white/5"
+                        className="h-4 w-4 rounded border-white/20 bg-white/5 accent-brand-500"
                       />
                     </label>
                     <p className="mt-1 text-[10px] leading-relaxed text-slate-500">
@@ -1218,12 +1324,12 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
                     {formEnabled && (
                       <div className="mt-3 space-y-2.5">
                         <div>
-                          <label className="label text-[10px]" htmlFor="draft-cta-form-intro">
+                          <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-slate-500" htmlFor="draft-cta-form-intro">
                             Intro (optional)
                           </label>
                           <textarea
                             id="draft-cta-form-intro"
-                            className="input py-1.5 text-xs"
+                            className="w-full rounded-md border border-white/[0.08] bg-white/[0.03] px-2.5 py-1.5 text-xs text-slate-900 placeholder:text-slate-400 outline-none transition focus:border-brand-500/50 focus:ring-2 focus:ring-brand-500/20 dark:bg-ink-900/70 dark:text-slate-100"
                             rows={2}
                             value={formIntro}
                             onChange={(e) => setFormIntro(e.target.value)}
@@ -1235,11 +1341,11 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
                         {formFields.map((field, i) => (
                           <div
                             key={field.key}
-                            className="space-y-1.5 rounded-lg border border-white/10 bg-white/[0.03] p-2"
+                            className="space-y-1.5 rounded-md border border-white/[0.08] bg-white/[0.03] p-2"
                           >
                             <div className="flex items-center gap-1.5">
                               <input
-                                className="input flex-1 py-1 text-xs"
+                                className="w-full flex-1 rounded-md border border-white/[0.08] bg-white/[0.03] px-2.5 py-1 text-xs text-slate-900 placeholder:text-slate-400 outline-none transition focus:border-brand-500/50 focus:ring-2 focus:ring-brand-500/20 dark:bg-ink-900/70 dark:text-slate-100"
                                 value={field.label}
                                 onChange={(e) => updateField(field.key, { label: e.target.value })}
                                 placeholder={`Question ${i + 1}`}
@@ -1248,7 +1354,7 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
                               <button
                                 onClick={() => removeField(field.key)}
                                 aria-label="Remove field"
-                                className="rounded p-1 text-slate-500 hover:bg-white/10 hover:text-red-400"
+                                className="shrink-0 rounded-md p-1 text-slate-500 transition hover:bg-red-500/10 hover:text-red-400"
                               >
                                 <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2">
                                   <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" />
@@ -1257,7 +1363,7 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
                             </div>
                             <div className="flex items-center gap-1.5">
                               <select
-                                className="input flex-1 py-1 text-[11px]"
+                                className="w-full flex-1 rounded-md border border-white/[0.08] bg-white/[0.03] px-2 py-1 text-[11px] text-slate-900 outline-none transition focus:border-brand-500/50 focus:ring-2 focus:ring-brand-500/20 dark:bg-ink-900/70 dark:text-slate-100"
                                 value={field.type}
                                 onChange={(e) =>
                                   updateField(field.key, {
@@ -1271,28 +1377,28 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
                                   </option>
                                 ))}
                               </select>
-                              <label className="flex shrink-0 items-center gap-1 text-[10px] text-slate-400">
+                              <label className="flex shrink-0 items-center gap-1 text-[10px] font-medium text-slate-500 dark:text-slate-400">
                                 <input
                                   type="checkbox"
                                   checked={field.isRequired}
                                   onChange={(e) =>
                                     updateField(field.key, { isRequired: e.target.checked })
                                   }
-                                  className="h-3.5 w-3.5 rounded border-white/20 bg-white/5"
+                                  className="h-3.5 w-3.5 rounded border-white/20 bg-white/5 accent-brand-500"
                                 />
                                 Required
                               </label>
                             </div>
                             {field.type === 'select' && (
                               <input
-                                className="input py-1 text-[11px]"
+                                className="w-full rounded-md border border-white/[0.08] bg-white/[0.03] px-2.5 py-1 text-[11px] text-slate-900 placeholder:text-slate-400 outline-none transition focus:border-brand-500/50 focus:ring-2 focus:ring-brand-500/20 dark:bg-ink-900/70 dark:text-slate-100"
                                 value={field.options}
                                 onChange={(e) => updateField(field.key, { options: e.target.value })}
                                 placeholder="Options, comma separated"
                               />
                             )}
                             <input
-                              className="input py-1 text-[11px]"
+                              className="w-full rounded-md border border-white/[0.08] bg-white/[0.03] px-2.5 py-1 text-[11px] text-slate-900 placeholder:text-slate-400 outline-none transition focus:border-brand-500/50 focus:ring-2 focus:ring-brand-500/20 dark:bg-ink-900/70 dark:text-slate-100"
                               value={field.placeholder}
                               onChange={(e) =>
                                 updateField(field.key, { placeholder: e.target.value })
@@ -1306,18 +1412,18 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
                         <button
                           onClick={addField}
                           disabled={formFields.length >= 20}
-                          className="btn-ghost w-full py-1 text-[11px] disabled:opacity-40"
+                          className="w-full rounded-md border border-dashed border-white/[0.12] py-1 text-[10px] font-semibold tracking-tight text-slate-500 transition hover:border-brand-500/40 hover:text-brand-500 disabled:opacity-40 dark:hover:text-brand-300"
                         >
                           + Add field
                         </button>
 
                         <div>
-                          <label className="label text-[10px]" htmlFor="draft-cta-form-submit">
+                          <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-slate-500" htmlFor="draft-cta-form-submit">
                             Submit button text
                           </label>
                           <input
                             id="draft-cta-form-submit"
-                            className="input py-1.5 text-xs"
+                            className="w-full rounded-md border border-white/[0.08] bg-white/[0.03] px-2.5 py-1.5 text-xs text-slate-900 placeholder:text-slate-400 outline-none transition focus:border-brand-500/50 focus:ring-2 focus:ring-brand-500/20 dark:bg-ink-900/70 dark:text-slate-100"
                             value={formSubmitText}
                             onChange={(e) => setFormSubmitText(e.target.value)}
                             maxLength={40}
@@ -1328,12 +1434,12 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
                   </div>
 
                   {!formOnly && !editingId && (
-                    <label className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300 cursor-pointer pt-1">
+                    <label className="flex cursor-pointer items-center gap-2 pt-1 text-[11px] text-slate-700 dark:text-slate-300">
                       <input
                         type="checkbox"
                         checked={autoExpandOffer}
                         onChange={(e) => setAutoExpandOffer(e.target.checked)}
-                        className="h-3.5 w-3.5 rounded border-slate-300 dark:border-white/20 text-accent-500"
+                        className="h-3.5 w-3.5 rounded border-slate-300 accent-accent-500 dark:border-white/20"
                       />
                       Expand offer automatically at participant end
                     </label>
@@ -1342,8 +1448,15 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
                   <button
                     onClick={formOnly ? saveForm : createOffer}
                     disabled={saving}
-                    className="btn-primary w-full py-1.5 text-xs disabled:opacity-50"
+                    className="inline-flex w-full items-center justify-center gap-1.5 rounded-md bg-gradient-to-b from-brand-400 to-brand-600 py-1.5 text-[11px] font-semibold tracking-tight text-white shadow-sm transition hover:from-brand-300 hover:to-brand-500 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50"
                   >
+                    {saving ? (
+                      <span className="h-3 w-3 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                    ) : (
+                      <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2.5">
+                        <path d="M5 12h14M13 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    )}
                     {saving
                       ? 'Saving…'
                       : formOnly
@@ -1358,40 +1471,83 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
               {!loading && !composing && tab === 'quiz' && (
                 <div className="space-y-2">
                   {quizzes.length === 0 && (
-                    <p className="py-6 text-center text-xs text-slate-500">
-                      No quizzes yet — tap “+ New” to write one now.
-                    </p>
+                    <div className="space-y-2 py-8 text-center">
+                      <span className="mx-auto grid h-9 w-9 place-items-center rounded-lg bg-white/[0.04] text-slate-400 ring-1 ring-white/[0.08]">
+                        <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M9 12l2 2 4-4M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      </span>
+                      <p className="text-[11px] font-semibold tracking-tight text-slate-800 dark:text-slate-200">
+                        No quizzes yet
+                      </p>
+                      <p className="mx-auto max-w-[15rem] text-[10px] leading-relaxed text-slate-500 dark:text-slate-400">
+                        Write a question with up to six options and launch it to the room instantly.
+                      </p>
+                    </div>
                   )}
                   {quizzes.map((q) => {
                     const isLive = activeQuiz?.id === q.id;
                     return (
                       <div
                         key={q.id}
-                        className="rounded-xl border border-white/10 bg-white/[0.03] p-3"
+                        className={`group/row relative overflow-hidden rounded-lg border bg-white/[0.02] p-3 pl-3.5 transition ${
+                          isLive
+                            ? 'border-mint-500/35 bg-mint-500/[0.05] shadow-[0_0_0_1px_rgba(34,197,94,0.12)]'
+                            : 'border-white/[0.08] hover:border-white/[0.14] hover:bg-white/[0.04]'
+                        }`}
                       >
-                        <p className="text-xs font-semibold text-slate-900 dark:text-slate-200">{q.question}</p>
-                        <p className="mt-1 text-[11px] text-slate-500">
-                          {q.options.length} options · {q.timeLimitSecs}s ·{' '}
-                          {isLive
-                            ? 0
-                            : quizResults?.quizId === q.id
-                            ? quizResults.totalAnswers
-                            : q.answerCount}{' '}
-                          answers
-                        </p>
-                        <div className="mt-2.5 flex gap-2">
+                        <span
+                          className={`absolute inset-y-0 left-0 w-[2px] ${
+                            isLive ? 'bg-mint-500 dark:bg-mint-400' : 'bg-transparent'
+                          }`}
+                          aria-hidden
+                        />
+                        <div className="flex items-start justify-between gap-2">
+                          <p className="min-w-0 flex-1 text-xs font-semibold leading-snug tracking-tight text-slate-900 dark:text-slate-100">
+                            {q.question}
+                          </p>
+                          {isLive && (
+                            <span className="inline-flex shrink-0 items-center gap-1 rounded bg-mint-500/15 px-1.5 py-px text-[9px] font-bold uppercase tracking-wider text-mint-600 dark:text-mint-400">
+                              <span className="h-1 w-1 rounded-full bg-mint-500 dark:bg-mint-400" />
+                              Live
+                            </span>
+                          )}
+                        </div>
+                        <div className="mt-1.5 flex flex-wrap items-center gap-1">
+                          <span className="rounded bg-white/[0.05] px-1.5 py-px text-[9px] font-medium tabular-nums text-slate-500 dark:text-slate-400">
+                            {q.options.length} options
+                          </span>
+                          <span className="rounded bg-white/[0.05] px-1.5 py-px text-[9px] font-medium tabular-nums text-slate-500 dark:text-slate-400">
+                            {q.timeLimitSecs}s
+                          </span>
+                          <span className="rounded bg-brand-500/10 px-1.5 py-px text-[9px] font-semibold tabular-nums text-brand-600 dark:text-brand-300">
+                            {isLive
+                              ? 0
+                              : quizResults?.quizId === q.id
+                              ? quizResults.totalAnswers
+                              : q.answerCount}{' '}
+                            answers
+                          </span>
+                        </div>
+                        <div className="mt-2.5 flex gap-1.5">
                           {isLive ? (
                             <button
                               onClick={() => close(q.id)}
-                              className="btn-ghost px-2.5 py-1 text-[11px]"
+                              className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/[0.04] px-2 py-1 text-[10px] font-semibold tracking-tight text-slate-700 transition hover:bg-white/[0.09] active:scale-[0.98] dark:text-slate-200"
                             >
+                              <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2">
+                                <rect x="6" y="6" width="12" height="12" rx="1.5" />
+                              </svg>
                               Close quiz
                             </button>
                           ) : (
                             <button
                               onClick={() => launch(q.id)}
-                              className="btn-primary px-2.5 py-1 text-[11px]"
+                              className="inline-flex items-center gap-1 rounded-md bg-gradient-to-b from-brand-400 to-brand-600 px-2 py-1 text-[10px] font-semibold tracking-tight text-white shadow-sm transition hover:from-brand-300 hover:to-brand-500 active:scale-[0.98]"
                             >
+                              <svg viewBox="0 0 24 24" className="h-3 w-3" fill="currentColor">
+                                <path d="M8 5.5v13l11-6.5-11-6.5Z" />
+                              </svg>
                               Launch
                             </button>
                           )}
@@ -1411,28 +1567,31 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
                   })}
 
                   {quizResults && (
-                    <div className="mt-3 rounded-xl border border-brand-500/30 bg-brand-500/10 p-3">
+                    <div className="mt-3 rounded-lg border border-brand-500/25 bg-brand-500/[0.08] p-3">
                       <div className="flex items-center justify-between">
-                        <p className="text-[11px] font-semibold text-brand-600 dark:text-brand-200">
+                        <p className="text-[11px] font-semibold tracking-tight text-brand-600 dark:text-brand-200">
                           Results for “{quizResults.question}”
                         </p>
                         <button
                           type="button"
                           onClick={() => useRoomStore.getState().set({ quizResults: null })}
-                          className="text-[10px] text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                          className="rounded p-0.5 text-slate-400 transition hover:bg-white/[0.08] hover:text-slate-600 dark:hover:text-slate-200"
                           title="Dismiss results"
+                          aria-label="Dismiss results"
                         >
-                          ✕
+                          <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" />
+                          </svg>
                         </button>
                       </div>
-                      <p className="mt-1 text-[11px] text-slate-700 dark:text-slate-300">
+                      <p className="mt-1 text-[10px] text-slate-600 dark:text-slate-300">
                         {quizResults.correctCount}/{quizResults.totalAnswers} correct
                       </p>
                       <ul className="mt-2 space-y-1">
                         {Object.entries(quizResults.distribution).map(([optId, count]) => (
-                          <li key={optId} className="flex items-center gap-2 text-[11px] text-slate-600 dark:text-slate-400">
+                          <li key={optId} className="flex items-center gap-2 text-[10px] text-slate-600 dark:text-slate-400">
                             <span className="w-4 font-mono text-slate-500">{optId}</span>
-                            <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-200 dark:bg-white/10">
+                            <span className="h-1 flex-1 overflow-hidden rounded-full bg-slate-200 dark:bg-white/10">
                               <span
                                 className="block h-full rounded-full bg-brand-500"
                                 style={{
@@ -1456,43 +1615,85 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
               {!loading && !composing && tab === 'poll' && (
                 <div className="space-y-2">
                   {polls.length === 0 && (
-                    <p className="py-6 text-center text-xs text-slate-500">
-                      No polls yet — tap “+ New” to write one now.
-                    </p>
+                    <div className="space-y-2 py-8 text-center">
+                      <span className="mx-auto grid h-9 w-9 place-items-center rounded-lg bg-white/[0.04] text-slate-400 ring-1 ring-white/[0.08]">
+                        <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M6 20V10M12 20V4M18 20v-7" strokeLinecap="round" />
+                        </svg>
+                      </span>
+                      <p className="text-[11px] font-semibold tracking-tight text-slate-800 dark:text-slate-200">
+                        No polls yet
+                      </p>
+                      <p className="mx-auto max-w-[15rem] text-[10px] leading-relaxed text-slate-500 dark:text-slate-400">
+                        Ask the room a question and watch votes land live as they come in.
+                      </p>
+                    </div>
                   )}
                   {polls.map((p) => {
                     const isLive = activePoll?.id === p.id;
                     return (
                       <div
                         key={p.id}
-                        className="rounded-xl border border-white/10 bg-white/[0.03] p-3"
+                        className={`group/row relative overflow-hidden rounded-lg border bg-white/[0.02] p-3 pl-3.5 transition ${
+                          isLive
+                            ? 'border-accent-500/35 bg-accent-500/[0.05] shadow-[0_0_0_1px_rgba(245,158,11,0.12)]'
+                            : 'border-white/[0.08] hover:border-white/[0.14] hover:bg-white/[0.04]'
+                        }`}
                       >
-                        <p className="text-xs font-semibold text-slate-900 dark:text-slate-200">{p.question}</p>
-                        <p className="mt-1 text-[11px] text-slate-500">
-                          {p.options.length} options ·{' '}
-                          {p.timeLimitSecs > 0 ? `${p.timeLimitSecs}s` : 'open until closed'} ·{' '}
-                          {isLive && pollResults
-                            ? pollResults.totalVotes
-                            : pollResults && pollResults.pollId === p.id
-                            ? pollResults.totalVotes
-                            : isLive
-                            ? 0
-                            : p.voteCount}{' '}
-                          votes
-                        </p>
-                        <div className="mt-2.5 flex gap-2">
+                        <span
+                          className={`absolute inset-y-0 left-0 w-[2px] ${
+                            isLive ? 'bg-accent-500 dark:bg-accent-400' : 'bg-transparent'
+                          }`}
+                          aria-hidden
+                        />
+                        <div className="flex items-start justify-between gap-2">
+                          <p className="min-w-0 flex-1 text-xs font-semibold leading-snug tracking-tight text-slate-900 dark:text-slate-100">
+                            {p.question}
+                          </p>
+                          {isLive && (
+                            <span className="inline-flex shrink-0 items-center gap-1 rounded bg-accent-500/15 px-1.5 py-px text-[9px] font-bold uppercase tracking-wider text-accent-600 dark:text-accent-400">
+                              <span className="h-1 w-1 rounded-full bg-accent-500 dark:bg-accent-400" />
+                              Live
+                            </span>
+                          )}
+                        </div>
+                        <div className="mt-1.5 flex flex-wrap items-center gap-1">
+                          <span className="rounded bg-white/[0.05] px-1.5 py-px text-[9px] font-medium tabular-nums text-slate-500 dark:text-slate-400">
+                            {p.options.length} options
+                          </span>
+                          <span className="rounded bg-white/[0.05] px-1.5 py-px text-[9px] font-medium tabular-nums text-slate-500 dark:text-slate-400">
+                            {p.timeLimitSecs > 0 ? `${p.timeLimitSecs}s` : 'open until closed'}
+                          </span>
+                          <span className="rounded bg-accent-500/10 px-1.5 py-px text-[9px] font-semibold tabular-nums text-accent-600 dark:text-accent-400">
+                            {isLive && pollResults
+                              ? pollResults.totalVotes
+                              : pollResults && pollResults.pollId === p.id
+                              ? pollResults.totalVotes
+                              : isLive
+                              ? 0
+                              : p.voteCount}{' '}
+                            votes
+                          </span>
+                        </div>
+                        <div className="mt-2.5 flex gap-1.5">
                           {isLive ? (
                             <button
                               onClick={() => closePoll(p.id)}
-                              className="btn-ghost px-2.5 py-1 text-[11px]"
+                              className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/[0.04] px-2 py-1 text-[10px] font-semibold tracking-tight text-slate-700 transition hover:bg-white/[0.09] active:scale-[0.98] dark:text-slate-200"
                             >
+                              <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2">
+                                <rect x="6" y="6" width="12" height="12" rx="1.5" />
+                              </svg>
                               Close poll
                             </button>
                           ) : (
                             <button
                               onClick={() => launchPoll(p.id)}
-                              className="btn-primary px-2.5 py-1 text-[11px]"
+                              className="inline-flex items-center gap-1 rounded-md bg-gradient-to-b from-brand-400 to-brand-600 px-2 py-1 text-[10px] font-semibold tracking-tight text-white shadow-sm transition hover:from-brand-300 hover:to-brand-500 active:scale-[0.98]"
                             >
+                              <svg viewBox="0 0 24 24" className="h-3 w-3" fill="currentColor">
+                                <path d="M8 5.5v13l11-6.5-11-6.5Z" />
+                              </svg>
                               Launch
                             </button>
                           )}
@@ -1512,21 +1713,24 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
                   })}
 
                   {pollResults && (
-                    <div className="mt-3 rounded-xl border border-accent-500/30 bg-accent-500/10 p-3">
+                    <div className="mt-3 rounded-lg border border-accent-500/25 bg-accent-500/[0.08] p-3">
                       <div className="flex items-center justify-between">
-                        <p className="text-[11px] font-semibold text-accent-600 dark:text-accent-400">
+                        <p className="text-[11px] font-semibold tracking-tight text-accent-600 dark:text-accent-400">
                           {pollResults.closed ? 'Final tally' : 'Live tally'}
                         </p>
                         <button
                           type="button"
                           onClick={() => useRoomStore.getState().set({ pollResults: null })}
-                          className="text-[10px] text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                          className="rounded p-0.5 text-slate-400 transition hover:bg-white/[0.08] hover:text-slate-600 dark:hover:text-slate-200"
                           title="Dismiss results"
+                          aria-label="Dismiss results"
                         >
-                          ✕
+                          <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" />
+                          </svg>
                         </button>
                       </div>
-                      <p className="mt-1 text-[11px] text-slate-700 dark:text-slate-300">
+                      <p className="mt-1 text-[10px] text-slate-600 dark:text-slate-300">
                         {pollResults.totalVotes}{' '}
                         {pollResults.totalVotes === 1 ? 'vote' : 'votes'}
                       </p>
@@ -1536,12 +1740,12 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
                           return (
                             <li
                               key={opt.id}
-                              className="flex items-center gap-2 text-[11px] text-slate-600 dark:text-slate-400"
+                              className="flex items-center gap-2 text-[10px] text-slate-600 dark:text-slate-400"
                             >
                               <span className="w-4 font-mono text-slate-500">
                                 {opt.id.toUpperCase()}
                               </span>
-                              <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-200 dark:bg-white/10">
+                              <span className="h-1 flex-1 overflow-hidden rounded-full bg-slate-200 dark:bg-white/10">
                                 <span
                                   className="block h-full rounded-full bg-accent-500"
                                   style={{
@@ -1570,40 +1774,46 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
               {!loading && !composing && tab === 'offer' && !followUpFor && (
                 <div className="space-y-3">
                   {/* Payment Gateway Status & Dedicated Webinar Webhook Card */}
-                  <div className="rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/[0.04] p-3 text-xs shadow-sm space-y-2.5">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <span className="text-base shrink-0">💳</span>
+                  {offerSettingsOpen && (
+                  <div className="animate-fade-in space-y-2.5 rounded-lg border border-white/[0.08] bg-white/[0.02] p-3 text-xs">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex min-w-0 items-center gap-2.5">
+                        <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-brand-500/15 text-brand-500 ring-1 ring-brand-500/25 dark:text-brand-300">
+                          <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2">
+                            <rect x="2.5" y="5" width="19" height="14" rx="2.5" />
+                            <path d="M2.5 10h19" strokeLinecap="round" />
+                          </svg>
+                        </span>
                         <div className="min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-semibold text-slate-800 dark:text-slate-200">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="whitespace-nowrap text-[11px] font-semibold tracking-tight text-slate-900 dark:text-slate-100">
                               Razorpay Payments
                             </span>
                             <span
-                              className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                              className={`whitespace-nowrap rounded px-1.5 py-px text-[9px] font-bold uppercase tracking-wider ${
                                 !gatewayStatus
-                                  ? 'bg-slate-200 dark:bg-white/10 text-slate-500'
+                                  ? 'bg-slate-200 text-slate-500 dark:bg-white/10'
                                   : !gatewayStatus.enabled
-                                  ? 'bg-red-500/15 text-red-600 dark:text-red-400 ring-1 ring-red-500/20'
+                                  ? 'bg-red-500/15 text-red-600 ring-1 ring-red-500/20 dark:text-red-400'
                                   : gatewayStatus.mode === 'live'
-                                  ? 'bg-mint-500/15 text-mint-600 dark:text-mint-400 ring-1 ring-mint-500/20'
+                                  ? 'bg-mint-500/15 text-mint-600 ring-1 ring-mint-500/20 dark:text-mint-400'
                                   : gatewayStatus.mode === 'test'
-                                  ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 ring-1 ring-amber-500/20'
-                                  : 'bg-slate-200 dark:bg-white/10 text-slate-600 dark:text-slate-300'
+                                  ? 'bg-amber-500/15 text-amber-600 ring-1 ring-amber-500/20 dark:text-amber-400'
+                                  : 'bg-slate-200 text-slate-600 dark:bg-white/10 dark:text-slate-300'
                               }`}
                             >
                               {!gatewayStatus
                                 ? 'Checking…'
                                 : !gatewayStatus.enabled
-                                ? '🔴 Disabled'
+                                ? 'Disabled'
                                 : gatewayStatus.mode === 'live'
-                                ? '🟢 Live Active'
+                                ? 'Live active'
                                 : gatewayStatus.mode === 'test'
-                                ? '🟡 Test Active'
-                                : '⚪ Mock Mode'}
+                                ? 'Test active'
+                                : 'Mock mode'}
                             </span>
                           </div>
-                          <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
+                          <p className="mt-0.5 text-[10px] leading-relaxed text-slate-500 dark:text-slate-400">
                             {!gatewayStatus
                               ? 'Checking payment gateway configuration…'
                               : !gatewayStatus.enabled
@@ -1617,17 +1827,17 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
                       <button
                         type="button"
                         onClick={() => setShowGatewayModal(true)}
-                        className="shrink-0 px-2.5 py-1 text-[11px] font-semibold rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 text-slate-700 dark:text-slate-200 transition shadow-sm"
+                        className="w-full shrink-0 rounded-md border border-white/10 bg-white/[0.04] px-2 py-1 text-[10px] font-semibold tracking-tight text-slate-700 shadow-sm transition hover:bg-white/[0.09] dark:text-slate-200 sm:w-auto"
                       >
-                        ⚙️ Configure Keys
+                        Configure keys
                       </button>
                     </div>
 
                     {/* Dedicated Webinar Webhook Box */}
-                    <div className="pt-2 border-t border-slate-200 dark:border-white/10 space-y-1">
-                      <div className="flex items-center justify-between text-[11px]">
-                        <span className="font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1">
-                          <span>🔗</span> Webhook URL for this Webinar:
+                    <div className="space-y-1 border-t border-white/[0.07] pt-2">
+                      <div className="flex items-center justify-between text-[10px]">
+                        <span className="flex items-center gap-1 font-semibold text-slate-600 dark:text-slate-300">
+                          Webhook URL for this webinar
                         </span>
                         <button
                           type="button"
@@ -1643,12 +1853,12 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
                               setTimeout(() => setCopiedWebhook(false), 2500);
                             }
                           }}
-                          className="text-amber-500 font-semibold hover:underline flex items-center gap-1 text-[11px]"
+                          className="flex items-center gap-1 text-[10px] font-semibold text-amber-500 hover:underline"
                         >
-                          {copiedWebhook ? '✓ Copied!' : '📋 Copy Webhook URL'}
+                          {copiedWebhook ? 'Copied' : 'Copy'}
                         </button>
                       </div>
-                      <div className="flex items-center bg-white dark:bg-black/30 rounded-lg p-1.5 border border-slate-200 dark:border-white/10">
+                      <div className="flex items-center rounded-md border border-white/[0.08] bg-white/[0.03] p-1.5 dark:bg-black/30">
                         <input
                           type="text"
                           readOnly
@@ -1658,19 +1868,19 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
                               ? `${window.location.origin.replace(':3000', ':4000')}/api/payments/webhook/${webinarId}`
                               : '')
                           }
-                          className="bg-transparent text-[10px] font-mono text-slate-600 dark:text-slate-300 flex-1 truncate select-all focus:outline-none"
+                          className="flex-1 truncate bg-transparent font-mono text-[10px] text-slate-600 select-all focus:outline-none dark:text-slate-300"
                         />
                       </div>
 
                       {/* Webhook Secret Key */}
-                      <div className="pt-2 border-t border-dashed border-slate-200 dark:border-white/10 space-y-1.5">
-                        <div className="flex items-center justify-between text-[11px]">
-                          <span className="font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1">
-                            <span>🔑</span> Webhook Secret Key:
+                      <div className="space-y-1.5 border-t border-dashed border-white/[0.07] pt-2">
+                        <div className="flex items-center justify-between text-[10px]">
+                          <span className="font-semibold text-slate-600 dark:text-slate-300">
+                            Webhook secret key
                           </span>
                           {secretSaved && (
-                            <span className="text-emerald-500 font-medium text-[10px] flex items-center gap-1">
-                              <span>✓</span> Saved
+                            <span className="flex items-center gap-1 text-[10px] font-medium text-emerald-500">
+                              Saved
                             </span>
                           )}
                         </div>
@@ -1683,47 +1893,63 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
                                 setWebhookSecret(e.target.value);
                                 setSecretSaved(false);
                               }}
-                              placeholder="Enter Razorpay Webhook Secret..."
-                              className="w-full bg-white dark:bg-black/30 rounded-lg py-1.5 pl-2.5 pr-7 border border-slate-200 dark:border-white/10 text-[10px] font-mono text-slate-800 dark:text-slate-200 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                              placeholder="Enter Razorpay webhook secret…"
+                              className="w-full rounded-md border border-white/[0.08] bg-white/[0.03] py-1.5 pl-2.5 pr-7 font-mono text-[10px] text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-amber-500 dark:bg-black/30 dark:text-slate-200"
                             />
                             <button
                               type="button"
                               onClick={() => setShowSecret(!showSecret)}
-                              className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xs"
+                              className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 transition hover:text-slate-600 dark:hover:text-slate-200"
                               title={showSecret ? 'Hide secret' : 'Show secret'}
+                              aria-label={showSecret ? 'Hide secret' : 'Show secret'}
                             >
-                              {showSecret ? '👁️' : '🔒'}
+                              <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2">
+                                {showSecret ? (
+                                  <>
+                                    <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z" strokeLinejoin="round" />
+                                    <circle cx="12" cy="12" r="3" />
+                                  </>
+                                ) : (
+                                  <>
+                                    <path d="M3 3l18 18" strokeLinecap="round" />
+                                    <path d="M10.6 6.2A9.9 9.9 0 0 1 12 6c6.4 0 10 6 10 6a17 17 0 0 1-3.2 3.9M6.3 7.9A17 17 0 0 0 2 12s3.6 6 10 6a9.7 9.7 0 0 0 4-.8" strokeLinecap="round" strokeLinejoin="round" />
+                                  </>
+                                )}
+                              </svg>
                             </button>
                           </div>
                           <button
                             type="button"
                             disabled={savingSecret}
                             onClick={handleSaveWebhookSecret}
-                            className="btn btn-primary py-1 px-3 text-[11px] rounded-lg font-medium shrink-0 disabled:opacity-50"
+                            className="shrink-0 rounded-md bg-brand-500 px-2.5 py-1.5 text-[10px] font-semibold tracking-tight text-white shadow-sm transition hover:bg-brand-400 active:scale-[0.98] disabled:opacity-50"
                           >
-                            {savingSecret ? 'Saving...' : 'Save Secret'}
+                            {savingSecret ? 'Saving…' : 'Save'}
                           </button>
                         </div>
                       </div>
 
-                      <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-relaxed">
-                        Add to Razorpay → Settings → Webhooks. Events: <code className="font-mono text-amber-500">payment.captured</code>, <code className="font-mono text-amber-500">order.paid</code>. Webhook Secret: enter above or use your Razorpay Key Secret.
+                      <p className="text-[10px] leading-relaxed text-slate-500 dark:text-slate-400">
+                        Add to Razorpay → Settings → Webhooks. Events:{' '}
+                        <code className="font-mono text-amber-500">payment.captured</code>,{' '}
+                        <code className="font-mono text-amber-500">order.paid</code>. Webhook secret: enter above or use your Razorpay key secret.
                       </p>
                     </div>
                   </div>
+                  )}
 
                   {/* Sub-tabs: Offers vs Live Sales */}
-                  <div className="flex items-center gap-2 border-b border-slate-200 dark:border-white/10 pb-2">
+                  <div className="flex items-center gap-1 rounded-md border border-white/[0.07] bg-slate-100/80 p-1 dark:bg-ink-950/40">
                     <button
                       type="button"
                       onClick={() => setOfferSubTab('offers')}
-                      className={`px-3 py-1 rounded-lg text-xs font-semibold transition ${
+                      className={`flex-1 rounded px-2 py-1 text-[11px] font-semibold tracking-tight transition ${
                         offerSubTab === 'offers'
-                          ? 'bg-amber-500 text-slate-950 shadow-sm'
-                          : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5'
+                          ? 'bg-white text-slate-900 shadow-sm ring-1 ring-slate-900/[0.08] dark:bg-white/[0.09] dark:text-white dark:ring-white/10'
+                          : 'text-slate-500 hover:bg-white hover:text-slate-700 dark:hover:bg-white/[0.04] dark:hover:text-slate-300'
                       }`}
                     >
-                      Offers ({ctas.length})
+                      Offers <span className="tabular-nums">({ctas.length})</span>
                     </button>
                     <button
                       type="button"
@@ -1731,14 +1957,14 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
                         setOfferSubTab('sales');
                         void refreshPayments();
                       }}
-                      className={`px-3 py-1 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 ${
+                      className={`flex flex-1 items-center justify-center gap-1.5 rounded px-2 py-1 text-[11px] font-semibold tracking-tight transition ${
                         offerSubTab === 'sales'
-                          ? 'bg-amber-500 text-slate-950 shadow-sm'
-                          : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5'
+                          ? 'bg-white text-slate-900 shadow-sm ring-1 ring-slate-900/[0.08] dark:bg-white/[0.09] dark:text-white dark:ring-white/10'
+                          : 'text-slate-500 hover:bg-white hover:text-slate-700 dark:hover:bg-white/[0.04] dark:hover:text-slate-300'
                       }`}
                     >
-                      <span>💰 Live Sales</span>
-                      <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-black/10 dark:bg-white/15">
+                      <span>Live sales</span>
+                      <span className="rounded bg-black/[0.06] px-1 py-px text-[9px] font-bold tabular-nums dark:bg-white/[0.12]">
                         {paymentCount} · ₹{(totalRevenuePaise / 100).toLocaleString('en-IN')}
                       </span>
                     </button>
@@ -1746,62 +1972,67 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
 
                   {/* Live Sales View */}
                   {offerSubTab === 'sales' && (
-                    <div className="space-y-2.5 animate-fade-in">
+                    <div className="animate-fade-in space-y-2.5">
                       <div className="grid grid-cols-2 gap-2">
-                        <div className="rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/[0.03] p-3 text-center">
-                          <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
-                            Total Revenue
+                        <div className="rounded-lg border border-white/[0.08] bg-white/[0.02] p-3 text-center">
+                          <p className="text-[9px] font-semibold uppercase tracking-wider text-slate-500">
+                            Total revenue
                           </p>
-                          <p className="mt-1 text-base font-extrabold text-slate-900 dark:text-white tabular-nums">
+                          <p className="mt-1 text-base font-bold tabular-nums tracking-tight text-slate-900 dark:text-white">
                             ₹{(totalRevenuePaise / 100).toLocaleString('en-IN')}
                           </p>
                         </div>
-                        <div className="rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/[0.03] p-3 text-center">
-                          <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
-                            Successful Sales
+                        <div className="rounded-lg border border-white/[0.08] bg-white/[0.02] p-3 text-center">
+                          <p className="text-[9px] font-semibold uppercase tracking-wider text-slate-500">
+                            Successful sales
                           </p>
-                          <p className="mt-1 text-base font-extrabold text-slate-900 dark:text-white tabular-nums">
+                          <p className="mt-1 text-base font-bold tabular-nums tracking-tight text-slate-900 dark:text-white">
                             {paymentCount} paid
                           </p>
                         </div>
                       </div>
 
                       {payments.length === 0 ? (
-                        <div className="py-8 text-center space-y-2">
-                          <p className="text-2xl">💳</p>
-                          <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">
+                        <div className="space-y-2 py-8 text-center">
+                          <span className="mx-auto grid h-9 w-9 place-items-center rounded-lg bg-white/[0.04] text-slate-400 ring-1 ring-white/[0.08]">
+                            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
+                              <rect x="2.5" y="5" width="19" height="14" rx="2.5" />
+                              <path d="M2.5 10h19" strokeLinecap="round" />
+                            </svg>
+                          </span>
+                          <p className="text-[11px] font-semibold tracking-tight text-slate-800 dark:text-slate-200">
                             No payments recorded yet for this webinar
                           </p>
-                          <p className="text-[11px] text-slate-500 dark:text-slate-400 max-w-xs mx-auto">
+                          <p className="mx-auto max-w-xs text-[10px] leading-relaxed text-slate-500 dark:text-slate-400">
                             When attendees pay through live offers or via the Razorpay webhook, captured transactions appear here in real-time.
                           </p>
                         </div>
                       ) : (
-                        <div className="space-y-2 max-h-72 overflow-y-auto pr-0.5">
+                        <div className="scrollbar-thin max-h-72 space-y-2 overflow-y-auto pr-0.5">
                           {payments.map((p) => (
                             <div
                               key={p.id}
-                              className="rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/[0.03] p-2.5 text-xs shadow-xs"
+                              className="rounded-lg border border-white/[0.08] bg-white/[0.02] p-2.5 text-xs transition hover:border-white/[0.14]"
                             >
                               <div className="flex items-center justify-between gap-2">
                                 <div className="min-w-0">
-                                  <p className="font-semibold text-slate-900 dark:text-white truncate">
+                                  <p className="truncate text-[11px] font-semibold tracking-tight text-slate-900 dark:text-white">
                                     {p.user?.name || 'Attendee'}
                                   </p>
-                                  <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                                  <p className="truncate text-[10px] text-slate-500 dark:text-slate-400">
                                     {p.user?.email || 'No email'} · {p.offerTitle || 'Offer'}
                                   </p>
                                 </div>
-                                <div className="text-right shrink-0">
-                                  <p className="font-bold text-slate-900 dark:text-white tabular-nums">
+                                <div className="shrink-0 text-right">
+                                  <p className="text-[11px] font-bold tabular-nums text-slate-900 dark:text-white">
                                     ₹{(p.amountPaise / 100).toLocaleString('en-IN')}
                                   </p>
-                                  <span className="inline-block mt-0.5 px-1.5 py-0.2 rounded text-[9px] font-bold uppercase tracking-wider bg-mint-500/15 text-mint-600 dark:text-mint-400">
+                                  <span className="mt-0.5 inline-block rounded bg-mint-500/15 px-1.5 py-px text-[9px] font-bold uppercase tracking-wider text-mint-600 dark:text-mint-400">
                                     {p.status}
                                   </span>
                                 </div>
                               </div>
-                              <p className="mt-1 text-[10px] text-slate-400 dark:text-slate-500">
+                              <p className="mt-1 text-[10px] tabular-nums text-slate-400 dark:text-slate-500">
                                 {new Date(p.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · {new Date(p.createdAt).toLocaleDateString()}
                               </p>
                             </div>
@@ -1815,9 +2046,19 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
                   {offerSubTab === 'offers' && (
                     <div className="space-y-2">
                   {ctas.length === 0 && (
-                    <p className="py-6 text-center text-xs text-slate-500">
-                      No offers yet — tap “+ New” to create one now.
-                    </p>
+                    <div className="space-y-2 py-8 text-center">
+                      <span className="mx-auto grid h-9 w-9 place-items-center rounded-lg bg-white/[0.04] text-slate-400 ring-1 ring-white/[0.08]">
+                        <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M3 7h18M3 12h18M3 17h10" strokeLinecap="round" />
+                        </svg>
+                      </span>
+                      <p className="text-[11px] font-semibold tracking-tight text-slate-800 dark:text-slate-200">
+                        No offers yet
+                      </p>
+                      <p className="mx-auto max-w-[15rem] text-[10px] leading-relaxed text-slate-500 dark:text-slate-400">
+                        Publish a course or product card to the room and collect payments in-stream.
+                      </p>
+                    </div>
                   )}
                   {ctas.map((c) => {
                     const isLive = activeCta?.id === c.id;
@@ -1825,18 +2066,49 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
                     return (
                       <div
                         key={c.id}
-                        className="rounded-xl border border-white/10 bg-white/[0.03] p-3"
+                        className={`group/row relative overflow-hidden rounded-lg border bg-white/[0.02] p-3 pl-3.5 transition ${
+                          isLive
+                            ? 'border-accent-500/35 bg-accent-500/[0.05] shadow-[0_0_0_1px_rgba(245,158,11,0.12)]'
+                            : 'border-white/[0.08] hover:border-white/[0.14] hover:bg-white/[0.04]'
+                        }`}
                       >
-                        <p className="text-xs font-semibold text-slate-900 dark:text-slate-200">{c.title}</p>
-                        <p className="mt-1 text-[11px] text-slate-500">
-                          {price ? `₹${(price / 100).toLocaleString('en-IN')}` : 'Free'}
-                          {c.course ? ` · ${c.course.title}` : ''}
-                        </p>
+                        <span
+                          className={`absolute inset-y-0 left-0 w-[2px] ${
+                            isLive ? 'bg-accent-500 dark:bg-accent-400' : 'bg-transparent'
+                          }`}
+                          aria-hidden
+                        />
+                        <div className="flex items-start justify-between gap-2">
+                          <p className="min-w-0 flex-1 text-xs font-semibold leading-snug tracking-tight text-slate-900 dark:text-slate-100">
+                            {c.title}
+                          </p>
+                          {isLive && (
+                            <span className="inline-flex shrink-0 items-center gap-1 rounded bg-accent-500/15 px-1.5 py-px text-[9px] font-bold uppercase tracking-wider text-accent-600 dark:text-accent-400">
+                              <span className="h-1 w-1 rounded-full bg-accent-500 dark:bg-accent-400" />
+                              Live
+                            </span>
+                          )}
+                        </div>
+                        <div className="mt-1.5 flex flex-wrap items-center gap-1">
+                          <span className="rounded bg-mint-500/10 px-1.5 py-px text-[9px] font-semibold tabular-nums text-mint-600 dark:text-mint-400">
+                            {price ? `₹${(price / 100).toLocaleString('en-IN')}` : 'Free'}
+                          </span>
+                          {c.course && (
+                            <span className="truncate rounded bg-white/[0.05] px-1.5 py-px text-[9px] font-medium text-slate-500 dark:text-slate-400">
+                              {c.course.title}
+                            </span>
+                          )}
+                          {c.formEnabled && (
+                            <span className="rounded bg-brand-500/10 px-1.5 py-px text-[9px] font-medium text-brand-600 dark:text-brand-300">
+                              form before payment
+                            </span>
+                          )}
+                        </div>
                         {/* The tally, live from the socket, falling back to the
                             count fetched with the list so it is right the
                             moment the panel opens. It is a summary only — the
                             names behind it live in the follow-up list. */}
-                        <p className="mt-1 flex items-center gap-1.5 text-[11px] text-accent-400">
+                        <p className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[10px] text-accent-500 dark:text-accent-400">
                           <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2">
                             <path d="M9 11.5V6a1.5 1.5 0 0 1 3 0v5m0 0V4.5a1.5 1.5 0 0 1 3 0V11m0 0V6.5a1.5 1.5 0 0 1 3 0V14a6 6 0 0 1-6 6h-1.2a5 5 0 0 1-3.9-1.9L4 14.5a1.6 1.6 0 0 1 2.4-2.1L9 15" strokeLinecap="round" strokeLinejoin="round" />
                           </svg>
@@ -1844,33 +2116,33 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
                             {ctaClickCounts[c.id] ?? c.clickCount ?? 0}
                           </span>
                           opened
-                          {c.formEnabled && (
-                            <span className="text-slate-500">· form before payment</span>
-                          )}
                           {isLive && activeCta?.expanded && (
-                            <span className="ml-1 rounded-full bg-accent-500/20 px-1.5 py-0.5 text-[9px] font-bold text-accent-400 border border-accent-500/30">
+                            <span className="ml-1 rounded border border-accent-500/30 bg-accent-500/15 px-1.5 py-px text-[9px] font-bold uppercase tracking-wider text-accent-500 dark:text-accent-400">
                               Expanded on audience screens
                             </span>
                           )}
                         </p>
-                        <div className="mt-2.5 flex flex-wrap gap-2">
+                        <div className="mt-2.5 flex flex-wrap gap-1.5">
                           {isLive ? (
                             <>
                               <button
                                 onClick={hideCta}
-                                className="btn-ghost px-2.5 py-1 text-[11px]"
+                                className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/[0.04] px-2 py-1 text-[10px] font-semibold tracking-tight text-slate-700 transition hover:bg-white/[0.09] active:scale-[0.98] dark:text-slate-200"
                               >
+                                <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2">
+                                  <path d="M3 3l18 18M10.6 6.2A9.9 9.9 0 0 1 12 6c6.4 0 10 6 10 6a17 17 0 0 1-3.2 3.9M6.3 7.9A17 17 0 0 0 2 12s3.6 6 10 6a9.7 9.7 0 0 0 4-.8" strokeLinecap="round" strokeLinejoin="round" />
+                                </svg>
                                 Hide offer
                               </button>
                               <button
                                 onClick={() => expandCta(!activeCta?.expanded)}
-                                className={`px-2.5 py-1 text-[11px] font-semibold rounded-lg transition flex items-center gap-1.5 ${
+                                className={`inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[10px] font-semibold tracking-tight transition active:scale-[0.98] ${
                                   activeCta?.expanded
-                                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 hover:bg-amber-500/30'
-                                    : 'btn-accent'
+                                    ? 'border border-amber-500/40 bg-amber-500/15 text-amber-600 hover:bg-amber-500/25 dark:text-amber-300'
+                                    : 'bg-gradient-to-b from-accent-400 to-accent-600 text-ink-950 shadow-sm hover:from-accent-300 hover:to-accent-500'
                                 }`}
                               >
-                                <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2">
+                                <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2">
                                   {activeCta?.expanded ? (
                                     <path d="M4 14h6m0 0v6m0-6L3 21m17-7h-6m0 0v6m0-6l7 7M14 4h6m0 0v6m0-6l-7 7M4 10h6m0 0V4m0 6L3 3" strokeLinecap="round" strokeLinejoin="round" />
                                   ) : (
@@ -1884,17 +2156,21 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
                             <>
                               <button
                                 onClick={() => showCta(c.id, false)}
-                                className="btn-primary px-2.5 py-1 text-[11px]"
+                                className="inline-flex items-center gap-1 rounded-md bg-gradient-to-b from-brand-400 to-brand-600 px-2 py-1 text-[10px] font-semibold tracking-tight text-white shadow-sm transition hover:from-brand-300 hover:to-brand-500 active:scale-[0.98]"
                               >
+                                <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2">
+                                  <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z" strokeLinejoin="round" />
+                                  <circle cx="12" cy="12" r="3" />
+                                </svg>
                                 Show offer
                               </button>
                               <button
                                 onClick={() => showCta(c.id, true)}
-                                className="btn-accent px-2.5 py-1 text-[11px] flex items-center gap-1.5"
+                                className="inline-flex items-center gap-1.5 rounded-md bg-gradient-to-b from-accent-400 to-accent-600 px-2 py-1 text-[10px] font-semibold tracking-tight text-ink-950 shadow-sm transition hover:from-accent-300 hover:to-accent-500 active:scale-[0.98]"
                                 title="Publish offer and automatically open it expanded for all participants"
                               >
                                 <span>Show &amp; expand</span>
-                                <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2">
+                                <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2">
                                   <path d="M15 3h6m0 0v6m0-6L14 10M9 21H3m0 0v-6m0 6l7-7M3 9V3m0 0h6m-6 0l7 7m11 5v6m0 0h-6m6 0l-7-7" strokeLinecap="round" strokeLinejoin="round" />
                                 </svg>
                               </button>
@@ -1902,14 +2178,20 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
                           )}
                           <button
                             onClick={() => setFollowUpFor(c.id)}
-                            className="btn-ghost px-2.5 py-1 text-[11px]"
+                            className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/[0.04] px-2 py-1 text-[10px] font-semibold tracking-tight text-slate-700 transition hover:bg-white/[0.09] active:scale-[0.98] dark:text-slate-200"
                           >
+                            <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2">
+                              <path d="M17 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9.5 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM22 21v-2a4 4 0 0 0-3-3.9" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
                             Follow up
                           </button>
                           <button
                             onClick={() => editForm(c)}
-                            className="btn-ghost px-2.5 py-1 text-[11px]"
+                            className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/[0.04] px-2 py-1 text-[10px] font-semibold tracking-tight text-slate-700 transition hover:bg-white/[0.09] active:scale-[0.98] dark:text-slate-200"
                           >
+                            <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2">
+                              <path d="M4 6h16M4 12h16M4 18h10" strokeLinecap="round" />
+                            </svg>
                             {c.formEnabled ? 'Edit form' : 'Add form'}
                           </button>
                         </div>
@@ -1933,28 +2215,28 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
             </div>
 
             {/* ── stage control ───────────────────────────── */}
-            <div className="border-t border-white/10 px-4 py-3">
+            <div className="border-t border-white/[0.07] px-3.5 py-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="min-w-0">
-                  <p className="text-[11px] font-semibold text-slate-900 dark:text-white">Stage</p>
+                  <p className="text-[11px] font-semibold tracking-tight text-slate-900 dark:text-white">Stage</p>
                   <p className="text-[10px] text-slate-500">
                     {spotlightedPeerId
                       ? 'One speaker is pinned to the big tile.'
                       : 'Pin a speaker to the big tile for everyone.'}
                   </p>
                 </div>
-                <div className="flex shrink-0 gap-2">
+                <div className="flex shrink-0 gap-1.5">
                   {spotlightedPeerId && (
                     <button
                       onClick={() => spotlight(null)}
-                      className="rounded-lg bg-slate-100 dark:bg-white/10 border border-slate-200 dark:border-transparent px-2.5 py-1 text-[11px] font-semibold text-slate-800 dark:text-white hover:bg-slate-200 dark:hover:bg-white/15"
+                      className="rounded-md border border-white/10 bg-white/[0.04] px-2 py-1 text-[10px] font-semibold tracking-tight text-slate-700 transition hover:bg-white/[0.09] dark:text-slate-200"
                     >
                       Clear spotlight
                     </button>
                   )}
                   <button
                     onClick={muteAll}
-                    className="rounded-lg bg-slate-100 dark:bg-white/10 border border-slate-200 dark:border-transparent px-2.5 py-1 text-[11px] font-semibold text-slate-800 dark:text-white hover:bg-slate-200 dark:hover:bg-white/15"
+                    className="rounded-md border border-white/10 bg-white/[0.04] px-2 py-1 text-[10px] font-semibold tracking-tight text-slate-700 transition hover:bg-white/[0.09] dark:text-slate-200"
                   >
                     Mute all
                   </button>
@@ -1969,10 +2251,10 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
                       <button
                         key={p.peerId}
                         onClick={() => spotlight(active ? null : p.peerId)}
-                        className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold transition ${
+                        className={`rounded-md border px-2 py-0.5 text-[10px] font-semibold tracking-tight transition ${
                           active
-                            ? 'border-brand-400/60 bg-brand-500/20 text-brand-200'
-                            : 'border-white/10 bg-white/5 text-slate-300 hover:bg-white/10'
+                            ? 'border-brand-500/40 bg-brand-500/15 text-brand-600 dark:text-brand-200'
+                            : 'border-white/10 bg-white/[0.03] text-slate-600 hover:bg-white/[0.08] dark:text-slate-300'
                         }`}
                       >
                         {active ? '★ ' : ''}
@@ -1984,7 +2266,7 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
               )}
 
               {stageMsg && (
-                <p className="mt-2 rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-[10px] text-slate-300">
+                <p className="mt-2 rounded-md border border-white/10 bg-white/[0.04] px-2 py-1 text-[10px] text-slate-600 dark:text-slate-300">
                   {stageMsg}
                 </p>
               )}
@@ -1992,10 +2274,10 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
 
             {/* ── go live ─────────────────────────────────── */}
             {canEndWebinar && startedAt === null && (
-              <div className="border-t border-white/10 bg-brand-500/[0.06] px-4 py-3">
+              <div className="border-t border-brand-500/20 bg-brand-500/[0.06] px-3.5 py-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="min-w-0">
-                    <p className="text-[11px] font-semibold text-slate-900 dark:text-white">Start the webinar</p>
+                    <p className="text-[11px] font-semibold tracking-tight text-slate-900 dark:text-white">Start the webinar</p>
                     <p className="text-[10px] text-slate-500">
                       Participants are waiting. They join the moment you start.
                     </p>
@@ -2003,13 +2285,13 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
                   <button
                     onClick={startWebinar}
                     disabled={starting}
-                    className="shrink-0 rounded-lg bg-brand-500 px-3 py-1.5 text-[11px] font-semibold text-white transition hover:bg-brand-400 disabled:opacity-50"
+                    className="shrink-0 rounded-md bg-brand-500 px-3 py-1.5 text-[11px] font-semibold tracking-tight text-white shadow-sm transition hover:bg-brand-400 active:scale-[0.98] disabled:opacity-50"
                   >
                     {starting ? 'Starting…' : 'Go live'}
                   </button>
                 </div>
                 {startError && (
-                  <p className="mt-2 rounded-lg border border-red-500/30 bg-red-500/10 px-2 py-1 text-[10px] text-red-300">
+                  <p className="mt-2 rounded-md border border-red-500/25 bg-red-500/[0.08] px-2 py-1 text-[10px] text-red-600 dark:text-red-300">
                     {startError}
                   </p>
                 )}
@@ -2018,14 +2300,15 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
 
             {/* ── recording ───────────────────────────────── */}
             {canEndWebinar && (
-              <div className="border-t border-slate-200 dark:border-white/10 px-4 py-3">
+              <div className="border-t border-white/[0.07] px-3.5 py-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="min-w-0">
-                    <p className="text-[11px] font-semibold text-slate-900 dark:text-white flex items-center gap-1.5">
+                    <p className="flex items-center gap-1.5 text-[11px] font-semibold tracking-tight text-slate-900 dark:text-white">
                       Session recording
                       {recording && (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-red-500/15 px-1.5 py-0.5 text-[9px] font-bold text-red-500 animate-pulse">
-                          ● REC
+                        <span className="inline-flex items-center gap-1 rounded bg-red-500/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-red-500 ring-1 ring-red-500/25">
+                          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-red-500" />
+                          REC
                         </span>
                       )}
                     </p>
@@ -2038,10 +2321,10 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
                   <button
                     onClick={toggleRecording}
                     disabled={recBusy || recClientStatus.isUploading}
-                    className={`shrink-0 rounded-lg px-2.5 py-1 text-[11px] font-semibold transition disabled:opacity-50 ${
+                    className={`shrink-0 rounded-md px-2.5 py-1 text-[10px] font-semibold tracking-tight transition active:scale-[0.98] disabled:opacity-50 ${
                       recording
-                        ? 'bg-amber-500 text-black hover:bg-amber-400'
-                        : 'bg-slate-100 dark:bg-white/10 border border-slate-200 dark:border-transparent text-slate-800 dark:text-white hover:bg-slate-200 dark:hover:bg-white/15'
+                        ? 'bg-amber-500 text-amber-950 shadow-sm hover:bg-amber-400'
+                        : 'border border-white/10 bg-white/[0.04] text-slate-700 hover:bg-white/[0.09] dark:text-slate-200'
                     }`}
                   >
                     {recBusy
@@ -2058,9 +2341,9 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
                   <div className="mt-2.5 space-y-1">
                     <div className="flex items-center justify-between text-[10px] font-medium text-brand-500 dark:text-brand-400">
                       <span>Uploading high-definition recording...</span>
-                      <span>{recClientStatus.uploadProgress}%</span>
+                      <span className="tabular-nums">{recClientStatus.uploadProgress}%</span>
                     </div>
-                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-white/10">
+                    <div className="h-1 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-white/10">
                       <div
                         className="h-full rounded-full bg-brand-500 transition-all duration-300"
                         style={{ width: `${recClientStatus.uploadProgress}%` }}
@@ -2070,19 +2353,19 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
                 )}
 
                 {recError && (
-                  <p className="mt-2 rounded-lg border border-red-500/30 bg-red-500/10 px-2 py-1 text-[10px] text-red-300">
+                  <p className="mt-2 rounded-md border border-red-500/25 bg-red-500/[0.08] px-2 py-1 text-[10px] text-red-600 dark:text-red-300">
                     {recError}
                   </p>
                 )}
 
                 {recClientStatus.uploadError && (
-                  <p className="mt-2 rounded-lg border border-red-500/30 bg-red-500/10 px-2 py-1 text-[10px] text-red-300">
+                  <p className="mt-2 rounded-md border border-red-500/25 bg-red-500/[0.08] px-2 py-1 text-[10px] text-red-600 dark:text-red-300">
                     Upload failed: {recClientStatus.uploadError}
                   </p>
                 )}
 
                 {lastRecording && (
-                  <div className="mt-2 flex items-center justify-between rounded-lg border border-brand-500/20 bg-brand-500/5 px-2.5 py-1.5">
+                  <div className="mt-2 flex items-center justify-between rounded-md border border-brand-500/20 bg-brand-500/[0.06] px-2.5 py-1.5">
                     <span className="text-[10px] font-medium text-slate-600 dark:text-slate-300">
                       Recording ready ({formatDuration(lastRecording.durationMs)})
                     </span>
@@ -2090,7 +2373,7 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
                       href={`/replay/${lastRecording.id}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-[11px] font-semibold text-brand-600 dark:text-brand-400 hover:underline"
+                      className="inline-flex items-center gap-1 text-[10px] font-semibold text-brand-600 hover:underline dark:text-brand-400"
                     >
                       Watch replay →
                     </a>
@@ -2101,16 +2384,16 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
 
             {/* ── danger zone ─────────────────────────────── */}
             {canEndWebinar && (
-              <div className="border-t border-white/10 bg-red-500/[0.04] px-4 py-3">
+              <div className="border-t border-red-500/15 bg-red-500/[0.04] px-3.5 py-3">
                 {confirmEnd ? (
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="text-[11px] text-red-300">
+                    <p className="text-[10px] font-medium text-red-600 dark:text-red-300">
                       End for everyone? This cannot be undone.
                     </p>
-                    <div className="flex gap-2">
+                    <div className="flex gap-1.5">
                       <button
                         onClick={() => setConfirmEnd(false)}
-                        className="btn-ghost px-2.5 py-1 text-[11px]"
+                        className="rounded-md border border-white/10 bg-white/[0.04] px-2 py-1 text-[10px] font-semibold text-slate-600 transition hover:bg-white/[0.09] dark:text-slate-300"
                         disabled={ending}
                       >
                         Cancel
@@ -2118,7 +2401,7 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
                       <button
                         onClick={endWebinar}
                         disabled={ending}
-                        className="rounded-lg bg-red-500 px-2.5 py-1 text-[11px] font-semibold text-white transition hover:bg-red-400 disabled:opacity-50"
+                        className="rounded-md bg-red-500 px-2 py-1 text-[10px] font-semibold text-white shadow-sm transition hover:bg-red-400 active:scale-[0.98] disabled:opacity-50"
                       >
                         {ending ? 'Ending…' : 'Yes, end it'}
                       </button>
@@ -2127,7 +2410,7 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
                 ) : (
                   <button
                     onClick={() => setConfirmEnd(true)}
-                    className="text-[11px] font-semibold text-red-400 transition hover:text-red-300"
+                    className="text-[10px] font-semibold tracking-tight text-red-500 transition hover:text-red-400 dark:text-red-400 dark:hover:text-red-300"
                   >
                     End webinar for everyone
                   </button>
@@ -2141,8 +2424,11 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
 
       {/* Host Live Payment Toast Notification */}
       {toastMessage && (
-        <div className="fixed top-5 right-5 z-[99999] rounded-xl bg-amber-500 text-slate-950 font-bold px-4 py-3 shadow-2xl animate-fade-in flex items-center gap-2.5 text-xs">
-          <span className="text-base">🎉</span>
+        <div className="animate-fade-in fixed right-5 top-5 z-[99999] flex items-center gap-2.5 rounded-lg bg-amber-500 px-3.5 py-2.5 text-[11px] font-bold tracking-tight text-slate-950 shadow-2xl">
+          <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M12 3v2m0 14v2M5.6 5.6l1.4 1.4m10 10 1.4 1.4m0-12.8-1.4 1.4m-10 10L5.6 18.4" strokeLinecap="round" />
+            <circle cx="12" cy="12" r="3.5" />
+          </svg>
           <span>{toastMessage}</span>
         </div>
       )}
@@ -2150,26 +2436,33 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
       {/* Gateway Configuration Modal for Host */}
       {showGatewayModal &&
         createPortal(
-          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-            <div className="relative w-full max-w-lg rounded-2xl bg-white dark:bg-ink-950 border border-slate-200 dark:border-white/10 p-5 sm:p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
-              <div className="flex items-center justify-between pb-3 mb-4 border-b border-slate-200 dark:border-white/10">
-                <div className="flex items-center gap-2">
-                  <span className="text-xl">💳</span>
+          <div className="animate-fade-in fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+            <div className="scrollbar-thin relative max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-lg border border-white/[0.08] bg-white p-5 shadow-2xl dark:bg-ink-950 sm:p-6">
+              <div className="mb-4 flex items-center justify-between border-b border-white/[0.07] pb-3">
+                <div className="flex items-center gap-2.5">
+                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-brand-500/15 text-brand-500 ring-1 ring-brand-500/25 dark:text-brand-300">
+                    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
+                      <rect x="2.5" y="5" width="19" height="14" rx="2.5" />
+                      <path d="M2.5 10h19" strokeLinecap="round" />
+                    </svg>
+                  </span>
                   <div>
-                    <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                      Razorpay Gateway Setup
+                    <h3 className="text-[13px] font-semibold tracking-tight text-slate-900 dark:text-white">
+                      Razorpay gateway setup
                     </h3>
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400">
                       Configure credentials to accept attendee payments in live webinars.
                     </p>
                   </div>
                 </div>
                 <button
                   onClick={() => setShowGatewayModal(false)}
-                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/10 transition text-sm font-bold"
+                  className="rounded-md p-1.5 text-slate-400 transition hover:bg-white/[0.07] hover:text-slate-700 dark:hover:text-white"
                   aria-label="Close gateway setup"
                 >
-                  ✕
+                  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" />
+                  </svg>
                 </button>
               </div>
               <GatewayConfigPanel
@@ -2214,19 +2507,22 @@ function RowActions({
 }) {
   if (confirming) {
     return (
-      <div className="mt-2.5 flex flex-wrap items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-2.5 py-1.5">
-        <p className="text-[11px] text-red-300">Delete this for good?</p>
+      <div className="mt-2.5 flex flex-wrap items-center gap-2 rounded-md border border-red-500/25 bg-red-500/[0.08] px-2.5 py-1.5">
+        <svg viewBox="0 0 24 24" className="h-3 w-3 shrink-0 text-red-500 dark:text-red-400" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+        <p className="flex-1 text-[10px] font-medium text-red-600 dark:text-red-300">Delete this for good?</p>
         <button
           onClick={onCancelDelete}
           disabled={busy}
-          className="btn-ghost px-2 py-0.5 text-[11px] disabled:opacity-40"
+          className="rounded-md border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] font-semibold tracking-tight text-slate-600 transition hover:bg-white/[0.09] disabled:opacity-40 dark:text-slate-300"
         >
           Cancel
         </button>
         <button
           onClick={onDelete}
           disabled={busy}
-          className="rounded-lg bg-red-500 px-2 py-0.5 text-[11px] font-semibold text-white transition hover:bg-red-400 disabled:opacity-50"
+          className="rounded-md bg-red-500 px-2 py-0.5 text-[10px] font-semibold tracking-tight text-white shadow-sm transition hover:bg-red-400 active:scale-[0.98] disabled:opacity-50"
         >
           {busy ? 'Deleting…' : 'Delete'}
         </button>
@@ -2235,15 +2531,24 @@ function RowActions({
   }
 
   return (
-    <div className="mt-2.5 flex flex-wrap gap-2">
-      <button onClick={onEdit} className="btn-ghost px-2.5 py-1 text-[11px]">
+    <div className="mt-2.5 flex items-center gap-1 border-t border-white/[0.06] pt-2">
+      <button
+        onClick={onEdit}
+        className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[10px] font-semibold tracking-tight text-slate-500 transition hover:bg-white/[0.07] hover:text-slate-800 dark:hover:text-slate-200"
+      >
+        <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5Z" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
         {editLabel}
       </button>
       <button
         onClick={onAskDelete}
         aria-label={`Delete ${id}`}
-        className="btn-ghost px-2.5 py-1 text-[11px] text-red-400 hover:text-red-300"
+        className="ml-auto inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[10px] font-semibold tracking-tight text-slate-400 transition hover:bg-red-500/10 hover:text-red-500 dark:hover:text-red-400"
       >
+        <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v5M14 11v5" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
         Delete
       </button>
     </div>

@@ -27,7 +27,7 @@ export function MediaRequestPrompt({
 
   return (
     <div className="fixed inset-x-0 top-16 z-50 mx-auto w-[min(92vw,26rem)] animate-fade-up">
-      <div className="rounded-xl border border-brand-400/30 bg-ink-800/95 p-4 shadow-pop backdrop-blur-xl">
+      <div className="rounded-lg border border-brand-400/30 bg-ink-800/95 p-4 shadow-pop backdrop-blur-xl">
         <div className="flex items-start gap-3">
           <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-brand-500/20 text-brand-300">
             <svg

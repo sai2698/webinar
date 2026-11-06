@@ -65,7 +65,7 @@ export function PollModal({ socket }: PollModalProps) {
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-ink-950/80 p-4 backdrop-blur-md">
-      <div className="w-full max-w-lg animate-fade-up overflow-hidden rounded-2xl border border-white/10 bg-ink-850 shadow-2xl">
+      <div className="w-full max-w-lg animate-fade-up overflow-hidden rounded-lg border border-white/10 bg-ink-850 shadow-2xl">
         <div className="h-1 w-full bg-white/5">
           <div
             className={`h-full transition-all duration-1000 ease-linear ${
@@ -77,7 +77,7 @@ export function PollModal({ socket }: PollModalProps) {
 
         <div className="p-6">
           <div className="mb-4 flex items-center justify-between">
-            <span className="chip border-accent-500/30 bg-accent-500/15 text-accent-400">
+            <span className="chip border-accent-500/30 bg-accent-500/15 text-accent-600 dark:text-accent-400">
               {closed ? 'Poll closed' : 'Live poll'}
             </span>
             <div className="flex items-center gap-3">
@@ -85,14 +85,14 @@ export function PollModal({ socket }: PollModalProps) {
                 {total} {total === 1 ? 'vote' : 'votes'}
               </span>
               {!closed && shown.timeLimitSecs > 0 && (
-                <span className="font-mono text-sm font-bold tabular-nums text-slate-300">
+                <span className="font-mono text-sm font-bold tabular-nums text-slate-600 dark:text-slate-300">
                   {remaining}s
                 </span>
               )}
             </div>
           </div>
 
-          <h2 className="text-lg font-semibold leading-snug text-white">{shown.question}</h2>
+          <h2 className="text-lg font-semibold leading-snug text-slate-900 dark:text-white">{shown.question}</h2>
 
           <div className="mt-5 space-y-2">
             {shown.options.map((opt) => {
@@ -105,7 +105,7 @@ export function PollModal({ socket }: PollModalProps) {
                   key={opt.id}
                   onClick={() => vote(opt.id)}
                   disabled={closed}
-                  className={`relative flex w-full items-center gap-3 overflow-hidden rounded-xl border px-4 py-3 text-left transition-all disabled:cursor-default ${
+                  className={`relative flex w-full items-center gap-3 overflow-hidden rounded-md border px-4 py-3 text-left transition-all disabled:cursor-default ${
                     isSelected
                       ? 'border-brand-400/70 bg-brand-500/20'
                       : 'border-white/10 bg-white/[0.04] hover:border-white/25 hover:bg-white/[0.08]'
@@ -119,13 +119,13 @@ export function PollModal({ socket }: PollModalProps) {
                   />
                   <span
                     className={`relative grid h-6 w-6 shrink-0 place-items-center rounded-full text-[11px] font-bold ${
-                      isSelected ? 'bg-brand-500 text-white' : 'bg-white/10 text-slate-400'
+                      isSelected ? 'bg-brand-500 text-white' : 'bg-white/10 text-slate-500 dark:text-slate-400'
                     }`}
                   >
                     {opt.id.toUpperCase()}
                   </span>
-                  <span className="relative text-sm text-slate-200">{opt.text}</span>
-                  <span className="relative ml-auto text-[11px] tabular-nums text-slate-400">
+                  <span className="relative text-sm text-slate-800 dark:text-slate-200">{opt.text}</span>
+                  <span className="relative ml-auto text-[11px] tabular-nums text-slate-500 dark:text-slate-400">
                     {total > 0 ? `${Math.round(width)}%` : ''}
                   </span>
                 </button>

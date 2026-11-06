@@ -12,7 +12,7 @@ interface VideoGridProps {
 function UserCountCard({ count, vertical = false }: { count: number; vertical?: boolean }) {
   return (
     <div
-      className={`flex shrink-0 flex-col items-center justify-center gap-1 rounded-xl sm:rounded-2xl border border-slate-200 dark:border-white/10 bg-white dark:bg-ink-900/90 shadow-sm backdrop-blur ${
+      className={`flex shrink-0 flex-col items-center justify-center gap-1 rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-ink-900/90 shadow-sm backdrop-blur ${
         vertical ? 'w-full py-4 aspect-video' : 'h-20 w-20 sm:h-24 sm:w-28'
       }`}
     >
@@ -34,8 +34,9 @@ function FullscreenButton({ onClick, isFs }: { onClick?: () => void; isFs: boole
     <button
       type="button"
       onClick={onClick}
-      className="absolute bottom-3 right-3 z-20 flex items-center gap-1.5 rounded-lg border border-slate-200 dark:border-white/20 bg-white/90 dark:bg-black/70 text-slate-800 dark:text-white px-2.5 py-1.5 text-[11px] font-semibold shadow-lg backdrop-blur-md transition hover:bg-white dark:hover:bg-black/90 active:scale-95"
+      className="absolute bottom-2.5 right-2.5 z-20 grid h-7 w-7 place-items-center rounded-md border border-slate-200 dark:border-white/15 bg-white/90 dark:bg-black/70 text-slate-800 dark:text-white shadow-sm backdrop-blur-md transition hover:bg-white dark:hover:bg-black/90 active:scale-95"
       aria-label={isFs ? 'Exit fullscreen' : 'Enter fullscreen'}
+      title={isFs ? 'Exit fullscreen' : 'Fullscreen'}
     >
       <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2.2">
         {isFs ? (
@@ -52,7 +53,6 @@ function FullscreenButton({ onClick, isFs }: { onClick?: () => void; isFs: boole
           />
         )}
       </svg>
-      <span>{isFs ? 'Exit' : 'Fullscreen'}</span>
     </button>
   );
 }
@@ -226,7 +226,7 @@ export function VideoGrid({ onToggleFullscreen }: VideoGridProps) {
 
   if (tiles.length === 0 && !screenTile) {
     return (
-      <div className="grid h-full place-items-center rounded-2xl border border-slate-200 dark:border-white/10 bg-white dark:bg-ink-900/60 p-4 shadow-sm">
+      <div className="grid h-full place-items-center rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-ink-900/60 p-4 shadow-sm">
         <div className="text-center">
           <div className="mx-auto mb-3 h-8 w-8 animate-spin rounded-full border-2 border-slate-200 dark:border-white/10 border-t-brand-500" />
           <p className="text-sm text-slate-500 dark:text-slate-400">Waiting for the host to start…</p>
@@ -252,7 +252,7 @@ export function VideoGrid({ onToggleFullscreen }: VideoGridProps) {
     return (
       <div className="flex h-full w-full flex-row gap-2 bg-slate-900 dark:bg-ink-950 p-2 overflow-hidden">
         {/* Main Stage (Screen Share or Host Camera) */}
-        <div className="relative min-w-0 flex-1 h-full rounded-2xl overflow-hidden border border-slate-200 dark:border-white/10 bg-white dark:bg-black shadow-sm">
+        <div className="relative min-w-0 flex-1 h-full rounded-lg overflow-hidden bg-white dark:bg-black">
           {mainStageTile && (
             <VideoTile
               stream={mainStageTile.stream}
@@ -274,7 +274,7 @@ export function VideoGrid({ onToggleFullscreen }: VideoGridProps) {
 
         {/* Right Vertical Filmstrip: attendee video & user count tile */}
         {(sideTiles.length > 0 || showUserCountCard) && (
-          <div className="w-36 sm:w-48 shrink-0 flex flex-col gap-2 overflow-y-auto h-full pr-1">
+          <div className="scrollbar-thin w-36 sm:w-48 shrink-0 flex flex-col gap-2 overflow-y-auto h-full pr-1">
             {sideTiles.map((tile) => (
               <VideoTile
                 key={tile.key}
@@ -288,7 +288,7 @@ export function VideoGrid({ onToggleFullscreen }: VideoGridProps) {
                 producerId={tile.producerId}
                 handRaised={tile.handRaised}
                 layer={0}
-                className="w-full aspect-video shrink-0 rounded-xl"
+                className="w-full aspect-video shrink-0 rounded-lg"
               />
             ))}
             {showUserCountCard && <UserCountCard count={viewerCount} vertical />}
@@ -317,14 +317,14 @@ export function VideoGrid({ onToggleFullscreen }: VideoGridProps) {
                 producerId={tile.producerId}
                 handRaised={tile.handRaised}
                 layer={0}
-                className="h-20 w-24 sm:h-24 sm:w-28 shrink-0 rounded-xl sm:rounded-2xl"
+                className="h-20 w-24 sm:h-24 sm:w-28 shrink-0 rounded-lg"
               />
             ))}
             {showUserCountCard && <UserCountCard count={viewerCount} />}
           </div>
         )}
 
-        <div className="relative min-h-0 flex-1 aspect-video w-full max-h-[39vh] sm:max-h-[44vh] lg:max-h-none lg:aspect-auto rounded-xl sm:rounded-2xl overflow-hidden border border-slate-200 dark:border-white/10 bg-white dark:bg-black shadow-sm mx-auto">
+        <div className="relative min-h-0 flex-1 aspect-video w-full max-h-[39vh] sm:max-h-[44vh] lg:max-h-none lg:aspect-auto rounded-lg overflow-hidden bg-white dark:bg-black mx-auto">
           <VideoTile
             stream={screenTile.stream}
             name={screenTile.name}
@@ -364,13 +364,13 @@ export function VideoGrid({ onToggleFullscreen }: VideoGridProps) {
                 paused={tile.paused}
                 producerId={tile.producerId}
                 layer={0}
-                className="h-20 w-24 sm:h-24 sm:w-28 shrink-0 rounded-xl sm:rounded-2xl"
+                className="h-20 w-24 sm:h-24 sm:w-28 shrink-0 rounded-lg"
               />
             ))}
           </div>
         )}
 
-        <div className="relative min-h-0 flex-1 aspect-video w-full max-h-[39vh] sm:max-h-[44vh] lg:max-h-none lg:aspect-auto rounded-xl sm:rounded-2xl overflow-hidden border border-slate-200 dark:border-white/10 bg-white dark:bg-black shadow-sm mx-auto">
+        <div className="relative min-h-0 flex-1 aspect-video w-full max-h-[39vh] sm:max-h-[44vh] lg:max-h-none lg:aspect-auto rounded-lg overflow-hidden bg-white dark:bg-black mx-auto">
           <VideoTile
             stream={spotlightTile.stream}
             name={spotlightTile.name}
@@ -406,7 +406,7 @@ export function VideoGrid({ onToggleFullscreen }: VideoGridProps) {
       <div className="relative h-full w-full p-1 sm:p-2 overflow-hidden flex flex-col justify-center">
         <div
           className={`grid gap-2 sm:gap-3 w-full h-full place-content-center ${cols} ${
-            crowded ? 'auto-rows-[minmax(140px,1fr)] overflow-y-auto pr-1' : 'auto-rows-fr'
+            crowded ? 'scrollbar-thin auto-rows-[minmax(140px,1fr)] overflow-y-auto pr-1' : 'auto-rows-fr'
           }`}
         >
           {tiles.map((tile) => (
@@ -422,7 +422,7 @@ export function VideoGrid({ onToggleFullscreen }: VideoGridProps) {
               producerId={tile.producerId}
               handRaised={tile.handRaised}
               layer={tiles.length <= 4 ? 2 : 1}
-              className="h-full w-full min-h-[140px] rounded-xl sm:rounded-2xl"
+              className="h-full w-full min-h-[140px] rounded-lg"
             />
           ))}
         </div>
@@ -460,14 +460,14 @@ export function VideoGrid({ onToggleFullscreen }: VideoGridProps) {
               producerId={tile.producerId}
               handRaised={tile.handRaised}
               layer={0}
-              className="h-20 w-24 sm:h-24 sm:w-28 shrink-0 rounded-xl sm:rounded-2xl"
+              className="h-20 w-24 sm:h-24 sm:w-28 shrink-0 rounded-lg"
             />
           ))}
           {showUserCountCard && <UserCountCard count={viewerCount} />}
         </div>
 
         {/* Main stage with Host or Moderator or Co-host video */}
-        <div className="relative min-h-0 flex-1 aspect-video w-full max-h-[39vh] sm:max-h-[44vh] lg:max-h-none lg:aspect-auto rounded-xl sm:rounded-2xl overflow-hidden border border-slate-200 dark:border-white/10 bg-white dark:bg-black shadow-sm mx-auto">
+        <div className="relative min-h-0 flex-1 aspect-video w-full max-h-[39vh] sm:max-h-[44vh] lg:max-h-none lg:aspect-auto rounded-lg overflow-hidden bg-white dark:bg-black mx-auto">
           {stageTiles.length === 1 ? (
             <VideoTile
               stream={stageTiles[0].stream}
@@ -496,7 +496,7 @@ export function VideoGrid({ onToggleFullscreen }: VideoGridProps) {
                   paused={tile.paused}
                   producerId={tile.producerId}
                   layer={2}
-                  className="h-full w-full rounded-xl"
+                  className="h-full w-full rounded-lg"
                 />
               ))}
             </div>
@@ -515,7 +515,7 @@ export function VideoGrid({ onToggleFullscreen }: VideoGridProps) {
           <UserCountCard count={viewerCount} />
         </div>
       )}
-      <div className="relative min-h-0 flex-1 aspect-video w-full max-h-[36vh] sm:max-h-[42vh] lg:max-h-none lg:aspect-auto rounded-xl sm:rounded-2xl overflow-hidden border border-slate-200 dark:border-white/10 bg-white dark:bg-black shadow-sm mx-auto">
+      <div className="relative min-h-0 flex-1 aspect-video w-full max-h-[36vh] sm:max-h-[42vh] lg:max-h-none lg:aspect-auto rounded-lg overflow-hidden bg-white dark:bg-black mx-auto">
         {tiles[0] && (
           <VideoTile
             key={tiles[0].key}
