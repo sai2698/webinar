@@ -889,6 +889,7 @@ cmd_install() {
     set_env RTC_MAX_PORT "40100"
     set_env SERVER_NAME "$domain"
     set_env WEB_ORIGIN "$web_origin,http://localhost:5173,http://${public_ip}:5173"
+    set_env API_ORIGIN "$web_origin"
     set_env NEXT_PUBLIC_API_URL "$web_origin"
     set_env NEXT_PUBLIC_SOCKET_URL "$web_origin"
     set_env JWT_SECRET "$jwt"

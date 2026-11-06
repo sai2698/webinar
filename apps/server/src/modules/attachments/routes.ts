@@ -129,9 +129,7 @@ adminAttachmentRouter.post(
     const rand = crypto.randomBytes(4).toString('hex');
     const safeFilename = `att_${Date.now()}_${rand}.${ext}`;
     fs.writeFileSync(path.join(uploadsDir, safeFilename), buffer);
-
-    const origin = process.env.API_ORIGIN || `${req.protocol}://${req.get('host')}`;
-    const url = `${origin}/uploads/${safeFilename}`;
+    const url = (process.env.API_ORIGIN ? process.env.API_ORIGIN.replace(/\/+$/, '') : '') + '/uploads/' + safeFilename;
 
     // Strip any path components from the display name — a browser can send a
     // full path from some OSes and we only ever want the leaf.

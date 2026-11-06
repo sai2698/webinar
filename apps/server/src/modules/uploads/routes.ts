@@ -76,8 +76,7 @@ uploadRouter.post(
     fs.writeFileSync(filePath, buffer);
     logger.info(`Saved uploaded image: ${safeFilename} (${(buffer.length / 1024).toFixed(1)} KB)`);
 
-    const origin = (process.env.API_ORIGIN || `${req.protocol}://${req.get('host')}`);
-    const url = `${origin}/uploads/${safeFilename}`;
+    const url = (process.env.API_ORIGIN ? process.env.API_ORIGIN.replace(/\/+$/, '') : '') + '/uploads/' + safeFilename;
 
     res.json({
       ok: true,
