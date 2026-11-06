@@ -331,7 +331,8 @@ export function VideoGrid({ onToggleFullscreen }: VideoGridProps) {
   // - If host not sharing screen: host camera on left just like presentation, his/attendee's video + user count tile on right!
   if (isFullscreen) {
     const staffTiles = tiles.filter((t) => ['HOST', 'ADMIN', 'MODERATOR'].includes(t.role));
-    const mainStageTile = screenTile || staffTiles[0] || tiles[0];
+    const staffWithVideo = staffTiles.filter((t) => Boolean(t.camOn && !t.paused));
+    const mainStageTile = screenTile || staffWithVideo[0] || staffTiles[0] || tiles[0];
     const sideTiles = tiles.filter((t) => t.key !== mainStageTile?.key);
 
     return (
@@ -477,11 +478,9 @@ export function VideoGrid({ onToggleFullscreen }: VideoGridProps) {
   /* ── 3. ZOOM-LIKE CALL GALLERY GRID (when showParticipantsToEachOther is true) ── */
   if (showParticipantsToEachOther && tiles.length > 1) {
     const cols =
-      tiles.length === 2
-        ? 'grid-cols-1 sm:grid-cols-2'
-        : tiles.length <= 4
-          ? 'grid-cols-2'
-          : tiles.length <= 6
+      tiles.length <= 4
+        ? 'grid-cols-2'
+        : tiles.length <= 6
             ? 'grid-cols-2 sm:grid-cols-3'
             : 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4';
 
@@ -524,32 +523,52 @@ export function VideoGrid({ onToggleFullscreen }: VideoGridProps) {
   const staffTiles = tiles.filter((t) => ['HOST', 'ADMIN', 'MODERATOR'].includes(t.role));
   const participantTiles = tiles.filter((t) => !['HOST', 'ADMIN', 'MODERATOR'].includes(t.role));
 
-  const stageTiles = staffTiles.length > 0 ? staffTiles : [tiles[0]];
-  const topStripTiles = staffTiles.length > 0 ? participantTiles : tiles.slice(1);
+  const isVideoActive = (t: { camOn: boolean; paused?: boolean }) => Boolean(t.camOn && !t.paused);
+  const staffWithVideo = staffTiles.filter(isVideoActive);
+  const staffWithoutVideo = staffTiles.filter((t) => !isVideoActive(t));
 
-  if (stageTiles.length > 0 && (topStripTiles.length > 0 || showUserCountCard)) {
+  // Only hosts/co-hosts whose video is ON appear on the main stage.
+  // If no staff has video turned on, the primary host is shown on stage.
+  const stageTiles =
+    staffWithVideo.length > 0
+      ? staffWithVideo
+      : staffTiles.length > 0
+        ? [staffTiles[0]]
+        : [tiles[0]];
+
+  // Remaining hosts (with video OFF) are placed in the top strip alongside participants.
+  const topStripTiles =
+    staffWithVideo.length > 0
+      ? [...staffWithoutVideo, ...participantTiles]
+      : staffTiles.length > 0
+        ? [...staffTiles.slice(1), ...participantTiles]
+        : tiles.slice(1);
+
+  if (stageTiles.length > 0 && (topStripTiles.length > 0 || showUserCountCard || stageTiles.length > 1)) {
     return (
       <div className="flex h-full flex-col gap-1.5 sm:gap-2 overflow-hidden">
         {/* Videos strip at TOP */}
-        <div className="flex shrink-0 gap-2 overflow-x-auto pb-1 pt-0.5 scrollbar-thin">
-          {topStripTiles.map((tile) => (
-            <VideoTile
-              key={tile.key}
-              stream={tile.stream}
-              name={tile.name}
-              role={tile.role}
-              isLocal={tile.isLocal}
-              micOn={tile.micOn}
-              camOn={tile.camOn}
-              paused={tile.paused}
-              producerId={tile.producerId}
-              handRaised={tile.handRaised}
-              layer={0}
-              className="h-20 w-24 sm:h-24 sm:w-28 shrink-0 rounded-lg"
-            />
-          ))}
-          {showUserCountCard && <UserCountCard count={viewerCount} />}
-        </div>
+        {(topStripTiles.length > 0 || showUserCountCard) && (
+          <div className="flex shrink-0 gap-2 overflow-x-auto pb-1 pt-0.5 scrollbar-thin">
+            {topStripTiles.map((tile) => (
+              <VideoTile
+                key={tile.key}
+                stream={tile.stream}
+                name={tile.name}
+                role={tile.role}
+                isLocal={tile.isLocal}
+                micOn={tile.micOn}
+                camOn={tile.camOn}
+                paused={tile.paused}
+                producerId={tile.producerId}
+                handRaised={tile.handRaised}
+                layer={0}
+                className="h-20 w-24 sm:h-24 sm:w-28 shrink-0 rounded-lg"
+              />
+            ))}
+            {showUserCountCard && <UserCountCard count={viewerCount} />}
+          </div>
+        )}
 
         {/* Main stage with Host or Moderator or Co-host video */}
         <div className="relative min-h-0 flex-1 aspect-video w-full max-h-[39vh] sm:max-h-[44vh] lg:max-h-none lg:aspect-auto rounded-lg overflow-hidden bg-white dark:bg-black mx-auto">
@@ -568,7 +587,7 @@ export function VideoGrid({ onToggleFullscreen }: VideoGridProps) {
               className="h-full w-full"
             />
           ) : (
-            <div className={`grid h-full w-full gap-2 p-1 ${stageTiles.length === 2 ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-2'}`}>
+            <div className="grid h-full w-full gap-2 p-1 grid-cols-2">
               {stageTiles.map((tile) => (
                 <VideoTile
                   key={tile.key}

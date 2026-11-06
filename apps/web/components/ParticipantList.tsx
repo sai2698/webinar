@@ -224,7 +224,7 @@ export function ParticipantList({ socket }: ParticipantListProps) {
         </div>
 
         {showActions && isStaff && !isSelf && (
-          <div className="flex shrink-0 items-center gap-1 opacity-0 transition group-hover:opacity-100 focus-within:opacity-100">
+          <div className="flex shrink-0 items-center gap-1 transition opacity-100 lg:opacity-0 lg:group-hover:opacity-100 lg:focus-within:opacity-100">
             {hand && (
               <>
                 <button
@@ -249,7 +249,7 @@ export function ParticipantList({ socket }: ParticipantListProps) {
                 type="button"
                 onClick={() => requestMedia(peer.userId, 'mic')}
                 title="Ask this participant to unmute"
-                className="rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600 hover:bg-white/20 dark:text-slate-300"
+                className="hidden lg:inline-flex rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600 hover:bg-white/20 dark:text-slate-300"
               >
                 Ask mic
               </button>
@@ -258,7 +258,7 @@ export function ParticipantList({ socket }: ParticipantListProps) {
                 type="button"
                 onClick={() => mute(peer.userId)}
                 title="Mute this participant"
-                className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-amber-300 hover:bg-amber-500/30"
+                className="hidden lg:inline-flex rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-amber-300 hover:bg-amber-500/30"
               >
                 Stop mic
               </button>
@@ -269,7 +269,7 @@ export function ParticipantList({ socket }: ParticipantListProps) {
                 type="button"
                 onClick={() => requestMedia(peer.userId, 'cam')}
                 title="Ask this participant to turn their camera on"
-                className="rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600 hover:bg-white/20 dark:text-slate-300"
+                className="hidden lg:inline-flex rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600 hover:bg-white/20 dark:text-slate-300"
               >
                 Ask cam
               </button>
@@ -278,7 +278,7 @@ export function ParticipantList({ socket }: ParticipantListProps) {
                 type="button"
                 onClick={() => stopVideo(peer.userId)}
                 title="Stop this participant's video"
-                className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-amber-300 hover:bg-amber-500/30"
+                className="hidden lg:inline-flex rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-amber-300 hover:bg-amber-500/30"
               >
                 Stop video
               </button>
@@ -289,16 +289,23 @@ export function ParticipantList({ socket }: ParticipantListProps) {
               onClick={(e) => {
                 e.stopPropagation();
                 const rect = e.currentTarget.getBoundingClientRect();
+                const menuWidth = 230;
+                const menuHeight = 250;
                 setContextMenu({
-                  x: Math.min(rect.right - 230, window.innerWidth - 240),
-                  y: Math.min(rect.bottom + 5, window.innerHeight - 250),
+                  x: Math.max(10, Math.min(rect.right - menuWidth, window.innerWidth - menuWidth - 10)),
+                  y: Math.max(10, Math.min(rect.bottom + 5, window.innerHeight - menuHeight - 10)),
                   peer,
                 });
               }}
               title="More options (Make Co-host, remove, etc.)"
-              className="rounded bg-white/10 px-2 py-0.5 text-[11px] font-bold text-slate-600 hover:bg-white/20 dark:text-slate-300"
+              aria-label="More options"
+              className="grid h-6 w-6 place-items-center rounded bg-white/10 text-slate-600 hover:bg-white/20 dark:text-slate-300"
             >
-              •••
+              <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="currentColor">
+                <circle cx="5" cy="12" r="1.8" />
+                <circle cx="12" cy="12" r="1.8" />
+                <circle cx="19" cy="12" r="1.8" />
+              </svg>
             </button>
           </div>
         )}
