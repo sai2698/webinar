@@ -6,6 +6,7 @@ import type {
   HandRaiseEntry,
   MediaSource,
   PeerInfo,
+  PresentationState,
   QuizResults,
   PublicQuiz,
   PublicPoll,
@@ -139,6 +140,14 @@ interface RoomState {
   /** The peer the host has pinned to the big tile, if any. */
   spotlightedPeerId: string | null;
   /**
+   * The uploaded file currently on the presentation stage, or `null`.
+   *
+   * Distinct from `spotlightedPeerId`: a spotlight pins a person, a
+   * presentation shows a file, and a host narrating over a deck is both at
+   * once. The stage renders this in place of the video grid.
+   */
+  presentation: PresentationState | null;
+  /**
    * A pending request from a host to turn on this peer's mic or camera.
    * Cleared when the participant accepts or dismisses it.
    */
@@ -220,6 +229,7 @@ const initial = {
   ctaClickCounts: {},
   questions: [],
   spotlightedPeerId: null,
+  presentation: null,
   mediaRequest: null,
   ended: false,
   recording: false,

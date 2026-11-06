@@ -22,10 +22,15 @@ export function PanelSection({
 }) {
   return (
     <section className="space-y-4">
-      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-line/60 pb-3">
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-line/60 pb-3.5">
         <div className="min-w-0">
-          <h3 className="text-sm font-bold text-fg">{title}</h3>
-          {description && <p className="mt-0.5 text-xs text-muted leading-relaxed">{description}</p>}
+          <h3 className="flex items-center gap-2 text-[13.5px] font-bold tracking-tight text-fg">
+            <span className="h-3.5 w-[2.5px] shrink-0 rounded-full bg-brand-500" />
+            {title}
+          </h3>
+          {description && (
+            <p className="mt-1 pl-[10px] text-[11.5px] leading-relaxed text-muted">{description}</p>
+          )}
         </div>
         {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
       </div>
@@ -42,24 +47,38 @@ export function PanelNote({
   children: React.ReactNode;
 }) {
   const tones = {
-    info: 'border-line bg-panel-2 text-muted',
+    info: 'border-line bg-panel-2/70 text-muted',
     warn: 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300',
     error: 'border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-300',
     success: 'border-mint-500/30 bg-mint-500/10 text-mint-600 dark:text-mint-300',
   } as const;
 
+  const dots = {
+    info: 'bg-brand-500',
+    warn: 'bg-amber-500',
+    error: 'bg-red-500',
+    success: 'bg-mint-500',
+  } as const;
+
   return (
-    <div className={`rounded-xl border px-3.5 py-2.5 text-xs leading-relaxed font-medium ${tones[tone]}`}>
-      {children}
+    <div
+      className={`flex items-start gap-2.5 rounded-xl border px-3.5 py-2.5 text-[11.5px] font-medium leading-relaxed ${tones[tone]}`}
+    >
+      <span className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${dots[tone]}`} />
+      <div className="min-w-0 flex-1">{children}</div>
     </div>
   );
 }
 
 export function PanelEmpty({ children }: { children: React.ReactNode }) {
   if (typeof children === 'string') {
-    return <EmptyState title={children} className="py-8" />;
+    return <EmptyState title={children} className="py-10" />;
   }
-  return <div className="py-8 text-center text-xs text-muted">{children}</div>;
+  return (
+    <div className="rounded-xl border border-dashed border-line bg-panel-2/40 px-4 py-10 text-center text-[11.5px] text-muted">
+      {children}
+    </div>
+  );
 }
 
 export function PanelButton({
@@ -119,7 +138,7 @@ export function PanelInput({
       onChange={(e) => onChange(e.target.value)}
       onKeyDown={onKeyDown}
       placeholder={placeholder}
-      className={`h-8.5 rounded-xl border border-line bg-panel px-3 text-xs text-fg outline-none transition placeholder:text-subtle focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 ${className}`}
+      className={`h-9 rounded-xl border border-line bg-panel px-3 text-[12px] text-fg outline-none transition placeholder:text-subtle hover:border-line focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 ${className}`}
     />
   );
 }

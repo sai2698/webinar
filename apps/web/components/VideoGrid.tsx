@@ -57,7 +57,15 @@ function FullscreenButton({ onClick, isFs }: { onClick?: () => void; isFs: boole
   );
 }
 
-export function VideoGrid({ onToggleFullscreen }: VideoGridProps) {
+/**
+ * Builds the tile list for the room.
+ *
+ * Extracted from VideoGrid so the presentation stage can render the exact same
+ * filmstrip that a screen share shows above its stage — the two layouts must
+ * agree on ordering, privacy rules and the viewer-count card, and duplicating
+ * this logic is how they drift apart.
+ */
+export function useVideoTiles() {
   const peers = useRoomStore((s) => s.peers);
   const remoteStreams = useRoomStore((s) => s.remoteStreams);
   const localStream = useRoomStore((s) => s.localStream);
@@ -66,13 +74,11 @@ export function VideoGrid({ onToggleFullscreen }: VideoGridProps) {
   const self = useRoomStore((s) => s.self);
   const micOn = useRoomStore((s) => s.micOn);
   const camOn = useRoomStore((s) => s.camOn);
-  const spotlightedPeerId = useRoomStore((s) => s.spotlightedPeerId);
   const viewerCount = useRoomStore((s) => s.viewerCount);
   const showParticipantsToEachOther = useRoomStore((s) => s.showParticipantsToEachOther);
   const role = useRoomStore((s) => s.role);
   const isHostOrStaff = role === 'HOST' || role === 'ADMIN' || role === 'MODERATOR';
   const hands = useRoomStore((s) => s.hands);
-  const isFullscreen = useIsFullscreen();
 
   const { tiles, screenTile } = useMemo(() => {
     const list: {
@@ -223,6 +229,85 @@ export function VideoGrid({ onToggleFullscreen }: VideoGridProps) {
     !isHostOrStaff &&
     !showParticipantsToEachOther &&
     viewerCount > 0;
+
+  return { tiles, screenTile, showUserCountCard, viewerCount };
+}
+
+/**
+ * The strip of camera tiles that sits beside a shared stage.
+ *
+ * Used by the screen-share layout inside VideoGrid and by the file
+ * presentation stage, so a host presenting a deck still sees everyone's
+ * cameras exactly where they are during a screen share.
+ *
+ * `vertical` switches it to the right-hand rail used in fullscreen, where the
+ * stage owns the whole viewport and the cameras stack down the side.
+ */
+export function VideoFilmstrip({
+  className = '',
+  vertical = false,
+}: {
+  className?: string;
+  vertical?: boolean;
+}) {
+  const { tiles, showUserCountCard, viewerCount } = useVideoTiles();
+
+  if (tiles.length === 0 && !showUserCountCard) return null;
+
+  if (vertical) {
+    return (
+      <div
+        className={`scrollbar-thin flex h-full w-36 shrink-0 flex-col gap-2 overflow-y-auto pr-1 sm:w-48 ${className}`}
+      >
+        {tiles.map((tile) => (
+          <VideoTile
+            key={tile.key}
+            stream={tile.stream}
+            name={tile.name}
+            role={tile.role}
+            isLocal={tile.isLocal}
+            micOn={tile.micOn}
+            camOn={tile.camOn}
+            paused={tile.paused}
+            producerId={tile.producerId}
+            handRaised={tile.handRaised}
+            layer={0}
+            className="aspect-video w-full shrink-0 rounded-lg"
+          />
+        ))}
+        {showUserCountCard && <UserCountCard count={viewerCount} vertical />}
+      </div>
+    );
+  }
+
+  return (
+    <div className={`flex shrink-0 gap-2 overflow-x-auto pb-1 pt-0.5 scrollbar-thin ${className}`}>
+      {tiles.map((tile) => (
+        <VideoTile
+          key={tile.key}
+          stream={tile.stream}
+          name={tile.name}
+          role={tile.role}
+          isLocal={tile.isLocal}
+          micOn={tile.micOn}
+          camOn={tile.camOn}
+          paused={tile.paused}
+          producerId={tile.producerId}
+          handRaised={tile.handRaised}
+          layer={0}
+          className="h-20 w-24 sm:h-24 sm:w-28 shrink-0 rounded-lg"
+        />
+      ))}
+      {showUserCountCard && <UserCountCard count={viewerCount} />}
+    </div>
+  );
+}
+
+export function VideoGrid({ onToggleFullscreen }: VideoGridProps) {
+  const { tiles, screenTile, showUserCountCard, viewerCount } = useVideoTiles();
+  const spotlightedPeerId = useRoomStore((s) => s.spotlightedPeerId);
+  const showParticipantsToEachOther = useRoomStore((s) => s.showParticipantsToEachOther);
+  const isFullscreen = useIsFullscreen();
 
   if (tiles.length === 0 && !screenTile) {
     return (

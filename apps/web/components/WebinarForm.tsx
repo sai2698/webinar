@@ -210,15 +210,15 @@ export function WebinarForm({
 
       {/* Banner Upload Section */}
       <div className="space-y-2">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <label className="text-xs font-semibold uppercase tracking-wider text-muted">
             Webinar Banner Image
           </label>
-          <div className="flex items-center gap-1 rounded-xl bg-panel-2 p-1 border border-line">
+          <div className="flex shrink-0 items-center gap-1 rounded-xl border border-line bg-panel-2 p-1">
             <button
               type="button"
               onClick={() => setBannerMode('upload')}
-              className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition ${
+              className={`whitespace-nowrap rounded-lg px-2.5 py-1 text-[11px] font-semibold transition ${
                 bannerMode === 'upload'
                   ? 'bg-brand-500 text-white shadow-xs'
                   : 'text-muted hover:text-fg'
@@ -229,7 +229,7 @@ export function WebinarForm({
             <button
               type="button"
               onClick={() => setBannerMode('url')}
-              className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition ${
+              className={`whitespace-nowrap rounded-lg px-2.5 py-1 text-[11px] font-semibold transition ${
                 bannerMode === 'url'
                   ? 'bg-brand-500 text-white shadow-xs'
                   : 'text-muted hover:text-fg'

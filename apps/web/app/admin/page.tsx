@@ -7,6 +7,7 @@ import { AdminShell, type NavItem } from '@/components/admin/AdminShell';
 import {
   IconArrowRight,
   IconCalendar,
+  IconCalendarGrid,
   IconCard,
   IconChart,
   IconCheck,
@@ -35,7 +36,6 @@ import {
   StatCard,
   EmptyState,
   Tabs,
-  Dialog,
 } from '@/components/ui';
 import { WebinarForm, emptyWebinar, fromWebinar, type WebinarFormValues } from '@/components/WebinarForm';
 import { EngagementPanel } from '@/components/EngagementPanel';
@@ -104,17 +104,10 @@ type Tab =
   | 'distribution'
   | 'integrations';
 
-const NAV: { key: Tab; label: string; icon: NavItem['icon'] }[] = [
-  { key: 'webinars', label: 'Webinars', icon: IconVideo },
-  { key: 'registrations', label: 'Registrations', icon: IconUsers },
-  { key: 'audience', label: 'Audience', icon: IconSend },
-  { key: 'team', label: 'Team', icon: IconUsers },
-  { key: 'analytics', label: 'Analytics', icon: IconChart },
-  { key: 'engagement', label: 'Engagement', icon: IconSpark },
-  { key: 'distribution', label: 'Distribution', icon: IconExternal },
-  { key: 'integrations', label: 'Integrations', icon: IconSpark },
-  { key: 'payments', label: 'Payments', icon: IconCard },
-  { key: 'recordings', label: 'Recordings', icon: IconDisc },
+const NAV: { key: Tab; label: string; icon: NavItem['icon']; group: string }[] = [
+  { key: 'webinars', label: 'Webinars', icon: IconVideo, group: 'Overview' },
+  { key: 'payments', label: 'Payments', icon: IconCard, group: 'Revenue' },
+  { key: 'integrations', label: 'Integrations', icon: IconSpark, group: 'Growth' },
 ];
 
 const TAB_TITLES: Record<Tab, string> = {
@@ -208,7 +201,7 @@ export default function AdminPage() {
   const [analytics, setAnalytics] = useState<Analytics | null>(null);
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'live' | 'scheduled' | 'draft' | 'ended'>('all');
-  const [viewMode, setViewMode] = useState<'cards' | 'list'>('cards');
+  const [viewMode, setViewMode] = useState<'cards' | 'list' | 'calendar'>('cards');
 
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<AdminWebinar | null>(null);
@@ -440,33 +433,44 @@ export default function AdminPage() {
     badge: item.key === 'webinars' ? stats.total : undefined,
   }));
 
-  const subtitle = selected && tab !== 'webinars' ? selected.title : TAB_BLURBS[tab];
+  const subtitle = showForm
+    ? editing
+      ? 'Update this session’s schedule, access rules and streaming options.'
+      : 'Set the schedule, access rules and streaming options for a new session.'
+    : selected && tab !== 'webinars'
+      ? selected.title
+      : TAB_BLURBS[tab];
 
   return (
     <AdminShell
       nav={nav}
       active={tab}
       onNavigate={(key) => {
+        setShowForm(false);
+        setEditing(null);
+        setFormError(null);
         setTab(key as Tab);
         if (key === 'webinars') setSelected(null);
       }}
-      title={TAB_TITLES[tab]}
+      title={showForm ? (editing ? 'Edit webinar' : 'New webinar') : TAB_TITLES[tab]}
       subtitle={subtitle}
       user={user ? { name: user.name, role: user.role } : null}
       onSignOut={logout}
       actions={
-        <Button
-          variant="primary"
-          size="sm"
-          onClick={() => {
-            setEditing(null);
-            setFormError(null);
-            setShowForm(true);
-          }}
-          leftIcon={<IconPlus className="h-4 w-4" />}
-        >
-          New webinar
-        </Button>
+        showForm ? undefined : (
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() => {
+              setEditing(null);
+              setFormError(null);
+              setShowForm(true);
+            }}
+            leftIcon={<IconPlus className="h-4 w-4" />}
+          >
+            New webinar
+          </Button>
+        )
       }
     >
       {/* Toast Notification */}
@@ -494,7 +498,21 @@ export default function AdminPage() {
         </div>
       )}
 
-      {tab === 'webinars' ? (
+      {/* Full-page Create / Edit composer (replaces the old modal) */}
+      {showForm ? (
+        <WebinarComposeView
+          editing={editing}
+          initial={initialForm}
+          busy={formBusy}
+          error={formError}
+          onSubmit={submitForm}
+          onCancel={() => {
+            setShowForm(false);
+            setEditing(null);
+            setFormError(null);
+          }}
+        />
+      ) : tab === 'webinars' ? (
         <WebinarsView
           loading={loading}
           webinars={filtered}
@@ -548,31 +566,106 @@ export default function AdminPage() {
           onToast={showToast}
         />
       )}
-
-      {/* Modal Dialog for Webinar Create / Edit */}
-      <Dialog
-        open={showForm}
-        onClose={() => {
-          setShowForm(false);
-          setEditing(null);
-        }}
-        title={editing ? 'Edit webinar' : 'Create new webinar'}
-        description="Configure streaming options, access controls, and ticketing."
-        maxWidth="2xl"
-      >
-        <WebinarForm
-          initial={initialForm}
-          submitLabel={editing ? 'Save changes' : 'Create webinar'}
-          busy={formBusy}
-          error={formError}
-          onSubmit={submitForm}
-          onCancel={() => {
-            setShowForm(false);
-            setEditing(null);
-          }}
-        />
-      </Dialog>
     </AdminShell>
+  );
+}
+
+/* ─────────────────────────── create / edit page ─────────────────────────── */
+
+function WebinarComposeView({
+  editing,
+  initial,
+  busy,
+  error,
+  onSubmit,
+  onCancel,
+}: {
+  editing: AdminWebinar | null;
+  initial: WebinarFormValues;
+  busy: boolean;
+  error: string | null;
+  onSubmit: (values: WebinarFormValues) => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div className="space-y-5">
+      {/* Page header */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <button
+            onClick={onCancel}
+            className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-brand-600 transition hover:underline dark:text-brand-400"
+          >
+            <IconChevron className="h-3 w-3 rotate-180" />
+            Back to webinars
+          </button>
+          <h2 className="mt-1.5 text-lg font-bold tracking-tight text-fg">
+            {editing ? 'Edit webinar' : 'Create a new webinar'}
+          </h2>
+          <p className="mt-0.5 text-[11.5px] leading-relaxed text-muted">
+            {editing
+              ? 'Update the schedule, access rules and streaming options for this session.'
+              : 'Set the schedule, access rules and streaming options. You can publish it once it is ready.'}
+          </p>
+        </div>
+
+        <div className="flex shrink-0 items-center gap-2">
+          <Button variant="outline" size="sm" onClick={onCancel}>
+            Cancel
+          </Button>
+        </div>
+      </div>
+
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_300px]">
+        {/* Form card */}
+        <Card className="p-5 sm:p-6">
+          <WebinarForm
+            initial={initial}
+            submitLabel={editing ? 'Save changes' : 'Create webinar'}
+            busy={busy}
+            error={error}
+            onSubmit={onSubmit}
+            onCancel={onCancel}
+          />
+        </Card>
+
+        {/* Guidance rail */}
+        <aside className="space-y-3 xl:sticky xl:top-[92px] xl:self-start">
+          <Card className="p-4">
+            <h3 className="flex items-center gap-2 text-[12.5px] font-bold tracking-tight text-fg">
+              <span className="h-3.5 w-[2.5px] shrink-0 rounded-full bg-brand-500" />
+              Before you publish
+            </h3>
+            <ul className="mt-3 space-y-2.5">
+              {[
+                'A 16:9 banner (1920×1080) renders best on the registration page.',
+                'Turn on “Require registration” to collect attendee details.',
+                'Enable “Require host approval” to screen every signup.',
+                'Paid sessions need a Razorpay gateway configured under Payments.',
+              ].map((tip) => (
+                <li key={tip} className="flex items-start gap-2 text-[11.5px] leading-relaxed text-muted">
+                  <span className="mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded-full bg-brand-500/10 text-brand-600 dark:text-brand-300">
+                    <IconCheck className="h-2.5 w-2.5" />
+                  </span>
+                  {tip}
+                </li>
+              ))}
+            </ul>
+          </Card>
+
+          <Card className="p-4">
+            <h3 className="flex items-center gap-2 text-[12.5px] font-bold tracking-tight text-fg">
+              <span className="h-3.5 w-[2.5px] shrink-0 rounded-full bg-mint-500" />
+              What happens next
+            </h3>
+            <p className="mt-2 text-[11.5px] leading-relaxed text-muted">
+              New webinars start as a draft. Publish it from the webinar card to open the
+              registration page, then host the session from the studio.
+            </p>
+          </Card>
+        </aside>
+      </div>
+    </div>
   );
 }
 
@@ -605,8 +698,8 @@ function WebinarsView({
   onQuery: (v: string) => void;
   statusFilter: 'all' | 'live' | 'scheduled' | 'draft' | 'ended';
   onStatusFilter: (f: 'all' | 'live' | 'scheduled' | 'draft' | 'ended') => void;
-  viewMode: 'cards' | 'list';
-  onViewMode: (m: 'cards' | 'list') => void;
+  viewMode: 'cards' | 'list' | 'calendar';
+  onViewMode: (m: 'cards' | 'list' | 'calendar') => void;
   stats: { total: number; live: number; scheduled: number; drafts: number; ended: number; regs: number };
   joiningSlug: string | null;
   onJoin: (slug: string) => void;
@@ -617,8 +710,45 @@ function WebinarsView({
   onCreate: () => void;
   onToast: (msg: string, tone?: 'success' | 'info') => void;
 }) {
+  const liveWebinar = webinars.find((w) => w.status === 'LIVE') ?? null;
+
   return (
     <div className="space-y-6">
+      {/* ── Quick create strip ───────────────────────────────── */}
+      <div className="grid gap-3 sm:grid-cols-3">
+        <QuickActionCard
+          tone="brand"
+          icon={IconCalendar}
+          title="Schedule a webinar"
+          description="Pick a date, set access rules and publish a registration page."
+          onClick={onCreate}
+        />
+        <QuickActionCard
+          tone="live"
+          icon={IconPlay}
+          title="Enter live studio"
+          description={
+            liveWebinar
+              ? `Jump straight into “${liveWebinar.title}”.`
+              : 'No session is live right now — start one from a webinar card.'
+          }
+          disabled={!liveWebinar}
+          onClick={() => liveWebinar && onJoin(liveWebinar.slug)}
+        />
+        <QuickActionCard
+          tone="mint"
+          icon={IconDisc}
+          title="Replay library"
+          description={
+            webinars.length
+              ? 'Review captured timelines and publish a premiere.'
+              : 'Recordings appear here once a session has been broadcast.'
+          }
+          disabled={!webinars.length}
+          onClick={() => webinars[0] && onOpen(webinars[0], 'recordings')}
+        />
+      </div>
+
       {/* 4 Metric Stats Grid */}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
@@ -652,35 +782,41 @@ function WebinarsView({
       </div>
 
       {/* Filter and Search Bar */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <Tabs
-          tabs={[
-            { id: 'all', label: 'All', count: stats.total },
-            { id: 'live', label: 'Live Now', count: stats.live },
-            { id: 'scheduled', label: 'Scheduled', count: stats.scheduled },
-            { id: 'draft', label: 'Drafts', count: stats.drafts },
-            { id: 'ended', label: 'Ended', count: stats.ended },
-          ]}
-          active={statusFilter}
-          onChange={onStatusFilter}
-        />
+      <div className="flex flex-col gap-3 rounded-2xl border border-line bg-panel p-2.5 shadow-card xl:flex-row xl:items-center xl:justify-between">
+        <div className="-mx-0.5 min-w-0 overflow-x-auto px-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <Tabs
+            tabs={[
+              { id: 'all', label: 'All', count: stats.total },
+              { id: 'live', label: 'Live Now', count: stats.live },
+              { id: 'scheduled', label: 'Scheduled', count: stats.scheduled },
+              { id: 'draft', label: 'Drafts', count: stats.drafts },
+              { id: 'ended', label: 'Ended', count: stats.ended },
+            ]}
+            active={statusFilter}
+            onChange={onStatusFilter}
+            className="w-max flex-nowrap border-0 bg-transparent p-0"
+          />
+        </div>
 
         {/* Search & View Mode Switcher */}
-        <div className="flex items-center gap-2">
-          <div className="relative min-w-0 flex-1 sm:w-64">
+        <div className="flex shrink-0 items-center gap-2">
+          <div className="relative min-w-0 flex-1 xl:w-60">
             <Input
               value={query}
               onChange={(e) => onQuery(e.target.value)}
               placeholder="Search webinars…"
               leftIcon={<IconSearch className="h-4 w-4" />}
+              className="py-2"
             />
           </div>
 
-          <div className="flex items-center rounded-xl border border-line bg-panel p-1">
+          <div className="flex shrink-0 items-center rounded-xl border border-line bg-panel-2 p-1">
             <button
               onClick={() => onViewMode('cards')}
               className={`grid h-7 w-7 place-items-center rounded-lg transition ${
-                viewMode === 'cards' ? 'bg-brand-500 text-white' : 'text-subtle hover:text-fg'
+                viewMode === 'cards'
+                  ? 'bg-brand-500 text-white shadow-sm'
+                  : 'text-subtle hover:text-fg'
               }`}
               title="Card grid view"
               aria-label="Card grid view"
@@ -690,12 +826,26 @@ function WebinarsView({
             <button
               onClick={() => onViewMode('list')}
               className={`grid h-7 w-7 place-items-center rounded-lg transition ${
-                viewMode === 'list' ? 'bg-brand-500 text-white' : 'text-subtle hover:text-fg'
+                viewMode === 'list'
+                  ? 'bg-brand-500 text-white shadow-sm'
+                  : 'text-subtle hover:text-fg'
               }`}
               title="Compact list view"
               aria-label="Compact list view"
             >
               <IconList className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => onViewMode('calendar')}
+              className={`grid h-7 w-7 place-items-center rounded-lg transition ${
+                viewMode === 'calendar'
+                  ? 'bg-brand-500 text-white shadow-sm'
+                  : 'text-subtle hover:text-fg'
+              }`}
+              title="Calendar view"
+              aria-label="Calendar view"
+            >
+              <IconCalendarGrid className="h-4 w-4" />
             </button>
           </div>
         </div>
@@ -732,7 +882,7 @@ function WebinarsView({
           }
         />
       ) : viewMode === 'cards' ? (
-        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
           {webinars.map((w) => (
             <WebinarCard
               key={w.id}
@@ -747,7 +897,7 @@ function WebinarsView({
             />
           ))}
         </div>
-      ) : (
+      ) : viewMode === 'list' ? (
         <div className="space-y-2">
           {webinars.map((w) => (
             <WebinarListRow
@@ -763,8 +913,88 @@ function WebinarsView({
             />
           ))}
         </div>
+      ) : (
+        <WebinarCalendar
+          webinars={webinars}
+          joiningSlug={joiningSlug}
+          onJoin={onJoin}
+          onOpen={onOpen}
+          onEdit={onEdit}
+          onCreate={onCreate}
+        />
       )}
     </div>
+  );
+}
+
+/* ─────────────────────────── quick action card ─────────────────────────── */
+
+const QUICK_TONES = {
+  brand: {
+    ring: 'hover:border-brand-500/40',
+    chip: 'bg-brand-500/10 text-brand-600 dark:text-brand-300',
+    glow: 'from-brand-500/[0.07]',
+  },
+  live: {
+    ring: 'hover:border-red-500/40',
+    chip: 'bg-red-500/10 text-red-600 dark:text-red-400',
+    glow: 'from-red-500/[0.07]',
+  },
+  mint: {
+    ring: 'hover:border-mint-500/40',
+    chip: 'bg-mint-500/10 text-mint-600 dark:text-mint-400',
+    glow: 'from-mint-500/[0.07]',
+  },
+} as const;
+
+function QuickActionCard({
+  tone,
+  icon: Icon,
+  title,
+  description,
+  onClick,
+  disabled = false,
+}: {
+  tone: keyof typeof QUICK_TONES;
+  icon: React.ComponentType<{ className?: string }>;
+  title: string;
+  description: string;
+  onClick: () => void;
+  disabled?: boolean;
+}) {
+  const t = QUICK_TONES[tone];
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className={`group relative overflow-hidden rounded-2xl border border-line bg-panel p-4 text-left shadow-card transition-all duration-200 ${t.ring} ${
+        disabled
+          ? 'cursor-not-allowed opacity-55'
+          : 'hover:-translate-y-0.5 hover:shadow-pop active:translate-y-0'
+      }`}
+    >
+      <div
+        className={`pointer-events-none absolute inset-0 bg-gradient-to-br to-transparent opacity-0 transition-opacity duration-300 ${t.glow} ${
+          disabled ? '' : 'group-hover:opacity-100'
+        }`}
+      />
+      <div className="relative flex items-start gap-3">
+        <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl ${t.chip}`}>
+          <Icon className="h-[18px] w-[18px]" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-[13px] font-bold leading-tight text-fg">{title}</p>
+          <p className="mt-1 text-[11px] leading-relaxed text-muted line-clamp-2">
+            {description}
+          </p>
+        </div>
+        <IconArrowRight
+          className={`mt-1 h-4 w-4 shrink-0 text-subtle transition-transform duration-200 ${
+            disabled ? '' : 'group-hover:translate-x-0.5 group-hover:text-fg'
+          }`}
+        />
+      </div>
+    </button>
   );
 }
 
@@ -806,7 +1036,7 @@ function WebinarCard({
   };
 
   return (
-    <Card className="group relative flex flex-col overflow-hidden hover:border-brand-500/40 hover:shadow-pop">
+    <Card className="group relative flex flex-col overflow-hidden transition-all duration-200 hover:-translate-y-0.5 hover:border-brand-500/40 hover:shadow-pop">
       {/* 16:9 Banner Header */}
       <div className="relative aspect-[16/9] w-full overflow-hidden bg-panel-2">
         {bannerSrc ? (
@@ -814,7 +1044,7 @@ function WebinarCard({
           <img
             src={bannerSrc}
             alt={w.title}
-            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+            className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]"
           />
         ) : (
           <div className="flex h-full w-full flex-col items-center justify-center bg-gradient-to-br from-brand-600/20 via-panel-2 to-panel p-4 text-center">
@@ -826,22 +1056,33 @@ function WebinarCard({
         )}
 
         {/* Gradient Overlay for Top Badges */}
-        <div className="absolute inset-x-0 top-0 flex items-center justify-between p-3 bg-gradient-to-b from-black/70 via-black/30 to-transparent">
-          <Badge
-            variant={statusToBadgeVariant(w.status)}
-            size="sm"
-            dot
-            className="backdrop-blur-md"
-          >
-            {w.status}
-          </Badge>
+        <div className="absolute inset-x-0 top-0 flex items-center justify-between gap-2 bg-gradient-to-b from-black/75 via-black/30 to-transparent p-3">
+          <span className="inline-flex items-center gap-1.5">
+            <Badge
+              variant={statusToBadgeVariant(w.status)}
+              size="sm"
+              dot
+              className="backdrop-blur-md"
+            >
+              {w.status}
+            </Badge>
+            {isLive && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-red-500/90 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-white shadow-sm backdrop-blur-md">
+                <span className="relative flex h-1.5 w-1.5">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-75" />
+                  <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-white" />
+                </span>
+                On air
+              </span>
+            )}
+          </span>
 
           {paid ? (
-            <span className="rounded-full bg-accent-500/90 px-2 py-0.5 text-[10px] font-bold text-ink-950 shadow-sm backdrop-blur-md">
+            <span className="rounded-full bg-accent-500/90 px-2 py-0.5 text-[10px] font-bold tabular-nums text-ink-950 shadow-sm backdrop-blur-md">
               {formatPrice(Number(w.settings?.priceInPaise ?? 0))}
             </span>
           ) : (
-            <span className="rounded-full bg-white/20 px-2 py-0.5 text-[10px] font-semibold text-white backdrop-blur-md">
+            <span className="rounded-full bg-black/45 px-2 py-0.5 text-[10px] font-semibold text-white ring-1 ring-inset ring-white/25 backdrop-blur-md">
               Free
             </span>
           )}
@@ -849,16 +1090,16 @@ function WebinarCard({
       </div>
 
       {/* Card Content */}
-      <div className="flex flex-1 flex-col p-4 sm:p-5">
+      <div className="flex flex-1 flex-col p-4 sm:p-[18px]">
         <h3
           onClick={() => onOpen(w, 'registrations')}
-          className="cursor-pointer text-[15px] font-bold leading-snug text-fg transition hover:text-brand-500 line-clamp-2"
+          className="cursor-pointer text-[14.5px] font-bold leading-snug tracking-tight text-fg transition hover:text-brand-500 line-clamp-2"
           title={w.title}
         >
           {w.title}
         </h3>
 
-        <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
+        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11.5px] text-muted">
           <span className="inline-flex items-center gap-1.5">
             <IconCalendar className="h-3.5 w-3.5 text-subtle" />
             {formatDate(w.startsAt)}
@@ -870,26 +1111,27 @@ function WebinarCard({
         </div>
 
         {/* Attendees Meter */}
-        <div className="mt-3.5 flex items-center justify-between rounded-xl border border-line bg-panel-2 px-3 py-2">
+        <div className="mt-3.5 flex items-center justify-between rounded-xl border border-line bg-panel-2/60 px-2.5 py-2 transition-colors group-hover:border-line">
           <div className="flex items-center gap-2">
-            <span className="grid h-6 w-6 place-items-center rounded-lg bg-brand-500/10 text-brand-500">
+            <span className="grid h-6 w-6 place-items-center rounded-lg bg-brand-500/10 text-brand-600 dark:text-brand-400">
               <IconUsers className="h-3.5 w-3.5" />
             </span>
-            <span className="text-xs font-semibold text-fg">
+            <span className="text-xs font-bold tabular-nums text-fg">
               {w.registrationCount ?? 0}
             </span>
             <span className="text-[11px] text-muted">registered</span>
           </div>
           <button
             onClick={() => onOpen(w, 'registrations')}
-            className="text-[11px] font-bold text-brand-600 dark:text-brand-400 transition hover:underline"
+            className="inline-flex items-center gap-0.5 rounded-md px-1 py-0.5 text-[11px] font-bold text-brand-600 transition hover:gap-1.5 hover:bg-brand-500/10 dark:text-brand-400"
           >
-            View list →
+            View
+            <IconArrowRight className="h-3 w-3" />
           </button>
         </div>
 
         {/* Primary Action Button Cluster */}
-        <div className="mt-4 flex items-center gap-2">
+        <div className="mt-3.5 flex items-center gap-2">
           <Button
             variant={isLive ? 'danger' : 'primary'}
             size="sm"
@@ -928,33 +1170,37 @@ function WebinarCard({
         </div>
 
         {/* Secondary Tool Toolbar */}
-        <div className="mt-3 flex items-center justify-between border-t border-line/60 pt-3">
-          <div className="flex items-center gap-1">
+        <div className="mt-3 flex items-center justify-between gap-2 border-t border-line/60 pt-2.5">
+          <div className="flex items-center gap-0.5">
             <button
               onClick={() => onOpen(w, 'analytics')}
               title="Analytics"
-              className="grid h-7 w-7 place-items-center rounded-lg text-muted hover:text-fg hover:bg-panel-2 transition"
+              aria-label="Analytics"
+              className="grid h-7 w-7 place-items-center rounded-lg text-subtle transition hover:bg-panel-2 hover:text-fg active:scale-95"
             >
               <IconChart className="h-3.5 w-3.5" />
             </button>
             <button
               onClick={() => onOpen(w, 'engagement')}
               title="Engagement"
-              className="grid h-7 w-7 place-items-center rounded-lg text-muted hover:text-fg hover:bg-panel-2 transition"
+              aria-label="Engagement"
+              className="grid h-7 w-7 place-items-center rounded-lg text-subtle transition hover:bg-panel-2 hover:text-fg active:scale-95"
             >
               <IconSpark className="h-3.5 w-3.5" />
             </button>
             <button
               onClick={() => onOpen(w, 'payments')}
               title="Payments"
-              className="grid h-7 w-7 place-items-center rounded-lg text-muted hover:text-fg hover:bg-panel-2 transition"
+              aria-label="Payments"
+              className="grid h-7 w-7 place-items-center rounded-lg text-subtle transition hover:bg-panel-2 hover:text-fg active:scale-95"
             >
               <IconCard className="h-3.5 w-3.5" />
             </button>
             <button
               onClick={() => onOpen(w, 'recordings')}
               title="Recordings"
-              className="grid h-7 w-7 place-items-center rounded-lg text-muted hover:text-fg hover:bg-panel-2 transition"
+              aria-label="Recordings"
+              className="grid h-7 w-7 place-items-center rounded-lg text-subtle transition hover:bg-panel-2 hover:text-fg active:scale-95"
             >
               <IconDisc className="h-3.5 w-3.5" />
             </button>
@@ -962,25 +1208,24 @@ function WebinarCard({
 
           <div className="flex items-center gap-1">
             {w.status === 'DRAFT' && (
-              <Button
-                size="xs"
-                variant="accent"
-                onClick={() => onPublish(w)}
-              >
+              <Button size="xs" variant="accent" onClick={() => onPublish(w)}>
                 Publish
               </Button>
             )}
+            <span className="mx-0.5 h-4 w-px bg-line" />
             <button
               onClick={() => onEdit(w)}
               title="Edit Settings"
-              className="grid h-7 w-7 place-items-center rounded-lg text-muted hover:text-fg hover:bg-panel-2 transition"
+              aria-label="Edit settings"
+              className="grid h-7 w-7 place-items-center rounded-lg text-subtle transition hover:bg-panel-2 hover:text-fg active:scale-95"
             >
               <IconEdit className="h-3.5 w-3.5" />
             </button>
             <button
               onClick={() => onDelete(w)}
               title="Delete Webinar"
-              className="grid h-7 w-7 place-items-center rounded-lg text-muted hover:text-red-500 hover:bg-red-500/10 transition"
+              aria-label="Delete webinar"
+              className="grid h-7 w-7 place-items-center rounded-lg text-subtle transition hover:bg-red-500/10 hover:text-red-500 active:scale-95"
             >
               <IconTrash className="h-3.5 w-3.5" />
             </button>
@@ -1029,9 +1274,9 @@ function WebinarListRow({
   };
 
   return (
-    <Card className="flex flex-col gap-3 p-3.5 transition hover:border-brand-400/50 hover:shadow-pop md:flex-row md:items-center md:justify-between">
-      <div className="flex items-center gap-3.5 min-w-0">
-        <div className="relative h-12 w-16 shrink-0 overflow-hidden rounded-xl bg-panel-2 border border-line">
+    <Card className="group flex flex-col gap-3 p-3 transition-all duration-200 hover:border-brand-400/50 hover:shadow-pop md:flex-row md:items-center md:justify-between">
+      <div className="flex min-w-0 items-center gap-3.5">
+        <div className="relative h-12 w-16 shrink-0 overflow-hidden rounded-xl border border-line bg-panel-2">
           {bannerSrc ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={bannerSrc} alt="" className="h-full w-full object-cover" />
@@ -1039,6 +1284,12 @@ function WebinarListRow({
             <div className="grid h-full w-full place-items-center bg-brand-500/10 text-brand-500">
               <IconVideo className="h-5 w-5" />
             </div>
+          )}
+          {isLive && (
+            <span className="absolute right-1 top-1 flex h-2 w-2">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-500 opacity-75" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500 ring-2 ring-panel" />
+            </span>
           )}
         </div>
 
@@ -1048,28 +1299,37 @@ function WebinarListRow({
               {w.status}
             </Badge>
             {paid && (
-              <span className="rounded-full bg-accent-500/15 px-1.5 py-0.5 text-[9px] font-bold text-accent-500">
+              <span className="rounded-full bg-accent-500/15 px-1.5 py-0.5 text-[9px] font-bold tabular-nums text-accent-600 dark:text-accent-400">
                 {formatPrice(Number(w.settings?.priceInPaise ?? 0))}
               </span>
             )}
             <h4
               onClick={() => onOpen(w, 'registrations')}
-              className="cursor-pointer truncate text-sm font-bold text-fg hover:text-brand-500"
+              className="cursor-pointer truncate text-[13.5px] font-bold text-fg transition hover:text-brand-500"
             >
               {w.title}
             </h4>
           </div>
-          <div className="mt-1 flex items-center gap-2 text-xs text-muted">
-            <span>{formatDate(w.startsAt)}</span>
-            <span>•</span>
-            <span>{w.durationMins}m</span>
-            <span>•</span>
-            <span className="font-semibold text-fg">{w.registrationCount ?? 0} registered</span>
+          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11.5px] text-muted">
+            <span className="inline-flex items-center gap-1">
+              <IconCalendar className="h-3 w-3 text-subtle" />
+              {formatDate(w.startsAt)}
+            </span>
+            <span className="text-subtle">•</span>
+            <span className="inline-flex items-center gap-1">
+              <IconClock className="h-3 w-3 text-subtle" />
+              {w.durationMins}m
+            </span>
+            <span className="text-subtle">•</span>
+            <span className="inline-flex items-center gap-1 font-semibold tabular-nums text-fg">
+              <IconUsers className="h-3 w-3 text-subtle" />
+              {w.registrationCount ?? 0} registered
+            </span>
           </div>
         </div>
       </div>
 
-      <div className="flex items-center gap-1.5 self-end md:self-auto shrink-0">
+      <div className="flex shrink-0 items-center gap-1.5 self-end md:self-auto">
         <Button
           size="xs"
           variant={isLive ? 'danger' : 'primary'}
@@ -1085,9 +1345,14 @@ function WebinarListRow({
           variant="outline"
           onClick={copyPublicLink}
           title="Copy link"
+          aria-label="Copy public link"
           className="px-2"
         >
-          {copied ? <IconCheck className="h-3.5 w-3.5 text-mint-500" /> : <IconCopy className="h-3.5 w-3.5" />}
+          {copied ? (
+            <IconCheck className="h-3.5 w-3.5 text-mint-500" />
+          ) : (
+            <IconCopy className="h-3.5 w-3.5" />
+          )}
         </Button>
 
         <Button
@@ -1095,15 +1360,19 @@ function WebinarListRow({
           variant="outline"
           onClick={() => onOpen(w, 'registrations')}
           title="Manage webinar"
+          aria-label="Manage webinar"
           className="px-2"
         >
           <IconUsers className="h-3.5 w-3.5" />
         </Button>
 
+        <span className="mx-0.5 h-4 w-px bg-line" />
+
         <button
           onClick={() => onEdit(w)}
           title="Edit"
-          className="grid h-7 w-7 place-items-center rounded-lg text-muted hover:text-fg hover:bg-panel-2 transition"
+          aria-label="Edit webinar"
+          className="grid h-7 w-7 place-items-center rounded-lg text-subtle transition hover:bg-panel-2 hover:text-fg active:scale-95"
         >
           <IconEdit className="h-3.5 w-3.5" />
         </button>
@@ -1111,7 +1380,8 @@ function WebinarListRow({
         <button
           onClick={() => onDelete(w)}
           title="Delete"
-          className="grid h-7 w-7 place-items-center rounded-lg text-muted hover:text-red-500 hover:bg-red-500/10 transition"
+          aria-label="Delete webinar"
+          className="grid h-7 w-7 place-items-center rounded-lg text-subtle transition hover:bg-red-500/10 hover:text-red-500 active:scale-95"
         >
           <IconTrash className="h-3.5 w-3.5" />
         </button>
@@ -1157,35 +1427,39 @@ function DetailView({
       return (
         <div className="space-y-6">
           <GatewayConfigPanel />
-          <Card className="p-6">
-            <h2 className="text-sm font-bold text-fg">
-              {tab === 'payments' ? 'Webinar Payments & Refunds' : 'Integrations & Webhooks'}
-            </h2>
-            <p className="mt-1 text-xs text-muted">
-              {tab === 'payments'
-                ? 'Choose a webinar below to view its transactions and process refunds.'
-                : 'Choose a webinar below to configure webhooks, automation cues, and tracking pixels.'}
-            </p>
+          <Card className="p-5 sm:p-6">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-bold tracking-tight text-fg">
+                  {tab === 'payments' ? 'Webinar payments & refunds' : 'Integrations & webhooks'}
+                </h2>
+                <p className="mt-1 text-xs leading-relaxed text-muted">
+                  {tab === 'payments'
+                    ? 'Choose a webinar below to view its transactions and process refunds.'
+                    : 'Choose a webinar below to configure webhooks, automation cues, and tracking pixels.'}
+                </p>
+              </div>
+            </div>
             {webinars.length === 0 ? (
               <EmptyState title="No webinars created yet" className="mt-4" />
             ) : (
-              <div className="mt-4 divide-y divide-line">
+              <div className="mt-4 space-y-1.5">
                 {webinars.map((w) => (
                   <button
                     key={w.id}
                     onClick={() => onSelect(w)}
-                    className="flex w-full items-center gap-3 py-3 text-left transition hover:bg-panel-2 rounded-xl px-2"
+                    className="group flex w-full items-center gap-3 rounded-xl border border-transparent px-3 py-2.5 text-left transition hover:border-line hover:bg-panel-2"
                   >
                     <Badge variant={statusToBadgeVariant(w.status)} size="sm">
                       {w.status}
                     </Badge>
-                    <span className="min-w-0 flex-1 truncate text-sm font-semibold text-fg">
+                    <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-fg">
                       {w.title}
                     </span>
-                    <span className="shrink-0 text-xs text-muted">
+                    <span className="shrink-0 text-[11px] tabular-nums text-muted">
                       {w.registrationCount ?? 0} regs
                     </span>
-                    <IconChevron className="h-4 w-4 shrink-0 text-subtle" />
+                    <IconChevron className="h-4 w-4 shrink-0 text-subtle transition group-hover:translate-x-0.5 group-hover:text-fg" />
                   </button>
                 ))}
               </div>
@@ -1196,31 +1470,34 @@ function DetailView({
     }
 
     return (
-      <Card className="p-6">
-        <h2 className="text-sm font-bold text-fg">Choose a webinar to view {TAB_TITLES[tab]}</h2>
-        <p className="mt-1 text-xs text-muted">
-          {TAB_TITLES[tab]} data is scoped to a single session — pick one below to open its dashboard.
+      <Card className="p-5 sm:p-6">
+        <h2 className="text-sm font-bold tracking-tight text-fg">
+          Choose a webinar to view {TAB_TITLES[tab]}
+        </h2>
+        <p className="mt-1 text-xs leading-relaxed text-muted">
+          {TAB_TITLES[tab]} data is scoped to a single session — pick one below to open its
+          dashboard.
         </p>
         {webinars.length === 0 ? (
           <EmptyState title="No webinars created yet" className="mt-4" />
         ) : (
-          <div className="mt-4 divide-y divide-line">
+          <div className="mt-4 space-y-1.5">
             {webinars.map((w) => (
               <button
                 key={w.id}
                 onClick={() => onSelect(w)}
-                className="flex w-full items-center gap-3 py-3.5 text-left transition hover:bg-panel-2 rounded-xl px-2"
+                className="group flex w-full items-center gap-3 rounded-xl border border-transparent px-3 py-3 text-left transition hover:border-line hover:bg-panel-2"
               >
                 <Badge variant={statusToBadgeVariant(w.status)} size="sm">
                   {w.status}
                 </Badge>
-                <span className="min-w-0 flex-1 truncate text-sm font-semibold text-fg">
+                <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-fg">
                   {w.title}
                 </span>
-                <span className="shrink-0 text-xs text-muted">
+                <span className="shrink-0 text-[11px] tabular-nums text-muted">
                   {w.registrationCount ?? 0} registrations
                 </span>
-                <IconChevron className="h-4 w-4 shrink-0 text-subtle" />
+                <IconChevron className="h-4 w-4 shrink-0 text-subtle transition group-hover:translate-x-0.5 group-hover:text-fg" />
               </button>
             ))}
           </div>
@@ -1242,36 +1519,43 @@ function DetailView({
   return (
     <div className="space-y-5">
       {/* ── Scoped Webinar Context Header ── */}
-      <Card className="p-5 sm:p-6">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+      <Card className="overflow-hidden p-0">
+        <div className="flex flex-col gap-4 p-5 sm:p-6 lg:flex-row lg:items-center lg:justify-between">
           <div className="min-w-0">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 text-[11px] font-medium text-subtle">
               <button
                 onClick={onClear}
-                className="inline-flex items-center gap-1 text-xs font-semibold text-brand-600 dark:text-brand-400 transition hover:underline"
+                className="inline-flex items-center gap-1 font-semibold text-brand-600 transition hover:underline dark:text-brand-400"
               >
                 <IconChevron className="h-3 w-3 rotate-180" />
                 All webinars
               </button>
-              <span className="text-subtle">/</span>
-              <span className="truncate text-xs font-medium text-muted">
-                {selected.title}
-              </span>
+              <IconChevron className="h-2.5 w-2.5" />
+              <span className="truncate text-muted">{selected.title}</span>
             </div>
 
             <div className="mt-2 flex flex-wrap items-center gap-2.5">
-              <h2 className="text-lg font-bold text-fg">{selected.title}</h2>
+              <h2 className="text-lg font-bold tracking-tight text-fg">{selected.title}</h2>
               <Badge variant={statusToBadgeVariant(selected.status)} size="sm" dot>
                 {selected.status}
               </Badge>
             </div>
 
-            <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted">
-              <span>{formatDate(selected.startsAt)}</span>
-              <span>•</span>
-              <span>{selected.durationMins} minutes</span>
-              <span>•</span>
-              <span className="font-semibold text-fg">{selected.registrationCount ?? 0} registered</span>
+            <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11.5px] text-muted">
+              <span className="inline-flex items-center gap-1.5">
+                <IconCalendar className="h-3.5 w-3.5 text-subtle" />
+                {formatDate(selected.startsAt)}
+              </span>
+              <span className="text-subtle">•</span>
+              <span className="inline-flex items-center gap-1.5">
+                <IconClock className="h-3.5 w-3.5 text-subtle" />
+                {selected.durationMins} minutes
+              </span>
+              <span className="text-subtle">•</span>
+              <span className="inline-flex items-center gap-1.5 font-semibold tabular-nums text-fg">
+                <IconUsers className="h-3.5 w-3.5 text-subtle" />
+                {selected.registrationCount ?? 0} registered
+              </span>
             </div>
           </div>
 
@@ -1310,7 +1594,7 @@ function DetailView({
         </div>
 
         {/* Horizontal Detail Sub-Tabs Bar */}
-        <div className="mt-5 flex gap-1.5 overflow-x-auto border-t border-line/60 pt-4">
+        <div className="scrollbar-thin flex gap-1 overflow-x-auto border-t border-line/60 bg-panel-2/40 px-3 py-2">
           {DETAIL_TABS.map((subItem) => {
             const Icon = subItem.icon;
             const active = tab === subItem.key;
@@ -1318,13 +1602,15 @@ function DetailView({
               <button
                 key={subItem.key}
                 onClick={() => onTabChange(subItem.key)}
-                className={`inline-flex shrink-0 items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-semibold transition ${
+                className={`inline-flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11.5px] font-semibold transition ${
                   active
-                    ? 'bg-brand-500 text-white shadow-sm'
-                    : 'text-muted hover:bg-panel-2 hover:text-fg'
+                    ? 'bg-panel text-brand-700 shadow-xs ring-1 ring-inset ring-brand-500/25 dark:text-brand-200'
+                    : 'text-muted hover:bg-panel/70 hover:text-fg'
                 }`}
               >
-                <Icon className={`h-3.5 w-3.5 ${active ? 'text-white' : 'text-subtle'}`} />
+                <Icon
+                  className={`h-3.5 w-3.5 ${active ? 'text-brand-600 dark:text-brand-300' : 'text-subtle'}`}
+                />
                 <span>{subItem.label}</span>
               </button>
             );
@@ -1333,7 +1619,7 @@ function DetailView({
       </Card>
 
       {/* Main Scoped Tab Content Panel */}
-      <Card className="p-5 sm:p-6">
+      <Card className="p-4 sm:p-5 lg:p-6">
         {tab === 'registrations' ? (
           <RegistrationsTable registrations={registrations} />
         ) : tab === 'engagement' ? (
@@ -1405,39 +1691,67 @@ function RegistrationsTable({ registrations }: { registrations: Registration[] }
     );
   }
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-left text-sm">
-        <thead>
-          <tr className="border-b border-line text-[11px] uppercase tracking-wider text-subtle">
-            <th className="pb-3 pr-4 font-semibold">Name</th>
-            <th className="pb-3 pr-4 font-semibold">Email</th>
-            <th className="pb-3 pr-4 font-semibold">Phone</th>
-            <th className="pb-3 pr-4 font-semibold">Payment</th>
-            <th className="pb-3 pr-4 font-semibold">Attended</th>
-            <th className="pb-3 font-semibold">Registered At</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-line/60">
-          {registrations.map((r) => (
-            <tr key={r.id} className="transition hover:bg-panel-2/40">
-              <td className="py-3.5 pr-4 font-medium text-fg">{r.name}</td>
-              <td className="py-3.5 pr-4 text-muted">{r.email}</td>
-              <td className="py-3.5 pr-4 text-subtle font-mono text-xs">{r.phone ?? '—'}</td>
-              <td className="py-3.5 pr-4">
-                <Badge variant={r.paid ? 'success' : 'default'} size="sm">
-                  {r.paid ? 'Paid' : 'Free'}
-                </Badge>
-              </td>
-              <td className="py-3.5 pr-4">
-                <Badge variant={r.attended ? 'brand' : 'default'} size="sm">
-                  {r.attended ? 'Attended' : 'Absent'}
-                </Badge>
-              </td>
-              <td className="py-3.5 text-xs text-subtle">{formatDate(r.createdAt)}</td>
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-bold tracking-tight text-fg">Attendee list</h3>
+        <span className="rounded-full border border-line bg-panel-2 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-muted">
+          {registrations.length} total
+        </span>
+      </div>
+
+      <div className="overflow-x-auto rounded-xl border border-line">
+        <table className="w-full text-left text-sm">
+          <thead className="bg-panel-2/70">
+            <tr className="text-[10px] uppercase tracking-[0.1em] text-subtle">
+              <th className="px-3 py-2.5 font-bold">Name</th>
+              <th className="px-3 py-2.5 font-bold">Email</th>
+              <th className="px-3 py-2.5 font-bold">Phone</th>
+              <th className="px-3 py-2.5 font-bold">Payment</th>
+              <th className="px-3 py-2.5 font-bold">Attended</th>
+              <th className="px-3 py-2.5 font-bold">Registered</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody className="divide-y divide-line/60">
+            {registrations.map((r) => {
+              const initials = r.name
+                .split(' ')
+                .filter(Boolean)
+                .slice(0, 2)
+                .map((p) => p[0]?.toUpperCase() ?? '')
+                .join('');
+              return (
+                <tr key={r.id} className="transition hover:bg-panel-2/50">
+                  <td className="px-3 py-2.5">
+                    <div className="flex items-center gap-2.5">
+                      <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-brand-500/10 text-[10px] font-bold text-brand-600 dark:text-brand-300">
+                        {initials || '?'}
+                      </span>
+                      <span className="font-semibold text-fg">{r.name}</span>
+                    </div>
+                  </td>
+                  <td className="px-3 py-2.5 text-[12px] text-muted">{r.email}</td>
+                  <td className="px-3 py-2.5 font-mono text-[11.5px] text-subtle">
+                    {r.phone ?? '—'}
+                  </td>
+                  <td className="px-3 py-2.5">
+                    <Badge variant={r.paid ? 'success' : 'default'} size="sm">
+                      {r.paid ? 'Paid' : 'Free'}
+                    </Badge>
+                  </td>
+                  <td className="px-3 py-2.5">
+                    <Badge variant={r.attended ? 'brand' : 'default'} size="sm">
+                      {r.attended ? 'Attended' : 'Absent'}
+                    </Badge>
+                  </td>
+                  <td className="px-3 py-2.5 text-[11.5px] text-subtle">
+                    {formatDate(r.createdAt)}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -1477,28 +1791,36 @@ function AnalyticsView({ analytics }: { analytics: Analytics | null }) {
       </div>
 
       <div>
-        <h4 className="mb-3 text-xs font-semibold uppercase tracking-wider text-subtle">
-          Quiz & Poll Performance
-        </h4>
+        <div className="mb-3 flex items-center justify-between">
+          <h4 className="text-[11px] font-bold uppercase tracking-[0.1em] text-subtle">
+            Quiz &amp; poll performance
+          </h4>
+          <span className="text-[11px] tabular-nums text-muted">
+            {analytics.quizzes.length} question{analytics.quizzes.length === 1 ? '' : 's'}
+          </span>
+        </div>
         {analytics.quizzes.length === 0 ? (
           <p className="rounded-xl border border-dashed border-line p-8 text-center text-xs text-subtle">
             No quizzes configured or answered for this session.
           </p>
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-2.5">
             {analytics.quizzes.map((q) => {
               const pct = q.answers > 0 ? Math.round((q.correct / q.answers) * 100) : 0;
               return (
-                <div key={q.id} className="rounded-xl border border-line bg-panel-2 p-3.5">
+                <div
+                  key={q.id}
+                  className="rounded-xl border border-line bg-panel-2/60 p-3.5 transition hover:border-brand-500/30"
+                >
                   <div className="flex items-center justify-between gap-3">
-                    <span className="truncate text-sm font-medium text-fg">{q.question}</span>
-                    <span className="shrink-0 text-xs tabular-nums text-muted font-semibold">
-                      {q.correct}/{q.answers} correct ({pct}%)
+                    <span className="truncate text-[13px] font-medium text-fg">{q.question}</span>
+                    <span className="shrink-0 text-[11px] font-bold tabular-nums text-muted">
+                      {q.correct}/{q.answers} · {pct}%
                     </span>
                   </div>
-                  <div className="mt-2.5 h-2 overflow-hidden rounded-full bg-line">
+                  <div className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-line">
                     <div
-                      className="h-full rounded-full bg-mint-500 transition-all duration-500"
+                      className="h-full rounded-full bg-gradient-to-r from-mint-500 to-mint-400 transition-all duration-500"
                       style={{ width: `${pct}%` }}
                     />
                   </div>
@@ -1508,6 +1830,373 @@ function AnalyticsView({ analytics }: { analytics: Analytics | null }) {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+/* ─────────────────────────── calendar view ─────────────────────────── */
+
+const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+const MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+
+/** Local YYYY-MM-DD key so a webinar lands on the day the host sees. */
+function dayKey(d: Date) {
+  const m = `${d.getMonth() + 1}`.padStart(2, '0');
+  const day = `${d.getDate()}`.padStart(2, '0');
+  return `${d.getFullYear()}-${m}-${day}`;
+}
+
+function timeLabel(iso: string) {
+  try {
+    return new Date(iso).toLocaleTimeString('en-IN', {
+      hour: 'numeric',
+      minute: '2-digit',
+    });
+  } catch {
+    return '';
+  }
+}
+
+const CAL_TONES: Record<string, { chip: string; dot: string }> = {
+  LIVE: {
+    chip: 'border-red-500/30 bg-red-500/10 text-red-700 hover:border-red-500/60 dark:text-red-300',
+    dot: 'bg-red-500',
+  },
+  SCHEDULED: {
+    chip: 'border-brand-500/30 bg-brand-500/10 text-brand-700 hover:border-brand-500/60 dark:text-brand-300',
+    dot: 'bg-brand-500',
+  },
+  DRAFT: {
+    chip: 'border-line bg-panel-2 text-muted hover:border-brand-500/40',
+    dot: 'bg-slate-400 dark:bg-slate-500',
+  },
+  ENDED: {
+    chip: 'border-line bg-panel-2/60 text-subtle hover:border-line',
+    dot: 'bg-slate-300 dark:bg-slate-600',
+  },
+};
+
+function WebinarCalendar({
+  webinars,
+  joiningSlug,
+  onJoin,
+  onOpen,
+  onEdit,
+  onCreate,
+}: {
+  webinars: AdminWebinar[];
+  joiningSlug: string | null;
+  onJoin: (slug: string) => void;
+  onOpen: (w: AdminWebinar, tab: Tab) => void;
+  onEdit: (w: AdminWebinar) => void;
+  onCreate: () => void;
+}) {
+  const today = useMemo(() => new Date(), []);
+  const [cursor, setCursor] = useState(() => new Date(today.getFullYear(), today.getMonth(), 1));
+  const [activeDay, setActiveDay] = useState<string | null>(null);
+
+  const byDay = useMemo(() => {
+    const map = new Map<string, AdminWebinar[]>();
+    for (const w of webinars) {
+      const d = new Date(w.startsAt);
+      if (Number.isNaN(d.getTime())) continue;
+      const key = dayKey(d);
+      const list = map.get(key);
+      if (list) list.push(w);
+      else map.set(key, [w]);
+    }
+    for (const list of map.values()) {
+      list.sort((a, b) => +new Date(a.startsAt) - +new Date(b.startsAt));
+    }
+    return map;
+  }, [webinars]);
+
+  /** 6×7 grid starting Monday, covering the whole month plus padding days. */
+  const cells = useMemo(() => {
+    const first = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
+    const offset = (first.getDay() + 6) % 7; // Monday = 0
+    const start = new Date(first);
+    start.setDate(first.getDate() - offset);
+    return Array.from({ length: 42 }, (_, i) => {
+      const d = new Date(start);
+      d.setDate(start.getDate() + i);
+      return d;
+    });
+  }, [cursor]);
+
+  const monthWebinars = useMemo(
+    () =>
+      webinars
+        .filter((w) => {
+          const d = new Date(w.startsAt);
+          return (
+            !Number.isNaN(d.getTime()) &&
+            d.getFullYear() === cursor.getFullYear() &&
+            d.getMonth() === cursor.getMonth()
+          );
+        })
+        .sort((a, b) => +new Date(a.startsAt) - +new Date(b.startsAt)),
+    [webinars, cursor]
+  );
+
+  const upcoming = useMemo(
+    () =>
+      webinars
+        .filter((w) => {
+          const d = new Date(w.startsAt);
+          return !Number.isNaN(d.getTime()) && d >= new Date(today.getFullYear(), today.getMonth(), today.getDate());
+        })
+        .sort((a, b) => +new Date(a.startsAt) - +new Date(b.startsAt))
+        .slice(0, 5),
+    [webinars, today]
+  );
+
+  const todayKey = dayKey(today);
+  const shift = (delta: number) =>
+    setCursor((c) => new Date(c.getFullYear(), c.getMonth() + delta, 1));
+
+  return (
+    <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
+      {/* ── Month grid ─────────────────────────────────────── */}
+      <Card className="min-w-0 overflow-hidden p-0">
+        {/* Toolbar */}
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line/70 px-4 py-3">
+          <div className="flex items-center gap-2.5">
+            <span className="grid h-8 w-8 place-items-center rounded-xl bg-brand-500/10 text-brand-600 dark:text-brand-300">
+              <IconCalendarGrid className="h-4 w-4" />
+            </span>
+            <div>
+              <p className="text-[13.5px] font-bold leading-tight tracking-tight text-fg">
+                {MONTH_NAMES[cursor.getMonth()]} {cursor.getFullYear()}
+              </p>
+              <p className="text-[10.5px] font-medium text-subtle">
+                {monthWebinars.length} session{monthWebinars.length === 1 ? '' : 's'} this month
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => shift(-1)}
+              aria-label="Previous month"
+              className="grid h-7 w-7 place-items-center rounded-lg border border-line bg-panel text-subtle transition hover:border-brand-500/40 hover:text-fg"
+            >
+              <IconChevron className="h-3.5 w-3.5 rotate-180" />
+            </button>
+            <button
+              onClick={() => setCursor(new Date(today.getFullYear(), today.getMonth(), 1))}
+              className="h-7 rounded-lg border border-line bg-panel px-2.5 text-[11px] font-semibold text-muted transition hover:border-brand-500/40 hover:text-fg"
+            >
+              Today
+            </button>
+            <button
+              onClick={() => shift(1)}
+              aria-label="Next month"
+              className="grid h-7 w-7 place-items-center rounded-lg border border-line bg-panel text-subtle transition hover:border-brand-500/40 hover:text-fg"
+            >
+              <IconChevron className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </div>
+
+        {/* Weekday header */}
+        <div className="grid grid-cols-7 border-b border-line/70 bg-panel-2/50">
+          {WEEKDAYS.map((d) => (
+            <div
+              key={d}
+              className="min-w-0 px-1 py-2 text-center text-[10px] font-bold uppercase tracking-[0.1em] text-subtle"
+            >
+              <span className="hidden sm:inline">{d}</span>
+              <span className="sm:hidden">{d.slice(0, 1)}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* Day cells */}
+        <div className="grid grid-cols-7">
+          {cells.map((d, i) => {
+            const key = dayKey(d);
+            const inMonth = d.getMonth() === cursor.getMonth();
+            const isToday = key === todayKey;
+            const items = byDay.get(key) ?? [];
+            const isActive = activeDay === key;
+            return (
+              <div
+                key={key + i}
+                onClick={() => setActiveDay(isActive ? null : key)}
+                className={`relative min-h-[62px] min-w-0 cursor-pointer border-b border-r border-line/50 p-1 transition-colors sm:min-h-[104px] sm:p-1.5 ${
+                  inMonth ? 'bg-panel' : 'bg-panel-2/30'
+                } ${isActive ? 'ring-1 ring-inset ring-brand-500/40' : 'hover:bg-panel-2/60'}`}
+              >
+                <div className="flex items-center justify-between gap-0.5">
+                  <span
+                    className={`grid h-5 min-w-[20px] place-items-center rounded-md px-1 text-[11px] font-bold tabular-nums ${
+                      isToday
+                        ? 'bg-brand-500 text-white shadow-sm'
+                        : inMonth
+                          ? 'text-fg'
+                          : 'text-subtle'
+                    }`}
+                  >
+                    {d.getDate()}
+                  </span>
+                  {items.length > 2 && (
+                    <span className="hidden text-[9px] font-bold tabular-nums text-subtle sm:inline">
+                      +{items.length - 2}
+                    </span>
+                  )}
+                </div>
+
+                {/* Mobile: compact dots */}
+                {items.length > 0 && (
+                  <div className="mt-1 flex flex-wrap gap-0.5 sm:hidden">
+                    {items.slice(0, 4).map((w) => {
+                      const tone = CAL_TONES[w.status] ?? CAL_TONES.DRAFT;
+                      return (
+                        <span
+                          key={w.id}
+                          className={`h-1.5 w-1.5 rounded-full ${tone.dot}`}
+                        />
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Desktop: event chips */}
+                <div className="mt-1 hidden space-y-1 sm:block">
+                  {items.slice(0, 2).map((w) => {
+                    const tone = CAL_TONES[w.status] ?? CAL_TONES.DRAFT;
+                    return (
+                      <button
+                        key={w.id}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onOpen(w, 'registrations');
+                        }}
+                        title={`${timeLabel(w.startsAt)} · ${w.title}`}
+                        className={`flex w-full min-w-0 items-center gap-1 rounded-md border px-1.5 py-[3px] text-left transition ${tone.chip}`}
+                      >
+                        <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${tone.dot}`} />
+                        <span className="min-w-0 flex-1 truncate text-[10px] font-semibold leading-tight">
+                          {w.title}
+                        </span>
+                        <span className="hidden shrink-0 text-[9px] font-medium tabular-nums opacity-70 xl:inline">
+                          {timeLabel(w.startsAt)}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Legend */}
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-line/70 bg-panel-2/40 px-4 py-2.5">
+          {(['LIVE', 'SCHEDULED', 'DRAFT', 'ENDED'] as const).map((s) => (
+            <span key={s} className="inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-subtle">
+              <span className={`h-1.5 w-1.5 rounded-full ${CAL_TONES[s].dot}`} />
+              {s}
+            </span>
+          ))}
+        </div>
+      </Card>
+
+      {/* ── Agenda rail ────────────────────────────────────── */}
+      <aside className="min-w-0 space-y-3 xl:sticky xl:top-[92px] xl:self-start">
+        <Card className="p-4">
+          <div className="flex items-center justify-between">
+            <h3 className="flex items-center gap-2 text-[12.5px] font-bold tracking-tight text-fg">
+              <span className="h-3 w-[2.5px] shrink-0 rounded-full bg-brand-500" />
+              Upcoming
+            </h3>
+            <span className="rounded-md bg-panel-2 px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-muted">
+              {upcoming.length}
+            </span>
+          </div>
+
+          {upcoming.length === 0 ? (
+            <p className="mt-3 rounded-xl border border-dashed border-line px-3 py-6 text-center text-[11px] text-subtle">
+              Nothing scheduled ahead.
+            </p>
+          ) : (
+            <div className="mt-3 space-y-1.5">
+              {upcoming.map((w) => {
+                const tone = CAL_TONES[w.status] ?? CAL_TONES.DRAFT;
+                const d = new Date(w.startsAt);
+                return (
+                  <button
+                    key={w.id}
+                    onClick={() => onOpen(w, 'registrations')}
+                    className="group flex w-full items-start gap-2.5 rounded-xl border border-line bg-panel-2/50 p-2.5 text-left transition hover:border-brand-500/40 hover:bg-panel-2"
+                  >
+                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-line bg-panel">
+                      <span className="text-[9px] font-bold uppercase leading-none text-subtle">
+                        {MONTH_NAMES[d.getMonth()].slice(0, 3)}
+                      </span>
+                      <span className="text-[12px] font-bold leading-none tabular-nums text-fg">
+                        {d.getDate()}
+                      </span>
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[11.5px] font-semibold leading-tight text-fg">
+                        {w.title}
+                      </span>
+                      <span className="mt-1 flex items-center gap-1.5 text-[10px] font-medium text-subtle">
+                        <span className={`h-1.5 w-1.5 rounded-full ${tone.dot}`} />
+                        {timeLabel(w.startsAt)} · {w.durationMins}m
+                      </span>
+                    </span>
+                    <IconChevron className="mt-1 h-3 w-3 shrink-0 text-subtle transition-transform group-hover:translate-x-0.5" />
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </Card>
+
+        <Card className="p-4">
+          <h3 className="flex items-center gap-2 text-[12.5px] font-bold tracking-tight text-fg">
+            <span className="h-3 w-[2.5px] shrink-0 rounded-full bg-mint-500" />
+            Quick actions
+          </h3>
+          <div className="mt-3 space-y-1.5">
+            <button
+              onClick={onCreate}
+              className="flex w-full items-center gap-2 rounded-xl border border-line bg-panel-2/50 px-2.5 py-2 text-[11.5px] font-semibold text-fg transition hover:border-brand-500/40 hover:bg-panel-2"
+            >
+              <IconPlus className="h-3.5 w-3.5 text-brand-500" />
+              Schedule a webinar
+            </button>
+            {activeDay && (byDay.get(activeDay)?.length ?? 0) > 0 && (
+              <div className="rounded-xl border border-line bg-panel-2/50 p-2.5">
+                <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-subtle">
+                  {new Date(`${activeDay}T00:00:00`).toLocaleDateString('en-IN', {
+                    day: 'numeric',
+                    month: 'short',
+                  })}
+                </p>
+                <div className="mt-1.5 space-y-1">
+                  {(byDay.get(activeDay) ?? []).map((w) => (
+                    <button
+                      key={w.id}
+                      onClick={() => onOpen(w, 'registrations')}
+                      className="block w-full truncate rounded-lg px-1.5 py-1 text-left text-[11px] font-medium text-muted transition hover:bg-panel hover:text-fg"
+                    >
+                      {timeLabel(w.startsAt)} · {w.title}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </Card>
+      </aside>
     </div>
   );
 }

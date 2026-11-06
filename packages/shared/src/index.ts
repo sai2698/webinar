@@ -585,6 +585,72 @@ export interface HandRaiseEntry {
  */
 export type MediaSource = 'camera' | 'microphone' | 'screen';
 
+/* ────────────────────────────────────────────────────────────
+ * Attachments & native presentation
+ * ──────────────────────────────────────────────────────────── */
+
+/** Which viewer the client mounts for an uploaded file. */
+export type AttachmentKind = 'pdf' | 'pptx' | 'image';
+
+/** A file the host uploaded to present from inside the room. */
+export interface AttachmentInfo {
+  id: string;
+  webinarId: string;
+  name: string;
+  url: string;
+  kind: AttachmentKind;
+  mimeType: string;
+  bytes: number;
+  /** PDF pages or slides; 0 when the client has not reported it yet. */
+  pageCount: number;
+  createdAt: string;
+}
+
+/**
+ * One annotation stroke drawn over the presented file.
+ *
+ * Points are normalised to 0..1 against the rendered page, not stored in
+ * pixels. The stage is a different size on every device — a phone in portrait,
+ * a 4K projector, a small thumbnail in the filmstrip — so pixel coordinates
+ * would land in the wrong place for everyone but the person who drew them.
+ * Normalised points scale with whatever box the viewer renders into.
+ */
+export interface AnnotationStroke {
+  id: string;
+  tool: 'pen' | 'highlighter';
+  /** CSS colour, e.g. `#f43f5e`. */
+  color: string;
+  /** Stroke width as a fraction of the page's shorter side. */
+  width: number;
+  /** Flat [x0, y0, x1, y1, ...] in 0..1 space. */
+  points: number[];
+  /** Page/slide this stroke belongs to, so strokes do not bleed across pages. */
+  page: number;
+}
+
+/**
+ * What is currently on the presentation stage.
+ *
+ * `null` everywhere means "no presentation" and the stage falls back to the
+ * normal video grid. This is deliberately separate from `spotlightedPeerId`:
+ * a spotlight pins a *person*, a presentation shows a *file*, and the two can
+ * be active at once (a host narrating over a deck).
+ */
+export interface PresentationState {
+  attachmentId: string;
+  name: string;
+  url: string;
+  kind: AttachmentKind;
+  /** 1-based page/slide currently shown. */
+  page: number;
+  /** Total pages/slides, or 0 when not yet known. */
+  pageCount: number;
+  /** Strokes drawn so far, in draw order. */
+  annotations: AnnotationStroke[];
+  /** Peer that started the presentation, so the UI can attribute it. */
+  startedBy: string | null;
+}
+
 export interface PeerInfo {
   peerId: string;
   userId: string;
@@ -625,6 +691,13 @@ export interface RoomSnapshot {
   questions: QaQuestionPayload[];
   /** The peer the host has pinned to the big tile, if any. */
   spotlightedPeerId: string | null;
+  /**
+   * The file currently on the presentation stage, or `null`.
+   *
+   * Sent in the snapshot so a late joiner lands on the same slide the room is
+   * already looking at, with the annotations that have been drawn on it.
+   */
+  presentation: PresentationState | null;
   /** Set when the host is recording, so late joiners see the REC indicator. */
   recording: boolean;
   /**
@@ -685,7 +758,9 @@ export type TimelineEvent =
   | { t: number; type: 'spotlightChanged'; peerId: string | null; peerName: string | null }
   | { t: number; type: 'hostCamOn'; peerId: string; peerName: string }
   | { t: number; type: 'hostCamOff'; peerId: string; peerName: string }
-  | { t: number; type: 'presenterChanged'; peerId: string; peerName: string; peerRole: Role };
+  | { t: number; type: 'presenterChanged'; peerId: string; peerName: string; peerRole: Role }
+  // ── Native presentation (uploaded files) ──
+  | { t: number; type: 'presentationChanged'; presentation: PresentationState | null };
 
 /**
  * `Omit` over a union collapses to the keys every member shares, which would
@@ -823,6 +898,46 @@ export interface ClientToServerEvents {
 
   /** Staff only — pins one peer to the large tile. `null` clears it. */
   spotlight: (payload: { peerId: string | null }, ack: (res: Ack) => void) => void;
+
+  /**
+   * Staff only — puts an uploaded file on the presentation stage.
+   *
+   * Unlike a screen share this publishes no media: the server just records
+   * which file is showing and at which page, and every client fetches and
+   * renders it locally. `null` clears the stage.
+   */
+  presentationStart: (
+    payload: {
+      attachmentId: string;
+      name: string;
+      url: string;
+      kind: AttachmentKind;
+      pageCount?: number;
+    },
+    ack: (res: Ack) => void
+  ) => void;
+  /** Staff only — takes the file off the stage. */
+  presentationStop: (ack: (res: Ack) => void) => void;
+  /** Staff only — moves everyone to a different page/slide. */
+  presentationPage: (payload: { page: number }, ack: (res: Ack) => void) => void;
+  /**
+   * Staff only — adds or removes annotation strokes.
+   *
+   * `add` appends strokes, `remove` deletes specific strokes by id (the
+   * eraser), `clear` wipes the current page, `clearAll` wipes every page.
+   * Sending whole strokes rather than pointer deltas keeps the payload small
+   * (a stroke is one message, not one per mouse move) and makes the state
+   * trivially idempotent for late joiners.
+   */
+  presentationAnnotate: (
+    payload: {
+      action: 'add' | 'remove' | 'clear' | 'clearAll';
+      strokes?: AnnotationStroke[];
+      removeIds?: string[];
+      page?: number;
+    },
+    ack: (res: Ack) => void
+  ) => void;
   /** Staff only — mutes every non-staff microphone at once. */
   muteAll: (ack: (res: Ack<{ muted: number }>) => void) => void;
 
@@ -941,6 +1056,18 @@ export interface ServerToClientEvents {
 
   /** The spotlighted peer changed. `null` means back to the normal grid. */
   spotlightChanged: (payload: { peerId: string | null }) => void;
+
+  /** The presentation stage changed — a file was opened, closed or replaced. */
+  presentationChanged: (payload: { presentation: PresentationState | null }) => void;
+  /** The presenter moved to another page/slide. */
+  presentationPageChanged: (payload: { page: number }) => void;
+  /** Annotation strokes were added or cleared. */
+  presentationAnnotated: (payload: {
+    action: 'add' | 'remove' | 'clear' | 'clearAll';
+    strokes?: AnnotationStroke[];
+    removeIds?: string[];
+    page?: number;
+  }) => void;
 
   /** Sent to a speaker when the host mutes the room — the client pauses its mic. */
   forceMute: () => void;

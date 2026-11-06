@@ -244,6 +244,16 @@ export function IconCalendar(props: IconProps) {
   );
 }
 
+export function IconCalendarGrid(props: IconProps) {
+  return (
+    <Base {...props}>
+      <rect x="3" y="4" width="18" height="17" rx="2.5" />
+      <path d="M16 2.5v3.5M8 2.5v3.5M3 9.5h18" />
+      <path d="M7.5 13h.01M12 13h.01M16.5 13h.01M7.5 17h.01M12 17h.01" strokeWidth="2.2" />
+    </Base>
+  );
+}
+
 export function IconClock(props: IconProps) {
   return (
     <Base {...props}>
@@ -260,3 +270,64 @@ export function IconArrowRight(props: IconProps) {
     </Base>
   );
 }
+
+export function IconMail(props: IconProps) {
+  return (
+    <Base {...props}>
+      <rect x="2.5" y="4.5" width="19" height="15" rx="2.5" />
+      <path d="M3 7l9 6 9-6" />
+    </Base>
+  );
+}
+
+export function IconLock(props: IconProps) {
+  return (
+    <Base {...props}>
+      <rect x="4" y="10.5" width="16" height="10.5" rx="2.5" />
+      <path d="M8 10.5V7a4 4 0 0 1 8 0v3.5" />
+    </Base>
+  );
+}
+
+export function IconSettings(props: IconProps) {
+  return (
+    <Base {...props}>
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+    </Base>
+  );
+}
+
+export function IconDownload(props: IconProps) {
+  return (
+    <Base {...props}>
+      <path d="M12 3v12M7 11l5 5 5-5M4 20h16" />
+    </Base>
+  );
+}
+
+export function IconUpload(props: IconProps) {
+  return (
+    <Base {...props}>
+      <path d="M12 16V4M7 8l5-5 5 5M4 20h16" />
+    </Base>
+  );
+}
+
+export function IconFilter(props: IconProps) {
+  return (
+    <Base {...props}>
+      <path d="M3 5h18l-7 8v6l-4 2v-8L3 5z" />
+    </Base>
+  );
+}
+
+export function IconBell(props: IconProps) {
+  return (
+    <Base {...props}>
+      <path d="M18 8a6 6 0 1 0-12 0c0 6-3 7-3 7h18s-3-1-3-7" />
+      <path d="M13.7 20a2 2 0 0 1-3.4 0" />
+    </Base>
+  );
+}
+

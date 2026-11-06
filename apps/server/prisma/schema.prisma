@@ -167,6 +167,7 @@ model Webinar {
   payments      Payment[]
   recordings    Recording[]
   questions     QaQuestion[]
+  attachments   Attachment[]
 
   // webinar.gg parity
   customFields       CustomField[]
@@ -413,6 +414,38 @@ model ChatMessage {
 
   webinar Webinar @relation(fields: [webinarId], references: [id], onDelete: Cascade)
   user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([webinarId, createdAt])
+}
+
+/// A file the host uploaded to present from inside the room.
+///
+/// This is deliberately *not* a screen share. A screen share publishes a video
+/// track of whatever is on the presenter's desktop — it costs bandwidth, it
+/// leaks notifications and other windows, and the audience sees it at whatever
+/// resolution the SFU negotiated. An attachment is served as a file and
+/// rendered natively by each viewer's browser, so a 40-page PDF is crisp at any
+/// zoom and costs the SFU nothing.
+///
+/// `kind` is derived from the extension at upload time and drives which viewer
+/// the client mounts: `pdf` → pdf.js, `pptx` → pptx-preview, `image` → <img>.
+/// `pageCount` is filled in for PDFs so the host's page picker can be built
+/// without re-parsing the file.
+model Attachment {
+  id        String   @id @default(cuid())
+  webinarId String
+  name      String
+  /// Public URL under /uploads — served by express.static.
+  url       String
+  /// pdf | pptx | image
+  kind      String
+  mimeType  String
+  bytes     Int      @default(0)
+  /// PDF page count, or slide count when the client reports it. 0 = unknown.
+  pageCount Int      @default(0)
+  createdAt DateTime @default(now())
+
+  webinar Webinar @relation(fields: [webinarId], references: [id], onDelete: Cascade)
 
   @@index([webinarId, createdAt])
 }

@@ -1,4 +1,4 @@
-import type { RecordingDetail, RecordingSummary } from '@webinar/shared';
+import type { AttachmentInfo, RecordingDetail, RecordingSummary } from '@webinar/shared';
 import { getToken, notifyAdminUnauthorized, roomToken, type SessionScope } from './session';
 
 function getBaseUrl(fallbackPort = 4000): string {
@@ -363,6 +363,30 @@ export const endpoints = {
       'admin'
     );
   },
+  /**
+   * Uploads a file the host can present from inside the room.
+   *
+   * Sent as base64 in JSON rather than multipart: the banner upload already
+   * uses that shape, and adding multer would mean a second body parser on the
+   * same Express app for no real gain at these sizes.
+   */
+  uploadAttachment: async (webinarId: string, file: File) => {
+    const data = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = () => reject(new Error('Failed to read the file'));
+      reader.readAsDataURL(file);
+    });
+    return api.post<{ attachment: AttachmentInfo }>(
+      `/api/admin/${webinarId}/attachments`,
+      { data, filename: file.name },
+      'admin'
+    );
+  },
+  attachments: (webinarId: string) =>
+    api.get<{ attachments: AttachmentInfo[] }>(`/api/admin/${webinarId}/attachments`, 'admin'),
+  deleteAttachment: (id: string) =>
+    api.del<{ ok: boolean }>(`/api/admin/attachments/${id}`, 'admin'),
   adminWebinars: () => api.get<{ webinars: unknown[] }>('/api/admin/webinars'),
   adminWebinar: (id: string) => api.get<{ webinar: unknown }>(`/api/admin/webinars/${id}`),
   createWebinar: (data: unknown) => api.post<{ webinar: { id: string; slug: string } }>('/api/admin/webinars', data),

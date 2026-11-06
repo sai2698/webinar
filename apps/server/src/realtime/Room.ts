@@ -1,11 +1,13 @@
 import type { Router, RtpCapabilities, Worker, WebRtcServer } from 'mediasoup/types';
 import type { Server } from 'socket.io';
 import type {
+  AnnotationStroke,
   ChatMessagePayload,
   ChatSystemKind,
   CtaPayload,
   HandRaiseEntry,
   PollResults,
+  PresentationState,
   PublicPoll,
   PublicQuiz,
   QaQuestionPayload,
@@ -86,6 +88,16 @@ export class Room {
   private activeCta: CtaPayload | null = null;
   /** The peer the host has pinned to the big tile, if any. */
   private spotlightedPeerId: string | null = null;
+
+  /**
+   * The file currently on the presentation stage, or `null`.
+   *
+   * Kept separate from `spotlightedPeerId` on purpose: a spotlight pins a
+   * person, a presentation shows a file, and a host narrating over a deck is
+   * both at once. Storing them in one field would make one silently cancel
+   * the other.
+   */
+  private presentation: PresentationState | null = null;
 
   /**
    * When the host opened the session, or `null` while it is still waiting.
@@ -1101,6 +1113,119 @@ export class Room {
     return this.spotlightedPeerId;
   }
 
+  /* ── native presentation (uploaded files) ────────────────── */
+
+  /**
+   * Puts an uploaded file on the stage for everyone.
+   *
+   * No media is published here. The server only records *which* file is
+   * showing and at which page; each client fetches the URL and renders it with
+   * its own viewer. That is the whole point of the feature — a 40-page PDF
+   * costs the SFU nothing and stays sharp at any zoom, where a screen share
+   * would burn a video track and cap the audience at the negotiated resolution.
+   */
+  setPresentation(input: {
+    attachmentId: string;
+    name: string;
+    url: string;
+    kind: PresentationState['kind'];
+    pageCount?: number;
+    startedBy?: string | null;
+  }): PresentationState {
+    this.presentation = {
+      attachmentId: input.attachmentId,
+      name: input.name,
+      url: input.url,
+      kind: input.kind,
+      page: 1,
+      pageCount: Math.max(0, input.pageCount ?? 0),
+      annotations: [],
+      startedBy: input.startedBy ?? null,
+    };
+
+    this.io.to(this.roomName()).emit('presentationChanged', {
+      presentation: this.presentation,
+    });
+
+    this.recorder?.record({
+      type: 'presentationChanged',
+      presentation: this.presentation,
+    });
+
+    return this.presentation;
+  }
+
+  /** Takes the file off the stage. Annotations go with it. */
+  clearPresentation(): void {
+    if (!this.presentation) return;
+    this.presentation = null;
+    this.io.to(this.roomName()).emit('presentationChanged', { presentation: null });
+    this.recorder?.record({ type: 'presentationChanged', presentation: null });
+  }
+
+  getPresentation(): PresentationState | null {
+    return this.presentation;
+  }
+
+  /**
+   * Moves everyone to a different page/slide.
+   *
+   * Clamped to the known page count when there is one, but a count of 0 means
+   * "not reported yet" (the client learns it after parsing the file), so the
+   * clamp is skipped rather than pinning everyone to page 1.
+   */
+  setPresentationPage(page: number): number {
+    if (!this.presentation) throw new Error('Nothing is being presented');
+    const max = this.presentation.pageCount;
+    const next = Math.max(1, max > 0 ? Math.min(page, max) : page);
+    this.presentation.page = next;
+    this.io.to(this.roomName()).emit('presentationPageChanged', { page: next });
+    return next;
+  }
+
+  /**
+   * Applies an annotation change and relays it.
+   *
+   * Strokes are sent whole rather than as pointer deltas: one message per
+   * stroke instead of one per mouse move, and the resulting state is trivially
+   * idempotent, so a client that reconnects mid-session can be resynced from
+   * the snapshot without replaying a stream of deltas.
+   */
+  applyAnnotation(input: {
+    action: 'add' | 'remove' | 'clear' | 'clearAll';
+    strokes?: AnnotationStroke[];
+    removeIds?: string[];
+    page?: number;
+  }): void {
+    if (!this.presentation) throw new Error('Nothing is being presented');
+
+    if (input.action === 'add' && input.strokes?.length) {
+      // Cap the stored history so a long session cannot grow the snapshot
+      // without bound. 2000 strokes is far more than any real walkthrough.
+      const merged = [...this.presentation.annotations, ...input.strokes];
+      this.presentation.annotations = merged.slice(-2000);
+    } else if (input.action === 'remove' && input.removeIds?.length) {
+      const drop = new Set(input.removeIds);
+      this.presentation.annotations = this.presentation.annotations.filter(
+        (s) => !drop.has(s.id)
+      );
+    } else if (input.action === 'clear') {
+      const page = input.page ?? this.presentation.page;
+      this.presentation.annotations = this.presentation.annotations.filter(
+        (s) => s.page !== page
+      );
+    } else if (input.action === 'clearAll') {
+      this.presentation.annotations = [];
+    }
+
+    this.io.to(this.roomName()).emit('presentationAnnotated', {
+      action: input.action,
+      strokes: input.strokes,
+      removeIds: input.removeIds,
+      page: input.page,
+    });
+  }
+
   /**
    * Mutes every non-staff microphone.
    *
@@ -1459,6 +1584,10 @@ export class Room {
       // right after join — see `sendQuestionsTo`.
       questions: [],
       spotlightedPeerId: this.spotlightedPeerId,
+      // A late joiner must land on the same slide the room is already on,
+      // annotations included — otherwise they see page 1 of a deck everyone
+      // else is 20 pages into.
+      presentation: this.presentation,
       recording: this.isRecording,
       startedAt: this.startedAt,
       // A watermark is only useful if the viewer cannot switch it off, so the

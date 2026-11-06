@@ -352,6 +352,9 @@ export function useMediasoup({ slug, token, onJoined, onError }: UseMediasoupOpt
             activeQuiz: snapshot.activeQuiz,
             activePoll: snapshot.activePoll,
             activeCta: snapshot.activeCta,
+            // A late joiner must land on the slide the room is already on,
+            // annotations included.
+            presentation: snapshot.presentation ?? null,
             isApprovedSpeaker: snapshot.self.isApprovedSpeaker,
             canPublishAudio: Boolean(snapshot.self.canPublishAudio),
             canPublishVideo: Boolean(snapshot.self.canPublishVideo),
@@ -642,6 +645,45 @@ export function useMediasoup({ slug, token, onJoined, onError }: UseMediasoupOpt
     socket.on('spotlightChanged', ({ peerId }) =>
       store.getState().set({ spotlightedPeerId: peerId })
     );
+
+    /*
+     * Presentation events.
+     *
+     * The server owns the authoritative state and re-sends it whole on every
+     * change, so these handlers just replace what is in the store. Page moves
+     * and annotation edits are applied to the existing object rather than
+     * replacing it, because the file URL and page count do not change when
+     * someone draws a line.
+     */
+    socket.on('presentationChanged', ({ presentation }) =>
+      store.getState().set({ presentation })
+    );
+
+    socket.on('presentationPageChanged', ({ page }) => {
+      const current = store.getState().presentation;
+      if (!current) return;
+      store.getState().set({ presentation: { ...current, page } });
+    });
+
+    socket.on('presentationAnnotated', ({ action, strokes, removeIds, page }) => {
+      const current = store.getState().presentation;
+      if (!current) return;
+
+      let annotations = current.annotations;
+      if (action === 'add' && strokes?.length) {
+        annotations = [...annotations, ...strokes];
+      } else if (action === 'remove' && removeIds?.length) {
+        const drop = new Set(removeIds);
+        annotations = annotations.filter((s) => !drop.has(s.id));
+      } else if (action === 'clear') {
+        const target = page ?? current.page;
+        annotations = annotations.filter((s) => s.page !== target);
+      } else if (action === 'clearAll') {
+        annotations = [];
+      }
+
+      store.getState().set({ presentation: { ...current, annotations } });
+    });
 
     // The host muted the room. Pausing the producer is the only thing a client
     // can do — the server cannot reach into the microphone itself.

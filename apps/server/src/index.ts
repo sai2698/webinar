@@ -49,6 +49,7 @@ import { adminEmbedRouter, publicEmbedRouter } from './modules/embed/routes.js';
 import { adminAnalyticsRouter, publicAnalyticsRouter } from './modules/analytics/routes.js';
 import { adminAutomationRouter } from './modules/automation/routes.js';
 import { uploadRouter, getUploadsDir } from './modules/uploads/routes.js';
+import { adminAttachmentRouter } from './modules/attachments/routes.js';
 
 const app = express();
 
@@ -67,6 +68,22 @@ app.use(cookieParser());
 
 /* ── Webhook must receive the raw body — mount BEFORE json parser ── */
 app.use('/api/payments/webhook', express.raw({ type: '*/*' }), webhookRouter);
+
+/*
+ * Attachment uploads carry a whole deck as base64, which inflates the payload
+ * by ~33%. The global parser below caps bodies at 25MB, so a 30MB PDF would be
+ * rejected before the route ever ran. This widens the limit for exactly one
+ * path — POST .../attachments — and leaves every other admin route on the
+ * tighter global limit. It runs *before* the global parser so it wins; the
+ * router itself is mounted further down, after the global parser, so the small
+ * PATCH/DELETE bodies are parsed normally.
+ */
+app.use('/api/admin', (req, res, next) => {
+  if (req.method === 'POST' && /\/attachments\/?$/.test(req.path)) {
+    return express.json({ limit: '70mb' })(req, res, next);
+  }
+  next();
+});
 
 app.use(express.json({ limit: '25mb' }));
 app.use(express.urlencoded({ extended: true, limit: '25mb' }));
@@ -117,6 +134,7 @@ app.use('/api/admin', adminCtaRouter);
 app.use('/api/admin/courses', adminCourseRouter);
 app.use('/api/admin/payments', adminPaymentRouter);
 app.use('/api/admin/upload', uploadRouter);
+app.use('/api/admin', adminAttachmentRouter);
 app.use('/api/admin/recordings', adminRecordingRouter);
 app.use('/api/recordings', publicRecordingByIdRouter);
 

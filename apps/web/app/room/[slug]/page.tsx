@@ -6,6 +6,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { useRoomStore } from '@/store/roomStore';
 import { useMediasoup } from '@/lib/useMediasoup';
 import { VideoGrid } from '@/components/VideoGrid';
+import { PresentationStage } from '@/components/PresentationStage';
 import { ChatPanel } from '@/components/ChatPanel';
 import { ParticipantList } from '@/components/ParticipantList';
 import { ControlsBar } from '@/components/ControlsBar';
@@ -53,6 +54,7 @@ export default function RoomPage() {
   const viewerCount = useRoomStore((s) => s.viewerCount);
   const showLiveUsersCount = useRoomStore((s) => s.showLiveUsersCount);
   const recording = useRoomStore((s) => s.recording);
+  const presentation = useRoomStore((s) => s.presentation);
   const hands = useRoomStore((s) => s.hands);
   const role = useRoomStore((s) => s.role);
   const userId = useRoomStore((s) => s.userId);
@@ -367,12 +369,24 @@ export default function RoomPage() {
       {/* ── body ────────────────────────────────────────── */}
       <div className="relative flex min-h-0 flex-1 flex-col lg:flex-row overflow-hidden">
         {/* Stage column: on mobile it hugs the video (shrink-0), on desktop it takes flex-1 */}
-        <div className="flex w-full shrink-0 flex-col overflow-hidden lg:min-w-0 lg:flex-1 lg:h-full">
+        <div
+          className={`flex w-full flex-col overflow-hidden lg:min-w-0 lg:flex-1 lg:h-full ${
+            /*
+             * A presented file is not a 16:9 video, so it cannot hug its
+             * content the way the grid does — a portrait PDF would collapse
+             * the deck to the height of its toolbar. Let the column fill the
+             * viewport instead and give the deck the leftover space.
+             */
+            presentation ? 'min-h-0 flex-1' : 'shrink-0'
+          }`}
+        >
           <div
             className={`relative overflow-hidden ${
               isFullscreen
                 ? 'fixed inset-0 z-50 h-screen w-screen bg-black p-0'
-                : 'w-full p-2 pb-0 sm:p-3 sm:pb-0 lg:pb-3 lg:h-auto lg:flex-1'
+                : presentation
+                  ? 'flex min-h-0 w-full flex-1 flex-col p-2 pb-0 sm:p-3 sm:pb-0 lg:pb-3'
+                  : 'w-full p-2 pb-0 sm:p-3 sm:pb-0 lg:pb-3 lg:h-auto lg:flex-1'
             }`}
             ref={stageRef}
           >
@@ -385,6 +399,18 @@ export default function RoomPage() {
                 recordingId={activePremiereRecordingId}
                 startedAtMs={premiereStartedAtMs!}
                 slug={slug}
+                onToggleFullscreen={toggleFullscreen}
+              />
+            ) : presentation ? (
+              /*
+               * A file on the stage replaces the video grid entirely, the same
+               * way a screen share does. Rendering it beside the grid would
+               * shrink a 16:9 deck into a column on a phone, which is exactly
+               * the case this feature exists to fix.
+               */
+              <PresentationStage
+                socket={socket}
+                isStaff={isStaff}
                 onToggleFullscreen={toggleFullscreen}
               />
             ) : (

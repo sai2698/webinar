@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { Socket } from 'socket.io-client';
-import type { QuizOption, CtaForm, CtaFormFieldType } from '@webinar/shared';
+import type { QuizOption, CtaForm, CtaFormFieldType, AttachmentInfo } from '@webinar/shared';
 import { useRoomStore } from '@/store/roomStore';
 import { endpoints } from '@/lib/api';
 import { CtaFollowUp } from './CtaFollowUp';
@@ -43,7 +43,7 @@ interface AdminCta {
   form: CtaForm | null;
 }
 
-type Tab = 'quiz' | 'poll' | 'offer';
+type Tab = 'quiz' | 'poll' | 'offer' | 'files';
 
 interface DraftOption {
   id: string;
@@ -159,6 +159,13 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
   const [offerSettingsOpen, setOfferSettingsOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+  /* ── attachments (native presentation) ── */
+  const [attachments, setAttachments] = useState<AttachmentInfo[]>([]);
+  const [attachmentsLoading, setAttachmentsLoading] = useState(false);
+  const [uploadingFile, setUploadingFile] = useState<string | null>(null);
+  const [attachmentError, setAttachmentError] = useState<string | null>(null);
+  const presentation = useRoomStore((s) => s.presentation);
+
   const refreshGatewayStatus = useCallback(async () => {
     try {
       const res = await endpoints.paymentGateway();
@@ -211,6 +218,75 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
       void refreshPayments();
     }
   }, [tab, refreshGatewayStatus, refreshPayments]);
+
+  /* ── attachments (native presentation) ─────────────────── */
+
+  const refreshAttachments = useCallback(async () => {
+    if (!webinarId) return;
+    setAttachmentsLoading(true);
+    setAttachmentError(null);
+    try {
+      const res = await endpoints.attachments(webinarId);
+      setAttachments(res.attachments ?? []);
+    } catch (err) {
+      setAttachmentError(err instanceof Error ? err.message : 'Could not load files');
+    } finally {
+      setAttachmentsLoading(false);
+    }
+  }, [webinarId]);
+
+  useEffect(() => {
+    if (tab === 'files') void refreshAttachments();
+  }, [tab, refreshAttachments]);
+
+  const handleUploadFiles = async (files: FileList | null) => {
+    if (!files?.length || !webinarId) return;
+    setAttachmentError(null);
+    for (const file of Array.from(files)) {
+      setUploadingFile(file.name);
+      try {
+        const res = await endpoints.uploadAttachment(webinarId, file);
+        setAttachments((prev) => [res.attachment, ...prev]);
+      } catch (err) {
+        setAttachmentError(
+          err instanceof Error ? `${file.name}: ${err.message}` : `Could not upload ${file.name}`
+        );
+      }
+    }
+    setUploadingFile(null);
+  };
+
+  const handlePresent = (att: AttachmentInfo) => {
+    const sock = socket.current;
+    if (!sock) return;
+    sock.emit(
+      'presentationStart',
+      {
+        attachmentId: att.id,
+        name: att.name,
+        url: att.url,
+        kind: att.kind,
+        pageCount: att.pageCount,
+      },
+      (res: { ok: boolean; error?: string }) => {
+        if (!res?.ok) setAttachmentError(res?.error ?? 'Could not start presenting');
+      }
+    );
+  };
+
+  const handleStopPresenting = () => {
+    socket.current?.emit('presentationStop', () => {});
+  };
+
+  const handleDeleteAttachment = async (att: AttachmentInfo) => {
+    try {
+      await endpoints.deleteAttachment(att.id);
+      setAttachments((prev) => prev.filter((a) => a.id !== att.id));
+      if (presentation?.attachmentId === att.id) handleStopPresenting();
+    } catch (err) {
+      setAttachmentError(err instanceof Error ? err.message : 'Could not delete file');
+    }
+  };
 
   useEffect(() => {
     const sock = socket.current;
@@ -929,18 +1005,26 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
             </div>
 
             <div className="flex shrink-0 items-center gap-1 border-b border-white/[0.07] bg-slate-100/80 p-1.5 dark:bg-ink-950/40">
-              {(['quiz', 'poll', 'offer'] as Tab[]).map((t) => {
+              {(['quiz', 'poll', 'offer', 'files'] as Tab[]).map((t) => {
                 // Each tab carries its own tally and a live dot, so the host can
                 // see at a glance that a poll is still running or that an offer
                 // is on screen without opening the tab to check.
                 const count =
-                  t === 'quiz' ? quizzes.length : t === 'poll' ? polls.length : ctas.length;
+                  t === 'quiz'
+                    ? quizzes.length
+                    : t === 'poll'
+                      ? polls.length
+                      : t === 'offer'
+                        ? ctas.length
+                        : attachments.length;
                 const live =
                   t === 'quiz'
                     ? Boolean(activeQuiz)
                     : t === 'poll'
                       ? Boolean(activePoll)
-                      : Boolean(activeCta);
+                      : t === 'offer'
+                        ? Boolean(activeCta)
+                        : Boolean(presentation);
                 return (
                   <button
                     key={t}
@@ -957,7 +1041,15 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
                         : 'text-slate-500 hover:bg-white hover:text-slate-700 dark:hover:bg-white/[0.04] dark:hover:text-slate-300'
                     }`}
                   >
-                    <span>{t === 'quiz' ? 'Quizzes' : t === 'poll' ? 'Polls' : 'Offers'}</span>
+                    <span>
+                      {t === 'quiz'
+                        ? 'Quizzes'
+                        : t === 'poll'
+                          ? 'Polls'
+                          : t === 'offer'
+                            ? 'Offers'
+                            : 'Files'}
+                    </span>
                     <span
                       className={`rounded px-1 py-px text-[9px] font-bold tabular-nums ${
                         tab === t
@@ -989,7 +1081,7 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
               {loading && <p className="py-6 text-center text-[11px] text-slate-500">Loading…</p>}
 
               {/* ── inline composer ─────────────────────── */}
-              {!loading && (
+              {!loading && tab !== 'files' && (
                 <div className="mb-3 flex items-center justify-between gap-2">
                   <div className="flex min-w-0 items-center gap-1.5">
                     <span className="h-1 w-1 shrink-0 rounded-full bg-slate-400 dark:bg-slate-600" />
@@ -1769,6 +1861,139 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
 
               {!loading && !composing && tab === 'offer' && followUpFor && (
                 <CtaFollowUp ctaId={followUpFor} onClose={() => setFollowUpFor(null)} />
+              )}
+
+              {/* ── files (native presentation) ─────────── */}
+              {tab === 'files' && (
+                <div className="space-y-3">
+                  {attachmentError && (
+                    <p className="rounded-lg border border-red-500/25 bg-red-500/[0.08] px-3 py-2 text-[11px] font-medium text-red-600 dark:text-red-300">
+                      {attachmentError}
+                    </p>
+                  )}
+
+                  {presentation && (
+                    <div className="flex items-center gap-2.5 rounded-lg border border-mint-500/30 bg-mint-500/[0.08] px-3 py-2">
+                      <span className="relative flex h-2 w-2 shrink-0">
+                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-mint-500 opacity-60" />
+                        <span className="relative inline-flex h-2 w-2 rounded-full bg-mint-500" />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-[11px] font-semibold tracking-tight text-slate-900 dark:text-slate-100">
+                          {presentation.name}
+                        </p>
+                        <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                          On stage
+                          {presentation.pageCount > 0
+                            ? ` · page ${presentation.page} of ${presentation.pageCount}`
+                            : ''}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleStopPresenting}
+                        className="shrink-0 rounded-md border border-red-500/30 bg-red-500/10 px-2 py-1 text-[10px] font-semibold tracking-tight text-red-600 transition hover:bg-red-500/20 active:scale-[0.98] dark:text-red-300"
+                      >
+                        Stop
+                      </button>
+                    </div>
+                  )}
+
+                  <label
+                    className={`flex cursor-pointer flex-col items-center justify-center gap-1.5 rounded-lg border border-dashed px-3 py-5 text-center transition ${
+                      uploadingFile
+                        ? 'border-brand-500/40 bg-brand-500/[0.06]'
+                        : 'border-white/[0.12] bg-white/[0.02] hover:border-brand-500/40 hover:bg-brand-500/[0.04]'
+                    }`}
+                  >
+                    <input
+                      type="file"
+                      multiple
+                      accept=".pdf,.ppt,.pptx,image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
+                      className="sr-only"
+                      disabled={Boolean(uploadingFile)}
+                      onChange={(e) => {
+                        void handleUploadFiles(e.target.files);
+                        e.target.value = '';
+                      }}
+                    />
+                    <span className="grid h-8 w-8 place-items-center rounded-lg bg-brand-500/15 text-brand-500 ring-1 ring-brand-500/25 dark:text-brand-300">
+                      <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M12 16V4m0 0L8 8m4-4 4 4" strokeLinecap="round" strokeLinejoin="round" />
+                        <path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" strokeLinecap="round" />
+                      </svg>
+                    </span>
+                    <span className="text-[11px] font-semibold tracking-tight text-slate-900 dark:text-slate-100">
+                      {uploadingFile ? `Uploading ${uploadingFile}…` : 'Upload a file to present'}
+                    </span>
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400">
+                      PDF, PowerPoint, or image · up to 50 MB
+                    </span>
+                  </label>
+
+                  {attachmentsLoading && (
+                    <p className="py-4 text-center text-[11px] text-slate-500">Loading files…</p>
+                  )}
+
+                  {!attachmentsLoading && attachments.length === 0 && (
+                    <p className="py-4 text-center text-[11px] text-slate-500 dark:text-slate-400">
+                      No files yet. Upload a deck and it appears here.
+                    </p>
+                  )}
+
+                  {!attachmentsLoading && attachments.length > 0 && (
+                    <ul className="space-y-1.5">
+                      {attachments.map((att) => {
+                        const onStage = presentation?.attachmentId === att.id;
+                        return (
+                          <li
+                            key={att.id}
+                            className={`flex items-center gap-2.5 rounded-lg border px-2.5 py-2 transition ${
+                              onStage
+                                ? 'border-mint-500/30 bg-mint-500/[0.06]'
+                                : 'border-white/[0.08] bg-white/[0.02] hover:border-white/[0.14] hover:bg-white/[0.04]'
+                            }`}
+                          >
+                            <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-slate-200/70 text-[8px] font-bold uppercase tracking-wide text-slate-600 dark:bg-white/[0.06] dark:text-slate-300">
+                              {att.kind === 'pdf' ? 'PDF' : att.kind === 'pptx' ? 'PPT' : 'IMG'}
+                            </span>
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-[11px] font-semibold tracking-tight text-slate-900 dark:text-slate-100">
+                                {att.name}
+                              </p>
+                              <p className="text-[10px] tabular-nums text-slate-500 dark:text-slate-400">
+                                {(att.bytes / (1024 * 1024)).toFixed(1)} MB
+                                {att.pageCount > 0 ? ` · ${att.pageCount} pages` : ''}
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => (onStage ? handleStopPresenting() : handlePresent(att))}
+                              className={`shrink-0 rounded-md border px-2 py-1 text-[10px] font-semibold tracking-tight transition active:scale-[0.98] ${
+                                onStage
+                                  ? 'border-red-500/30 bg-red-500/10 text-red-600 hover:bg-red-500/20 dark:text-red-300'
+                                  : 'border-brand-500/30 bg-brand-500/15 text-brand-600 hover:bg-brand-500/25 dark:text-brand-300'
+                              }`}
+                            >
+                              {onStage ? 'Stop' : 'Present'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void handleDeleteAttachment(att)}
+                              aria-label={`Delete ${att.name}`}
+                              title="Delete"
+                              className="shrink-0 rounded-md p-1 text-slate-400 transition hover:bg-red-500/10 hover:text-red-500"
+                            >
+                              <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2m-8 0 1 12a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1l1-12" strokeLinecap="round" strokeLinejoin="round" />
+                              </svg>
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </div>
               )}
 
               {!loading && !composing && tab === 'offer' && !followUpFor && (

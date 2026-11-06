@@ -14,6 +14,8 @@
     "@webinar/shared": "*",
     "mediasoup-client": "^3.7.16",
     "next": "^15.1.4",
+    "pdfjs-dist": "^4.10.38",
+    "pptx-preview": "^1.0.7",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "socket.io-client": "^4.8.1",

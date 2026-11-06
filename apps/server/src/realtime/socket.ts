@@ -868,6 +868,77 @@ export function registerSocketHandlers(io: Server) {
       ackOk(ack, { muted: c.room.muteAll() });
     });
 
+    /* ── native presentation (uploaded files) ─────────────── */
+    /*
+     * Gated on `screenshare` rather than a new permission: putting a file on
+     * the stage is the same act as sharing a screen — deciding what the room
+     * looks at — and co-hosts who were trusted with one were trusted with the
+     * other. Adding an 11th permission would mean every existing co-host row
+     * silently loses the ability until it is backfilled.
+     */
+    socket.on('presentationStart', (payload, ack) => {
+      const c = requirePeer();
+      if (!c) return ackErr(ack, 'Not in a room');
+      const no = denied(c.peer, 'screenshare');
+      if (no) return ackErr(ack, no);
+      if (!payload?.attachmentId || !payload?.url) {
+        return ackErr(ack, 'A file is required');
+      }
+      try {
+        c.room.setPresentation({
+          attachmentId: payload.attachmentId,
+          name: payload.name,
+          url: payload.url,
+          kind: payload.kind,
+          pageCount: payload.pageCount,
+          startedBy: c.peer.name,
+        });
+        ackOk(ack);
+      } catch (err) {
+        ackErr(ack, err instanceof Error ? err.message : 'Could not present file');
+      }
+    });
+
+    socket.on('presentationStop', (ack) => {
+      const c = requirePeer();
+      if (!c) return ackErr(ack, 'Not in a room');
+      const no = denied(c.peer, 'screenshare');
+      if (no) return ackErr(ack, no);
+      c.room.clearPresentation();
+      ackOk(ack);
+    });
+
+    socket.on('presentationPage', (payload, ack) => {
+      const c = requirePeer();
+      if (!c) return ackErr(ack, 'Not in a room');
+      const no = denied(c.peer, 'screenshare');
+      if (no) return ackErr(ack, no);
+      try {
+        c.room.setPresentationPage(Number(payload?.page) || 1);
+        ackOk(ack);
+      } catch (err) {
+        ackErr(ack, err instanceof Error ? err.message : 'Could not change page');
+      }
+    });
+
+    socket.on('presentationAnnotate', (payload, ack) => {
+      const c = requirePeer();
+      if (!c) return ackErr(ack, 'Not in a room');
+      const no = denied(c.peer, 'screenshare');
+      if (no) return ackErr(ack, no);
+      try {
+        c.room.applyAnnotation({
+          action: payload?.action ?? 'add',
+          strokes: payload?.strokes,
+          removeIds: payload?.removeIds,
+          page: payload?.page,
+        });
+        ackOk(ack);
+      } catch (err) {
+        ackErr(ack, err instanceof Error ? err.message : 'Could not annotate');
+      }
+    });
+
     socket.on('updateRoomSettings', async (payload, ack) => {
       const c = requirePeer();
       if (!c) return ackErr(ack, 'Not in a room');
