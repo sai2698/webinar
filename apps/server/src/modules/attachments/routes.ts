@@ -25,9 +25,9 @@ import { roomManager } from '../../realtime/RoomManager.js';
  */
 
 /** 50MB — a 200-slide deck with images lands comfortably under this. */
-const MAX_BYTES = 50 * 1024 * 1024;
+const MAX_BYTES = 100 * 1024 * 1024;
 
-type Kind = 'pdf' | 'pptx' | 'image';
+type Kind = 'pdf' | 'pptx' | 'image' | 'video';
 
 /**
  * Maps an extension to the viewer the client should mount.
@@ -51,6 +51,12 @@ function kindForExt(ext: string): Kind | null {
     case 'gif':
     case 'svg':
       return 'image';
+    case 'mp4':
+    case 'webm':
+    case 'ogg':
+    case 'mov':
+    case 'mkv':
+      return 'video';
     default:
       return null;
   }
@@ -66,6 +72,11 @@ const MIME_BY_EXT: Record<string, string> = {
   webp: 'image/webp',
   gif: 'image/gif',
   svg: 'image/svg+xml',
+  mp4: 'video/mp4',
+  webm: 'video/webm',
+  ogg: 'video/ogg',
+  mov: 'video/quicktime',
+  mkv: 'video/x-matroska',
 };
 
 export const adminAttachmentRouter = Router();
@@ -104,7 +115,7 @@ adminAttachmentRouter.post(
     const kind = kindForExt(ext);
     if (!kind) {
       throw badRequest(
-        `Unsupported file type ".${ext}". Upload a PDF, PowerPoint (.ppt/.pptx) or an image.`
+        `Unsupported file type ".${ext}". Upload a PDF, PowerPoint (.ppt/.pptx), video (.mp4/.webm/.mov), or an image.`
       );
     }
 

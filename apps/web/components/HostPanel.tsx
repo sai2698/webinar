@@ -1909,7 +1909,7 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
                     <input
                       type="file"
                       multiple
-                      accept=".pdf,.ppt,.pptx,image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
+                      accept=".pdf,.ppt,.pptx,image/png,image/jpeg,image/webp,image/gif,image/svg+xml,video/mp4,video/webm,video/ogg,.mov,.mkv,video/*"
                       className="sr-only"
                       disabled={Boolean(uploadingFile)}
                       onChange={(e) => {
@@ -1927,7 +1927,7 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
                       {uploadingFile ? `Uploading ${uploadingFile}…` : 'Upload a file to present'}
                     </span>
                     <span className="text-[10px] text-slate-500 dark:text-slate-400">
-                      PDF, PowerPoint, or image · up to 50 MB
+                      PDF, PowerPoint, video, or image · up to 100 MB
                     </span>
                   </label>
 
@@ -1955,7 +1955,7 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
                             }`}
                           >
                             <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-slate-200/70 text-[8px] font-bold uppercase tracking-wide text-slate-600 dark:bg-white/[0.06] dark:text-slate-300">
-                              {att.kind === 'pdf' ? 'PDF' : att.kind === 'pptx' ? 'PPT' : 'IMG'}
+                              {att.kind === 'pdf' ? 'PDF' : att.kind === 'pptx' ? 'PPT' : att.kind === 'video' ? 'VID' : 'IMG'}
                             </span>
                             <div className="min-w-0 flex-1">
                               <p className="truncate text-[11px] font-semibold tracking-tight text-slate-900 dark:text-slate-100">

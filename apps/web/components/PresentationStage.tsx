@@ -444,6 +444,22 @@ function PptxView({
   );
 }
 
+function VideoView({ url, name }: { url: string; name: string }) {
+  return (
+    <div className="relative flex h-full w-full items-center justify-center bg-black/95 p-1 sm:p-2">
+      <video
+        key={url}
+        src={url}
+        title={name}
+        controls
+        playsInline
+        preload="metadata"
+        className="max-h-full max-w-full rounded-lg shadow-2xl object-contain outline-none focus:outline-none"
+      />
+    </div>
+  );
+}
+
 /* ── Annotation canvas ─────────────────────────────────────── */
 
 function AnnotationLayer({
@@ -734,6 +750,9 @@ export function PresentationStage({ socket, isStaff, onToggleFullscreen }: Prese
                   />
                 </div>
               )}
+              {kind === 'video' && (
+                <VideoView url={url} name={name} />
+              )}
 
               <AnnotationLayer
                 strokes={presentation.annotations}
@@ -754,35 +773,47 @@ export function PresentationStage({ socket, isStaff, onToggleFullscreen }: Prese
           {name}
         </span>
 
-        {/* page navigation */}
-        <div className="flex items-center gap-0.5 rounded-md border border-slate-200 bg-slate-50 p-0.5 dark:border-white/10 dark:bg-white/[0.04]">
-          <button
-            type="button"
-            onClick={() => emit('presentationPage', { page: page - 1 })}
-            disabled={!isStaff || !canGoPrev}
-            className="grid h-6 w-6 place-items-center rounded text-slate-600 transition hover:bg-white disabled:opacity-30 dark:text-slate-300 dark:hover:bg-white/10"
-            aria-label="Previous page"
-          >
-            <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2.4">
-              <path d="M15 18l-6-6 6-6" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </button>
-          <span className="min-w-[38px] text-center text-[10px] font-semibold tabular-nums text-slate-600 sm:min-w-[46px] dark:text-slate-300">
-            {page}
-            {pageCount > 0 ? ` / ${pageCount}` : ''}
+        {/* page navigation (for multi-page decks / PDFs) */}
+        {kind !== 'video' && kind !== 'image' && (
+          <div className="flex items-center gap-0.5 rounded-md border border-slate-200 bg-slate-50 p-0.5 dark:border-white/10 dark:bg-white/[0.04]">
+            <button
+              type="button"
+              onClick={() => emit('presentationPage', { page: page - 1 })}
+              disabled={!isStaff || !canGoPrev}
+              className="grid h-6 w-6 place-items-center rounded text-slate-600 transition hover:bg-white disabled:opacity-30 dark:text-slate-300 dark:hover:bg-white/10"
+              aria-label="Previous page"
+            >
+              <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2.4">
+                <path d="M15 18l-6-6 6-6" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+            <span className="min-w-[38px] text-center text-[10px] font-semibold tabular-nums text-slate-600 sm:min-w-[46px] dark:text-slate-300">
+              {page}
+              {pageCount > 0 ? ` / ${pageCount}` : ''}
+            </span>
+            <button
+              type="button"
+              onClick={() => emit('presentationPage', { page: page + 1 })}
+              disabled={!isStaff || !canGoNext}
+              className="grid h-6 w-6 place-items-center rounded text-slate-600 transition hover:bg-white disabled:opacity-30 dark:text-slate-300 dark:hover:bg-white/10"
+              aria-label="Next page"
+            >
+              <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2.4">
+                <path d="M9 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+          </div>
+        )}
+        {kind === 'video' && (
+          <span className="rounded-md border border-brand-500/30 bg-brand-500/10 px-2 py-0.5 text-[10px] font-semibold text-brand-600 dark:text-brand-300">
+            🎬 Video
           </span>
-          <button
-            type="button"
-            onClick={() => emit('presentationPage', { page: page + 1 })}
-            disabled={!isStaff || !canGoNext}
-            className="grid h-6 w-6 place-items-center rounded text-slate-600 transition hover:bg-white disabled:opacity-30 dark:text-slate-300 dark:hover:bg-white/10"
-            aria-label="Next page"
-          >
-            <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2.4">
-              <path d="M9 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </button>
-        </div>
+        )}
+        {kind === 'image' && (
+          <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-slate-600 dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-300">
+            🖼️ Image
+          </span>
+        )}
 
         {isStaff && (
           <>

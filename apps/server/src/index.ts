@@ -80,7 +80,7 @@ app.use('/api/payments/webhook', express.raw({ type: '*/*' }), webhookRouter);
  */
 app.use('/api/admin', (req, res, next) => {
   if (req.method === 'POST' && /\/attachments\/?$/.test(req.path)) {
-    return express.json({ limit: '70mb' })(req, res, next);
+    return express.json({ limit: '150mb' })(req, res, next);
   }
   next();
 });

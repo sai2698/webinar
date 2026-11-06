@@ -590,7 +590,7 @@ export type MediaSource = 'camera' | 'microphone' | 'screen';
  * ──────────────────────────────────────────────────────────── */
 
 /** Which viewer the client mounts for an uploaded file. */
-export type AttachmentKind = 'pdf' | 'pptx' | 'image';
+export type AttachmentKind = 'pdf' | 'pptx' | 'image' | 'video';
 
 /** A file the host uploaded to present from inside the room. */
 export interface AttachmentInfo {

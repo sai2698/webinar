@@ -22,7 +22,7 @@ server {
     listen ${HTTP_PORT};
     server_name ${SERVER_NAME};
 
-    client_max_body_size 30m;
+    client_max_body_size 200m;
 
     # Performance & zero-copy kernel streaming on 1 vCPU / 1GB RAM
     sendfile on;
