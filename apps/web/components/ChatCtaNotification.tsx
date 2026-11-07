@@ -71,16 +71,21 @@ export function ChatCtaNotification() {
     }
   }, [cta?.id, selfName]);
 
-  // When the host expands or collapses the offer at the participant end
+  // When the host triggers expand at the participant end:
+  // Expand only for participants whose offer is not currently expanded.
+  // Never collapse or reset the step for participants already viewing or filling details.
   useEffect(() => {
-    if (cta?.expanded !== undefined) {
-      setIsBigView(Boolean(cta.expanded));
-      if (cta.expanded) {
-        setIsMinimized(false);
-        setStep('review');
-      }
+    if (cta?.expanded) {
+      setIsMinimized(false);
+      setIsBigView((prev) => {
+        if (!prev) {
+          setStep('review');
+          return true;
+        }
+        return prev;
+      });
     }
-  }, [cta?.expanded]);
+  }, [cta?.expanded, cta?.expandedAt]);
 
   if (!cta || isStaff) return null;
 

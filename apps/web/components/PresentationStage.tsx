@@ -820,7 +820,9 @@ function AnnotationLayer({
 
 export function PresentationStage({ socket, isStaff, onToggleFullscreen }: PresentationStageProps) {
   const presentation = useRoomStore((s) => s.presentation);
+  const allowParticipantFullscreen = useRoomStore((s) => s.allowParticipantFullscreen);
   const isFullscreen = useIsFullscreen();
+  const canFullscreen = isStaff || allowParticipantFullscreen;
   const [tool, setTool] = useState<Tool>('pen');
   const [color, setColor] = useState(PEN_COLORS[0]);
   const [annotating, setAnnotating] = useState(false);
@@ -1099,7 +1101,7 @@ export function PresentationStage({ socket, isStaff, onToggleFullscreen }: Prese
           </>
         )}
 
-        {onToggleFullscreen && (
+        {onToggleFullscreen && canFullscreen && (
           <button
             type="button"
             onClick={onToggleFullscreen}

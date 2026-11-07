@@ -556,6 +556,7 @@ export interface CtaPayload {
   form: CtaForm | null;
   /** When true, participant clients automatically open the offer in expanded full view. */
   expanded?: boolean;
+  expandedAt?: number;
 }
 
 /**
@@ -764,6 +765,7 @@ export interface RoomSnapshot {
    * overlay that cannot be dismissed.
    */
   watermark: { enabled: boolean; label: string; userId: string } | null;
+  allowParticipantFullscreen?: boolean;
 }
 
 /* ────────────────────────────────────────────────────────────
@@ -1061,6 +1063,10 @@ export interface ClientToServerEvents {
   /** Host/admin only — stops capture and finalises the recording. */
   recordingStop: (ack: (res: Ack<{ recordingId: string; durationMs: number }>) => void) => void;
 
+  setParticipantFullscreen: (
+    payload: { allowed: boolean },
+    ack?: (res: Ack) => void
+  ) => void;
   requestSnapshot: (ack: (res: Ack<RoomSnapshot>) => void) => void;
   updateRoomSettings: (
     payload: {
@@ -1149,7 +1155,7 @@ export interface ServerToClientEvents {
 
   ctaShown: (cta: CtaPayload) => void;
   ctaHidden: () => void;
-  ctaExpanded: (payload: { expanded: boolean }) => void;
+  ctaExpanded: (payload: { expanded: boolean; expandedAt?: number }) => void;
 
   /**
    * Staff only — the offer's click tally moved.
@@ -1183,6 +1189,7 @@ export interface ServerToClientEvents {
    */
   webinarStarted: (payload: { startedAt: number }) => void;
 
+  participantFullscreenPolicy: (payload: { allowed: boolean }) => void;
   webinarEnded: () => void;
   kicked: (payload: { reason: string }) => void;
   errorMessage: (payload: { message: string }) => void;

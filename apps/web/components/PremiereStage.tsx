@@ -44,7 +44,10 @@ function UserCountCard({ count, vertical = false }: { count: number; vertical?: 
 }
 
 function FullscreenButton({ onClick, isFs = false }: { onClick?: () => void; isFs?: boolean }) {
+  const role = useRoomStore((s) => s.role);
+  const allowParticipantFullscreen = useRoomStore((s) => s.allowParticipantFullscreen);
   if (!onClick) return null;
+  if (role === 'PARTICIPANT' && !allowParticipantFullscreen) return null;
   return (
     <button
       type="button"

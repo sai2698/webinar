@@ -30,6 +30,7 @@ export function ParticipantList({ socket }: ParticipantListProps) {
   const showParticipantsToEachOther = useRoomStore((s) => s.showParticipantsToEachOther);
   const allowMic = useRoomStore((s) => s.allowMic);
   const allowVideo = useRoomStore((s) => s.allowVideo);
+  const allowParticipantFullscreen = useRoomStore((s) => s.allowParticipantFullscreen);
   const isStaff = role === 'HOST' || role === 'ADMIN' || role === 'MODERATOR';
 
   useEffect(() => {

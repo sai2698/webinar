@@ -1058,6 +1058,19 @@ export function registerSocketHandlers(io: Server) {
       ackOk(ack);
     });
 
+    socket.on('setParticipantFullscreen', (payload, ack) => {
+      const c = requirePeer();
+      if (!c) return ackErr(ack, 'Not in a room');
+      if (!c.peer.isStaff) return ackErr(ack, 'Not allowed');
+      try {
+        const allowed = Boolean(payload?.allowed);
+        c.room.setParticipantFullscreen(allowed);
+        ackOk(ack);
+      } catch (err) {
+        ackErr(ack, err instanceof Error ? err.message : 'Could not set fullscreen policy');
+      }
+    });
+
     /**
      * A participant opened the offer.
      *

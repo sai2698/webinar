@@ -122,6 +122,7 @@ interface RoomState {
   showParticipantsToEachOther: boolean;
   allowMic: boolean;
   allowVideo: boolean;
+  allowParticipantFullscreen: boolean;
   activeQuiz: PublicQuiz | null;
   quizResults: QuizResults | null;
   activePoll: PublicPoll | null;
@@ -221,6 +222,7 @@ const initial = {
   showParticipantsToEachOther: false,
   allowMic: false,
   allowVideo: false,
+  allowParticipantFullscreen: true,
   activeQuiz: null,
   quizResults: null,
   activePoll: null,

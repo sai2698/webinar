@@ -113,8 +113,10 @@ export function ControlsBar({
   const allowMic = useRoomStore((s) => s.allowMic);
   const allowVideo = useRoomStore((s) => s.allowVideo);
   const canShareScreen = useRoomStore((s) => s.canShareScreen);
-
+  const allowParticipantFullscreen = useRoomStore((s) => s.allowParticipantFullscreen);
   const isStaff = role === 'HOST' || role === 'ADMIN' || role === 'MODERATOR';
+  const canFullscreen = isStaff || allowParticipantFullscreen;
+
   const canUseAudio =
     isStaff ||
     isApprovedSpeaker ||
@@ -145,6 +147,14 @@ export function ControlsBar({
   const { isFullscreen, toggle: toggleFullscreen } = useFullscreen(
     stageRef ?? fallbackRef
   );
+  useEffect(() => {
+    if (!isStaff && !allowParticipantFullscreen) {
+      if (typeof document !== 'undefined' && document.fullscreenElement) {
+        document.exitFullscreen().catch(() => {});
+      }
+    }
+  }, [isStaff, allowParticipantFullscreen]);
+
   const { cameras, microphones, refresh } = useMediaDevices();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [mediaOpen, setMediaOpen] = useState(false);

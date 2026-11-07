@@ -121,6 +121,7 @@ export class Room {
   private recordingTransports: import('mediasoup/types').PlainTransport[] = [];
   private recordingConsumers: import('mediasoup/types').Consumer[] = [];
   private mediaAttaching = false;
+  private allowParticipantFullscreen = true;
 
   constructor(
     private readonly io: Server,
@@ -1006,9 +1007,19 @@ export class Room {
 
   expandCta(expand = true) {
     if (!this.activeCta) return;
-    this.activeCta = { ...this.activeCta, expanded: expand };
-    this.io.to(this.roomName()).emit('ctaExpanded', { expanded: expand });
+    const expandedAt = Date.now();
+    this.activeCta = { ...this.activeCta, expanded: expand, expandedAt };
+    this.io.to(this.roomName()).emit('ctaExpanded', { expanded: expand, expandedAt });
     this.recorder?.record({ type: 'ctaShown', cta: this.activeCta });
+  }
+
+  setParticipantFullscreen(allowed: boolean) {
+    this.allowParticipantFullscreen = allowed;
+    this.io.to(this.roomName()).emit('participantFullscreenPolicy', { allowed });
+  }
+
+  getAllowParticipantFullscreen(): boolean {
+    return this.allowParticipantFullscreen;
   }
 
   hideCta() {
@@ -1624,6 +1635,7 @@ export class Room {
       watermark: this.settings.watermarkEnabled
         ? { enabled: true, label: peer.name, userId: peer.userId }
         : null,
+      allowParticipantFullscreen: this.allowParticipantFullscreen,
     };
   }
 

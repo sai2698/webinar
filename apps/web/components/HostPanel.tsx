@@ -43,7 +43,7 @@ interface AdminCta {
   form: CtaForm | null;
 }
 
-type Tab = 'quiz' | 'poll' | 'offer' | 'files';
+type Tab = 'quiz' | 'poll' | 'offer' | 'files' | 'settings';
 
 interface DraftOption {
   id: string;
@@ -93,6 +93,10 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
    * without reopening the panel.
    */
   const ctaClickCounts = useRoomStore((s) => s.ctaClickCounts);
+  const allowParticipantFullscreen = useRoomStore((s) => s.allowParticipantFullscreen);
+  const allowMic = useRoomStore((s) => s.allowMic);
+  const allowVideo = useRoomStore((s) => s.allowVideo);
+  const showParticipantsToEachOther = useRoomStore((s) => s.showParticipantsToEachOther);
 
   // A moderator runs the room but does not own it: quizzes and offers are
   // theirs to launch, ending the webinar is not. The server enforces this
@@ -2438,6 +2442,136 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
                 </div>
               )}
             </div>
+
+              {tab === 'settings' && (
+                <div className="space-y-4">
+                  <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm dark:border-white/10 dark:bg-ink-950/40">
+                    <div className="mb-3 flex items-center justify-between border-b border-slate-100 pb-2 dark:border-white/5">
+                      <div>
+                        <h3 className="text-xs font-semibold text-slate-900 dark:text-white">Audience Permissions</h3>
+                        <p className="text-[10px] text-slate-500 dark:text-slate-400">Controls participant features and display settings</p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-3">
+                      {/* Participant Fullscreen Toggle */}
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0 pr-2">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs font-semibold text-slate-900 dark:text-white">Participant Fullscreen</span>
+                            <span className={`rounded px-1.5 py-0.5 text-[9px] font-bold uppercase ${allowParticipantFullscreen ? 'bg-mint-500/15 text-mint-600 dark:text-mint-400' : 'bg-red-500/15 text-red-600 dark:text-red-400'}`}>
+                              {allowParticipantFullscreen ? 'Enabled' : 'Disabled'}
+                            </span>
+                          </div>
+                          <p className="mt-0.5 text-[10px] text-slate-500 dark:text-slate-400">
+                            {allowParticipantFullscreen
+                              ? 'Participants can freely enter and view webinar in fullscreen.'
+                              : 'Participants cannot fullscreen. Any attendee currently in fullscreen is forced out.'}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={allowParticipantFullscreen}
+                          onClick={() => {
+                            socket.current?.emit('setParticipantFullscreen', { allowed: !allowParticipantFullscreen });
+                          }}
+                          className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                            allowParticipantFullscreen ? 'bg-mint-500' : 'bg-slate-300 dark:bg-white/20'
+                          }`}
+                        >
+                          <span
+                            className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                              allowParticipantFullscreen ? 'translate-x-4' : 'translate-x-0'
+                            }`}
+                          />
+                        </button>
+                      </div>
+
+                      {/* Audience Mic */}
+                      <div className="flex items-center justify-between gap-3 border-t border-slate-100 pt-3 dark:border-white/5">
+                        <div className="min-w-0 pr-2">
+                          <p className="text-xs font-semibold text-slate-900 dark:text-white">Allow audience mic</p>
+                          <p className="mt-0.5 text-[10px] text-slate-500 dark:text-slate-400">
+                            {allowMic ? 'Attendees can unmute their microphones' : 'Audience microphones are locked'}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={allowMic}
+                          onClick={() => {
+                            socket.current?.emit('updateRoomSettings', { allowMic: !allowMic }, () => {});
+                          }}
+                          className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                            allowMic ? 'bg-mint-500' : 'bg-slate-300 dark:bg-white/20'
+                          }`}
+                        >
+                          <span
+                            className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                              allowMic ? 'translate-x-4' : 'translate-x-0'
+                            }`}
+                          />
+                        </button>
+                      </div>
+
+                      {/* Audience Camera */}
+                      <div className="flex items-center justify-between gap-3 border-t border-slate-100 pt-3 dark:border-white/5">
+                        <div className="min-w-0 pr-2">
+                          <p className="text-xs font-semibold text-slate-900 dark:text-white">Allow audience camera</p>
+                          <p className="mt-0.5 text-[10px] text-slate-500 dark:text-slate-400">
+                            {allowVideo ? 'Attendees can turn on their cameras' : 'Audience cameras are locked'}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={allowVideo}
+                          onClick={() => {
+                            socket.current?.emit('updateRoomSettings', { allowVideo: !allowVideo }, () => {});
+                          }}
+                          className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                            allowVideo ? 'bg-mint-500' : 'bg-slate-300 dark:bg-white/20'
+                          }`}
+                        >
+                          <span
+                            className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                              allowVideo ? 'translate-x-4' : 'translate-x-0'
+                            }`}
+                          />
+                        </button>
+                      </div>
+
+                      {/* Participants See Each Other */}
+                      <div className="flex items-center justify-between gap-3 border-t border-slate-100 pt-3 dark:border-white/5">
+                        <div className="min-w-0 pr-2">
+                          <p className="text-xs font-semibold text-slate-900 dark:text-white">Participants see each other</p>
+                          <p className="mt-0.5 text-[10px] text-slate-500 dark:text-slate-400">
+                            {showParticipantsToEachOther ? 'Zoom call mode (everyone visible)' : 'Webinar broadcast mode (staff on stage)'}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={showParticipantsToEachOther}
+                          onClick={() => {
+                            socket.current?.emit('updateRoomSettings', { showParticipantsToEachOther: !showParticipantsToEachOther }, () => {});
+                          }}
+                          className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                            showParticipantsToEachOther ? 'bg-brand-500' : 'bg-slate-300 dark:bg-white/20'
+                          }`}
+                        >
+                          <span
+                            className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                              showParticipantsToEachOther ? 'translate-x-4' : 'translate-x-0'
+                            }`}
+                          />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
 
             {/* ── stage control ───────────────────────────── */}
             <div className="border-t border-white/[0.07] px-3.5 py-3">

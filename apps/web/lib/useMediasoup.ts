@@ -362,8 +362,14 @@ export function useMediasoup({ slug, token, onJoined, onError }: UseMediasoupOpt
             startedAt: snapshot.startedAt,
             premiereRecordingId: snapshot.settings?.premiereRecordingId ?? null,
             premiereStartedAt: snapshot.settings?.premiereStartedAt ?? null,
+            allowParticipantFullscreen: snapshot.allowParticipantFullscreen !== false,
           });
 
+          if (snapshot.allowParticipantFullscreen === false && snapshot.self.role === 'PARTICIPANT') {
+            if (typeof document !== 'undefined' && document.fullscreenElement) {
+              document.exitFullscreen().catch(() => {});
+            }
+          }
           onJoined?.(snapshot);
 
           /* ── build the mediasoup device ────────────────────── */
@@ -751,10 +757,25 @@ export function useMediasoup({ slug, token, onJoined, onError }: UseMediasoupOpt
 
     socket.on('ctaShown', (cta) => store.getState().set({ activeCta: cta }));
     socket.on('ctaHidden', () => store.getState().set({ activeCta: null }));
-    socket.on('ctaExpanded', ({ expanded }: { expanded: boolean }) => {
+    socket.on('ctaExpanded', ({ expanded, expandedAt }: { expanded: boolean; expandedAt?: number }) => {
       const current = store.getState().activeCta;
       if (current) {
-        store.getState().set({ activeCta: { ...current, expanded } });
+        store.getState().set({
+          activeCta: {
+            ...current,
+            expanded,
+            expandedAt: expandedAt ?? Date.now(),
+          },
+        });
+      }
+    });
+
+    socket.on('participantFullscreenPolicy', ({ allowed }: { allowed: boolean }) => {
+      store.getState().set({ allowParticipantFullscreen: allowed });
+      if (!allowed && store.getState().role === 'PARTICIPANT') {
+        if (typeof document !== 'undefined' && document.fullscreenElement) {
+          document.exitFullscreen().catch(() => {});
+        }
       }
     });
 
