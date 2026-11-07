@@ -1515,64 +1515,94 @@ export function useMediasoup({ slug, token, onJoined, onError }: UseMediasoupOpt
    */
   const switchDevice = useCallback(
     async (kind: 'audio' | 'video', deviceId: string) => {
-      const local = store.getState().localStream;
-      if (!local) return;
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(`webinar_selected_${kind}_device`, deviceId);
+      }
+
+      let local = store.getState().localStream;
+      const micOn = store.getState().micOn;
+      const camOn = store.getState().camOn;
+
+      if (!local) {
+        if ((kind === 'audio' && micOn) || (kind === 'video' && camOn)) {
+          local = new MediaStream();
+          store.getState().set({ localStream: local });
+        } else {
+          return;
+        }
+      }
 
       const prefs = prefsRef.current ?? (await loadPreferences());
-
       const existing =
         kind === 'audio' ? local.getAudioTracks()[0] : local.getVideoTracks()[0];
 
+      if (!existing && !((kind === 'audio' && micOn) || (kind === 'video' && camOn))) {
+        return;
+      }
+
       try {
-        const fresh = await navigator.mediaDevices.getUserMedia({
-          audio:
-            kind === 'audio'
-              ? { deviceId: { exact: deviceId }, ...audioConstraints(prefs) }
-              : false,
-          video:
-            kind === 'video'
-              ? {
-                  deviceId: { exact: deviceId },
-                  width: { ideal: 1280 },
-                  height: { ideal: 720 },
-                  frameRate: { ideal: prefs.frameRate },
-                }
-              : false,
-        });
+        let fresh: MediaStream;
+        try {
+          fresh = await navigator.mediaDevices.getUserMedia({
+            audio:
+              kind === 'audio'
+                ? { deviceId: { exact: deviceId }, ...audioConstraints(prefs) }
+                : false,
+            video:
+              kind === 'video'
+                ? {
+                    deviceId: { exact: deviceId },
+                    width: { ideal: 1280 },
+                    height: { ideal: 720 },
+                    frameRate: { ideal: prefs.frameRate },
+                  }
+                : false,
+          });
+        } catch {
+          fresh = await navigator.mediaDevices.getUserMedia({
+            audio:
+              kind === 'audio'
+                ? { deviceId: { ideal: deviceId }, ...audioConstraints(prefs) }
+                : false,
+            video:
+              kind === 'video'
+                ? {
+                    deviceId: { ideal: deviceId },
+                    width: { ideal: 1280 },
+                    height: { ideal: 720 },
+                    frameRate: { ideal: prefs.frameRate },
+                  }
+                : false,
+          });
+        }
+
         const track = kind === 'audio' ? fresh.getAudioTracks()[0] : fresh.getVideoTracks()[0];
         if (!track) return;
 
-        // Find the producer that is currently sending this kind of camera media.
         const producer = [...producersRef.current.values()].find(
           (p) => p.kind === kind && p.appData?.source !== 'screen'
         );
 
         if (kind === 'audio') {
-          // Producers no longer stop tracks for us, so the mic we are
-          // replacing has to be released here or it stays open forever.
           rawMicTrackRef.current?.stop();
           rawMicTrackRef.current = track;
           const processed = await applyAudioProcessing(track, prefs);
           if (producer && !producer.closed) await producer.replaceTrack({ track: processed });
-          else await publishTrack(processed, 'audio');
+          else if (micOn) await publishTrack(processed, 'audio');
 
           if (existing) {
             local.removeTrack(existing);
             existing.stop();
           }
           local.addTrack(processed);
-          store.getState().set({ localStream: local });
+          store.getState().set({ localStream: new MediaStream(local.getTracks()) });
           return;
         }
 
-        // Video: the new camera has to go through the effect too, or switching
-        // cameras would silently drop the participant's background.
         rawCameraTrackRef.current?.stop();
         rawCameraTrackRef.current = track;
 
         if (effectsRef.current?.videoTrack) {
-          // Rebuild the processor against the new camera — the old one is
-          // bound to a track that is about to be stopped.
           effectsRef.current.stop(false);
           effectsRef.current = null;
           if (existing) {
@@ -1580,20 +1610,20 @@ export function useMediasoup({ slug, token, onJoined, onError }: UseMediasoupOpt
             existing.stop();
           }
           local.addTrack(track);
-          store.getState().set({ localStream: local });
+          store.getState().set({ localStream: new MediaStream(local.getTracks()) });
           await setBackground(prefs.background.mode, prefs.background.image);
           return;
         }
 
         if (producer && !producer.closed) await producer.replaceTrack({ track });
-        else await publishTrack(track, 'video');
+        else if (camOn) await publishTrack(track, 'video');
 
         if (existing) {
           local.removeTrack(existing);
           existing.stop();
         }
         local.addTrack(track);
-        store.getState().set({ localStream: local });
+        store.getState().set({ localStream: new MediaStream(local.getTracks()) });
       } catch (err) {
         console.error('[media] device switch failed', err);
         onError?.(`Could not switch ${kind === 'audio' ? 'microphone' : 'camera'}`);

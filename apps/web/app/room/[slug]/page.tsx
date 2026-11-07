@@ -482,7 +482,7 @@ export default function RoomPage() {
               <ChatPanel
                 socket={socket}
                 slug={slug}
-                onSwitchDevice={canPublish ? switchDevice : undefined}
+                onSwitchDevice={switchDevice}
                 onToggleMic={toggleMic}
                 onToggleCam={toggleCam}
                 onShareScreen={toggleScreenShare}
