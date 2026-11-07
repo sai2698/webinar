@@ -685,6 +685,19 @@ export function useMediasoup({ slug, token, onJoined, onError }: UseMediasoupOpt
       store.getState().set({ presentation: { ...current, annotations } });
     });
 
+    socket.on('presentationVideoAction', ({ action, currentTime, timestamp }) => {
+      const current = store.getState().presentation;
+      if (!current) return;
+      store.getState().set({
+        presentation: {
+          ...current,
+          videoPlaying: action === 'play',
+          videoCurrentTime: currentTime,
+          videoUpdatedAt: timestamp,
+        },
+      });
+    });
+
     // The host muted the room. Pausing the producer is the only thing a client
     // can do — the server cannot reach into the microphone itself.
     socket.on('forceMute', () => {

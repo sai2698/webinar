@@ -1141,6 +1141,9 @@ export class Room {
       pageCount: Math.max(0, input.pageCount ?? 0),
       annotations: [],
       startedBy: input.startedBy ?? null,
+      videoPlaying: false,
+      videoCurrentTime: 0,
+      videoUpdatedAt: Date.now(),
     };
 
     this.io.to(this.roomName()).emit('presentationChanged', {
@@ -1174,6 +1177,32 @@ export class Room {
    * "not reported yet" (the client learns it after parsing the file), so the
    * clamp is skipped rather than pinning everyone to page 1.
    */
+  /** Updates video playback state (play, pause, seek) and broadcasts to the room. */
+  setPresentationVideoAction(input: {
+    action: 'play' | 'pause' | 'seek';
+    currentTime: number;
+  }): void {
+    if (!this.presentation || this.presentation.kind !== 'video') {
+      throw new Error('No video is being presented');
+    }
+    const now = Date.now();
+    this.presentation.videoPlaying = input.action === 'play';
+    this.presentation.videoCurrentTime = Math.max(0, input.currentTime);
+    this.presentation.videoUpdatedAt = now;
+
+    this.io.to(this.roomName()).emit('presentationVideoAction', {
+      action: input.action,
+      currentTime: this.presentation.videoCurrentTime,
+      timestamp: now,
+    });
+
+    this.recorder?.record({
+      type: 'presentationVideoAction' as never,
+      action: input.action,
+      currentTime: this.presentation.videoCurrentTime,
+    } as never);
+  }
+
   setPresentationPage(page: number): number {
     if (!this.presentation) throw new Error('Nothing is being presented');
     const max = this.presentation.pageCount;

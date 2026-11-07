@@ -444,18 +444,198 @@ function PptxView({
   );
 }
 
-function VideoView({ url, name }: { url: string; name: string }) {
+function VideoView({
+  url,
+  name,
+  isStaff,
+  presentation,
+  emit,
+}: {
+  url: string;
+  name: string;
+  isStaff: boolean;
+  presentation: PresentationState;
+  emit: (event: string, payload?: unknown) => void;
+}) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const isSyncingRef = useRef(false);
+  const [needsUnmute, setNeedsUnmute] = useState(false);
+  const [muted, setMuted] = useState(false);
+
+  // Sync for participants when presentation state changes
+  useEffect(() => {
+    if (isStaff) return;
+    const video = videoRef.current;
+    if (!video) return;
+
+    const { videoPlaying, videoCurrentTime = 0, videoUpdatedAt = Date.now() } = presentation;
+    const elapsed = videoPlaying ? Math.max(0, (Date.now() - videoUpdatedAt) / 1000) : 0;
+    const targetTime = videoCurrentTime + elapsed;
+
+    isSyncingRef.current = true;
+    if (Math.abs(video.currentTime - targetTime) > 0.6) {
+      video.currentTime = targetTime;
+    }
+
+    if (videoPlaying) {
+      const p = video.play();
+      if (p !== undefined) {
+        p.catch(() => {
+          // Autoplay policy prevented playback with sound. Mute and retry.
+          video.muted = true;
+          setMuted(true);
+          setNeedsUnmute(true);
+          video.play().catch(() => {});
+        });
+      }
+    } else {
+      video.pause();
+    }
+
+    const t = setTimeout(() => {
+      isSyncingRef.current = false;
+    }, 150);
+    return () => clearTimeout(t);
+  }, [presentation.videoPlaying, presentation.videoCurrentTime, presentation.videoUpdatedAt, isStaff]);
+
+  // Periodic drift correction for participants while playing
+  useEffect(() => {
+    if (isStaff || !presentation.videoPlaying) return;
+    const interval = setInterval(() => {
+      const video = videoRef.current;
+      if (!video || isSyncingRef.current) return;
+      const { videoCurrentTime = 0, videoUpdatedAt = Date.now() } = presentation;
+      const elapsed = Math.max(0, (Date.now() - videoUpdatedAt) / 1000);
+      const targetTime = videoCurrentTime + elapsed;
+      if (Math.abs(video.currentTime - targetTime) > 1.5) {
+        isSyncingRef.current = true;
+        video.currentTime = targetTime;
+        setTimeout(() => {
+          isSyncingRef.current = false;
+        }, 150);
+      }
+    }, 2500);
+    return () => clearInterval(interval);
+  }, [isStaff, presentation.videoPlaying, presentation.videoCurrentTime, presentation.videoUpdatedAt]);
+
+  const handleHostPlay = () => {
+    if (!isStaff || isSyncingRef.current) return;
+    const time = videoRef.current?.currentTime ?? 0;
+    emit('presentationVideoAction', { action: 'play', currentTime: time });
+  };
+
+  const handleHostPause = () => {
+    if (!isStaff || isSyncingRef.current) return;
+    const time = videoRef.current?.currentTime ?? 0;
+    emit('presentationVideoAction', { action: 'pause', currentTime: time });
+  };
+
+  const handleHostSeeked = () => {
+    if (!isStaff || isSyncingRef.current) return;
+    const time = videoRef.current?.currentTime ?? 0;
+    emit('presentationVideoAction', { action: 'seek', currentTime: time });
+  };
+
+  const handleLoadedMetadata = () => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    if (!isStaff) {
+      const { videoPlaying, videoCurrentTime = 0, videoUpdatedAt = Date.now() } = presentation;
+      const elapsed = videoPlaying ? Math.max(0, (Date.now() - videoUpdatedAt) / 1000) : 0;
+      const targetTime = videoCurrentTime + elapsed;
+      video.currentTime = targetTime;
+
+      if (videoPlaying) {
+        const p = video.play();
+        if (p !== undefined) {
+          p.catch(() => {
+            video.muted = true;
+            setMuted(true);
+            setNeedsUnmute(true);
+            video.play().catch(() => {});
+          });
+        }
+      }
+    }
+  };
+
   return (
     <div className="relative flex h-full w-full items-center justify-center bg-black/95 p-1 sm:p-2">
       <video
+        ref={videoRef}
         key={url}
         src={url}
         title={name}
-        controls
+        controls={isStaff}
         playsInline
-        preload="metadata"
+        preload="auto"
+        onPlay={isStaff ? handleHostPlay : undefined}
+        onPause={isStaff ? handleHostPause : undefined}
+        onSeeked={isStaff ? handleHostSeeked : undefined}
+        onLoadedMetadata={handleLoadedMetadata}
         className="max-h-full max-w-full rounded-lg shadow-2xl object-contain outline-none focus:outline-none"
       />
+
+      {/* Floating unmute button for participants if browser blocked sound */}
+      {!isStaff && needsUnmute && (
+        <button
+          type="button"
+          onClick={() => {
+            if (videoRef.current) {
+              videoRef.current.muted = false;
+              setMuted(false);
+              setNeedsUnmute(false);
+            }
+          }}
+          className="absolute bottom-6 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 rounded-full bg-brand-500 px-4 py-2 text-xs font-semibold text-white shadow-2xl ring-2 ring-white/30 transition hover:bg-brand-400 active:scale-95 animate-bounce"
+        >
+          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M11 5L6 9H2v6h4l5 4V5zM19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          Click to listen (unmute)
+        </button>
+      )}
+
+      {/* Participant status & volume pill */}
+      {!isStaff && (
+        <div className="absolute bottom-3 right-3 z-20 flex items-center gap-2 rounded-md bg-black/75 px-2.5 py-1 text-xs text-white/90 shadow-md backdrop-blur">
+          <button
+            type="button"
+            onClick={() => {
+              if (videoRef.current) {
+                const next = !videoRef.current.muted;
+                videoRef.current.muted = next;
+                setMuted(next);
+                if (!next) setNeedsUnmute(false);
+              }
+            }}
+            className="flex items-center gap-1 hover:text-brand-300 transition"
+            title={muted ? 'Unmute' : 'Mute'}
+          >
+            {muted ? (
+              <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M11 5L6 9H2v6h4l5 4V5zM23 9l-6 6M17 9l6 6" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            ) : (
+              <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M11 5L6 9H2v6h4l5 4V5zM15.54 8.46a5 5 0 0 1 0 7.07" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            )}
+            <span>{muted ? 'Muted' : 'Sound on'}</span>
+          </button>
+          <span className="text-white/40">|</span>
+          <span className="text-[10px] text-slate-300">Controlled by host</span>
+        </div>
+      )}
+
+      {/* Host indicator badge */}
+      {isStaff && (
+        <div className="pointer-events-none absolute left-3 top-3 z-20 flex items-center gap-1.5 rounded-md bg-black/70 px-2 py-1 text-[11px] font-medium text-brand-300 backdrop-blur">
+          <span className="h-2 w-2 rounded-full bg-mint-400 animate-pulse" />
+          You control playback for everyone
+        </div>
+      )}
     </div>
   );
 }
@@ -751,7 +931,13 @@ export function PresentationStage({ socket, isStaff, onToggleFullscreen }: Prese
                 </div>
               )}
               {kind === 'video' && (
-                <VideoView url={url} name={name} />
+                <VideoView
+                  url={url}
+                  name={name}
+                  isStaff={isStaff}
+                  presentation={presentation}
+                  emit={emit}
+                />
               )}
 
               <AnnotationLayer

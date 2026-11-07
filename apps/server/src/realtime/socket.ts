@@ -921,6 +921,25 @@ export function registerSocketHandlers(io: Server) {
       }
     });
 
+    socket.on('presentationVideoAction', (payload, ack) => {
+      const c = requirePeer();
+      if (!c) return ackErr(ack, 'Not in a room');
+      const no = denied(c.peer, 'screenshare');
+      if (no) return ackErr(ack, no);
+      if (!payload?.action || typeof payload?.currentTime !== 'number') {
+        return ackErr(ack, 'Invalid video action payload');
+      }
+      try {
+        c.room.setPresentationVideoAction({
+          action: payload.action,
+          currentTime: payload.currentTime,
+        });
+        ackOk(ack);
+      } catch (err) {
+        ackErr(ack, err instanceof Error ? err.message : 'Could not control video');
+      }
+    });
+
     socket.on('presentationAnnotate', (payload, ack) => {
       const c = requirePeer();
       if (!c) return ackErr(ack, 'Not in a room');

@@ -649,6 +649,12 @@ export interface PresentationState {
   annotations: AnnotationStroke[];
   /** Peer that started the presentation, so the UI can attribute it. */
   startedBy: string | null;
+  /** For video presentations: whether the video is playing */
+  videoPlaying?: boolean;
+  /** For video presentations: current playback time in seconds */
+  videoCurrentTime?: number;
+  /** For video presentations: timestamp (epoch ms) when current time was updated */
+  videoUpdatedAt?: number;
 }
 
 export interface PeerInfo {
@@ -760,7 +766,8 @@ export type TimelineEvent =
   | { t: number; type: 'hostCamOff'; peerId: string; peerName: string }
   | { t: number; type: 'presenterChanged'; peerId: string; peerName: string; peerRole: Role }
   // ── Native presentation (uploaded files) ──
-  | { t: number; type: 'presentationChanged'; presentation: PresentationState | null };
+  | { t: number; type: 'presentationChanged'; presentation: PresentationState | null }
+  | { t: number; type: 'presentationVideoAction'; action: 'play' | 'pause' | 'seek'; currentTime: number };
 
 /**
  * `Omit` over a union collapses to the keys every member shares, which would
@@ -938,6 +945,14 @@ export interface ClientToServerEvents {
     },
     ack: (res: Ack) => void
   ) => void;
+  /** Staff only — controls video playback during video presentation. */
+  presentationVideoAction: (
+    payload: {
+      action: 'play' | 'pause' | 'seek';
+      currentTime: number;
+    },
+    ack?: (res: Ack) => void
+  ) => void;
   /** Staff only — mutes every non-staff microphone at once. */
   muteAll: (ack: (res: Ack<{ muted: number }>) => void) => void;
 
@@ -1067,6 +1082,12 @@ export interface ServerToClientEvents {
     strokes?: AnnotationStroke[];
     removeIds?: string[];
     page?: number;
+  }) => void;
+  /** Video presentation playback action (play/pause/seek) from host. */
+  presentationVideoAction: (payload: {
+    action: 'play' | 'pause' | 'seek';
+    currentTime: number;
+    timestamp: number;
   }) => void;
 
   /** Sent to a speaker when the host mutes the room — the client pauses its mic. */
