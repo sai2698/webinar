@@ -421,27 +421,29 @@ export default function RoomPage() {
           </div>
 
           {/* Desktop Controls */}
-          <div className="hidden lg:block shrink-0 px-3 pb-3 pt-1.5">
-            <ControlsBar
-              socket={socket}
-              onToggleMic={toggleMic}
-              onToggleCam={toggleCam}
-              onShareScreen={toggleScreenShare}
-              onLeave={leave}
-              canPublish={canPublish}
-              handRaised={handRaised}
-              onSwitchDevice={switchDevice}
-              stageRef={stageRef}
-              onSetBackground={setBackground}
-              onUploadBackground={uploadBackground}
-              onSetNoiseSuppression={setNoiseSuppression}
-              onSetEchoCancellation={setEchoCancellation}
-              onSetAutoGainControl={setAutoGainControl}
-              onSetFrameRate={setFrameRate}
-              onSetVideoFit={setVideoFit}
-              onSetMirror={setMirror}
-            />
-          </div>
+          {(!presentation || isStaff) && (
+            <div className="hidden lg:block shrink-0 px-3 pb-3 pt-1.5">
+              <ControlsBar
+                socket={socket}
+                onToggleMic={toggleMic}
+                onToggleCam={toggleCam}
+                onShareScreen={toggleScreenShare}
+                onLeave={leave}
+                canPublish={canPublish}
+                handRaised={handRaised}
+                onSwitchDevice={switchDevice}
+                stageRef={stageRef}
+                onSetBackground={setBackground}
+                onUploadBackground={uploadBackground}
+                onSetNoiseSuppression={setNoiseSuppression}
+                onSetEchoCancellation={setEchoCancellation}
+                onSetAutoGainControl={setAutoGainControl}
+                onSetFrameRate={setFrameRate}
+                onSetVideoFit={setVideoFit}
+                onSetMirror={setMirror}
+              />
+            </div>
+          )}
         </div>
 
 

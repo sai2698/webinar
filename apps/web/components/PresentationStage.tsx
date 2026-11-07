@@ -955,63 +955,57 @@ export function PresentationStage({ socket, isStaff, onToggleFullscreen }: Prese
           </div>
         </div>
 
-        {/* ── toolbar ── */}
-        <div className="flex shrink-0 flex-wrap items-center gap-1.5 border-t border-slate-200 bg-white/95 px-2 py-1.5 backdrop-blur dark:border-white/10 dark:bg-ink-900/95">
-        <span className="mr-1 hidden max-w-[140px] truncate text-[11px] font-semibold tracking-tight text-slate-700 sm:inline-block dark:text-slate-200">
-          {name}
-        </span>
-
-        {/* page navigation (for multi-page decks / PDFs) */}
-        {kind !== 'video' && kind !== 'image' && (
-          <div className="flex items-center gap-0.5 rounded-md border border-slate-200 bg-slate-50 p-0.5 dark:border-white/10 dark:bg-white/[0.04]">
-            <button
-              type="button"
-              onClick={() => emit('presentationPage', { page: page - 1 })}
-              disabled={!isStaff || !canGoPrev}
-              className="grid h-6 w-6 place-items-center rounded text-slate-600 transition hover:bg-white disabled:opacity-30 dark:text-slate-300 dark:hover:bg-white/10"
-              aria-label="Previous page"
-            >
-              <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2.4">
-                <path d="M15 18l-6-6 6-6" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </button>
-            <span className="min-w-[38px] text-center text-[10px] font-semibold tabular-nums text-slate-600 sm:min-w-[46px] dark:text-slate-300">
-              {page}
-              {pageCount > 0 ? ` / ${pageCount}` : ''}
-            </span>
-            <button
-              type="button"
-              onClick={() => emit('presentationPage', { page: page + 1 })}
-              disabled={!isStaff || !canGoNext}
-              className="grid h-6 w-6 place-items-center rounded text-slate-600 transition hover:bg-white disabled:opacity-30 dark:text-slate-300 dark:hover:bg-white/10"
-              aria-label="Next page"
-            >
-              <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2.4">
-                <path d="M9 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </button>
-          </div>
-        )}
-        {kind === 'video' && (
-          <span className="rounded-md border border-brand-500/30 bg-brand-500/10 px-2 py-0.5 text-[10px] font-semibold text-brand-600 dark:text-brand-300">
-            🎬 Video
-          </span>
-        )}
-        {kind === 'image' && (
-          <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-slate-600 dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-300">
-            🖼️ Image
-          </span>
-        )}
-
+        {/* ── staff toolbar ── */}
         {isStaff && (
-          <>
+          <div className="flex shrink-0 flex-wrap items-center gap-1.5 border-t border-slate-200 bg-white/95 px-2 py-1.5 backdrop-blur dark:border-white/10 dark:bg-ink-900/95">
+            <span className="mr-1 hidden max-w-[140px] truncate text-[11px] font-semibold tracking-tight text-slate-700 sm:inline-block dark:text-slate-200">
+              {name}
+            </span>
+
+            {/* page navigation (for multi-page decks / PDFs) */}
+            {kind !== 'video' && kind !== 'image' && (
+              <div className="flex items-center gap-0.5 rounded-md border border-slate-200 bg-slate-50 p-0.5 dark:border-white/10 dark:bg-white/[0.04]">
+                <button
+                  type="button"
+                  onClick={() => emit('presentationPage', { page: page - 1 })}
+                  disabled={!canGoPrev}
+                  className="grid h-6 w-6 place-items-center rounded text-slate-600 transition hover:bg-white disabled:opacity-30 dark:text-slate-300 dark:hover:bg-white/10"
+                  aria-label="Previous page"
+                >
+                  <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2.4">
+                    <path d="M15 18l-6-6 6-6" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </button>
+                <span className="min-w-[38px] text-center text-[10px] font-semibold tabular-nums text-slate-600 sm:min-w-[46px] dark:text-slate-300">
+                  {page}
+                  {pageCount > 0 ? ` / ${pageCount}` : ''}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => emit('presentationPage', { page: page + 1 })}
+                  disabled={!canGoNext}
+                  className="grid h-6 w-6 place-items-center rounded text-slate-600 transition hover:bg-white disabled:opacity-30 dark:text-slate-300 dark:hover:bg-white/10"
+                  aria-label="Next page"
+                >
+                  <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2.4">
+                    <path d="M9 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </button>
+              </div>
+            )}
+            {kind === 'video' && (
+              <span className="rounded-md border border-brand-500/30 bg-brand-500/10 px-2 py-0.5 text-[10px] font-semibold text-brand-600 dark:text-brand-300">
+                🎬 Video
+              </span>
+            )}
+            {kind === 'image' && (
+              <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-slate-600 dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-300">
+                🖼️ Image
+              </span>
+            )}
+
             <div className="mx-0.5 h-4 w-px bg-slate-200 dark:bg-white/10" />
 
-            {/*
-             * Annotation is a mode, not a permanent state: while it is on the
-             * canvas swallows pointer events, so the host cannot scroll or
-             * select the page. This toggle is the only way back out.
-             */}
             <button
               type="button"
               onClick={() => setAnnotating((v) => !v)}
@@ -1098,37 +1092,59 @@ export function PresentationStage({ socket, isStaff, onToggleFullscreen }: Prese
               <span className="hidden sm:inline">Stop presenting</span>
               <span className="sm:hidden">Stop</span>
             </button>
-          </>
+
+            {onToggleFullscreen && canFullscreen && (
+              <button
+                type="button"
+                onClick={onToggleFullscreen}
+                className="grid h-6 w-6 place-items-center rounded-md border border-slate-200 bg-white text-slate-600 transition hover:text-slate-900 dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-300 dark:hover:text-white"
+                aria-label="Toggle fullscreen"
+                title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+              >
+                <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2.2">
+                  {isFullscreen ? (
+                    <path
+                      d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  ) : (
+                    <path
+                      d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  )}
+                </svg>
+              </button>
+            )}
+          </div>
         )}
 
-        {onToggleFullscreen && canFullscreen && (
+        {/* Floating participant overlays (no control bar) */}
+        {!isStaff && pageCount > 1 && kind !== 'video' && kind !== 'image' && (
+          <div className="pointer-events-none absolute bottom-3 left-3 z-20 rounded-md bg-black/60 px-2.5 py-1 text-[11px] font-semibold text-white/90 shadow-md backdrop-blur">
+            {page} / {pageCount}
+          </div>
+        )}
+
+        {!isStaff && onToggleFullscreen && canFullscreen && (
           <button
             type="button"
             onClick={onToggleFullscreen}
-            className={`grid h-6 w-6 place-items-center rounded-md border border-slate-200 bg-white text-slate-600 transition hover:text-slate-900 dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-300 dark:hover:text-white ${
-              isStaff ? '' : 'ml-auto'
-            }`}
-            aria-label="Toggle fullscreen"
+            className="absolute bottom-3 right-3 z-20 grid h-7 w-7 place-items-center rounded-md border border-slate-200 dark:border-white/20 bg-white/90 dark:bg-black/70 text-slate-800 dark:text-white shadow-lg backdrop-blur-md transition hover:bg-white dark:hover:bg-black/90 active:scale-95"
+            aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
             title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
           >
             <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2.2">
               {isFullscreen ? (
-                <path
-                  d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
+                <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3" strokeLinecap="round" strokeLinejoin="round" />
               ) : (
-                <path
-                  d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
+                <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" strokeLinecap="round" strokeLinejoin="round" />
               )}
             </svg>
           </button>
         )}
-        </div>
       </div>
 
       {/* Right-hand camera rail, fullscreen only — same as a shared screen. */}
