@@ -68,6 +68,12 @@ model Webinar {
   handRaiseEnabled    Boolean @default(true)
   maxParticipants     Int?
 
+  // registration configuration
+  whatsappGroupUrl    String?
+  collectPhone        Boolean @default(true)
+  requirePhone        Boolean @default(true)
+  registrationFieldsJson String @default("{}")
+
   // access control
   /// When set, joining requires this passcode in addition to registration.
   passcode            String?

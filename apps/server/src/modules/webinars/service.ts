@@ -1,5 +1,20 @@
+export function parseRegistrationFields(jsonStr?: string | null): RegistrationFieldsConfig {
+  const fallback = { ...DEFAULT_REGISTRATION_FIELDS };
+  if (!jsonStr) return fallback;
+  try {
+    const parsed = JSON.parse(jsonStr);
+    return {
+      name: { ...fallback.name, ...(parsed.name ?? {}) },
+      email: { ...fallback.email, ...(parsed.email ?? {}) },
+      phone: { ...fallback.phone, ...(parsed.phone ?? {}) },
+    };
+  } catch {
+    return fallback;
+  }
+}
+
 import type { Webinar, WebinarModerator } from '@prisma/client';
-import type { WebinarSettings, WebinarStatus } from '@webinar/shared';
+import { DEFAULT_REGISTRATION_FIELDS, type RegistrationFieldsConfig, type WebinarSettings, type WebinarStatus } from '@webinar/shared';
 import { prisma } from '../../db/prisma.js';
 import { uniqueSlug } from '../../utils/slug.js';
 
@@ -34,6 +49,10 @@ export function toSettings(w: Webinar): WebinarSettings {
     cohostStartWithoutHost: w.cohostStartWithoutHost,
     premiereRecordingId: w.premiereRecordingId,
     premiereStartedAt: w.premiereStartedAt?.toISOString() ?? null,
+    whatsappGroupUrl: w.whatsappGroupUrl,
+    collectPhone: w.collectPhone,
+    requirePhone: w.requirePhone,
+    registrationFields: parseRegistrationFields(w.registrationFieldsJson),
   };
 }
 
@@ -94,6 +113,10 @@ export function serializePublicWebinar(w: WebinarWithRelations) {
       cohostStartWithoutHost: w.cohostStartWithoutHost,
       premiereRecordingId: w.premiereRecordingId,
       premiereStartedAt: w.premiereStartedAt?.toISOString() ?? null,
+      whatsappGroupUrl: w.whatsappGroupUrl,
+      collectPhone: w.collectPhone,
+      requirePhone: w.requirePhone,
+      registrationFields: parseRegistrationFields(w.registrationFieldsJson),
     } satisfies WebinarSettings,
   };
 }

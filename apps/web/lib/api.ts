@@ -1,4 +1,4 @@
-import type { AttachmentInfo, RecordingDetail, RecordingSummary } from '@webinar/shared';
+import { DEFAULT_REGISTRATION_FIELDS, type AttachmentInfo, type RecordingDetail, type RecordingSummary, type RegistrationFieldsConfig } from '@webinar/shared';
 import { getToken, notifyAdminUnauthorized, roomToken, type SessionScope } from './session';
 
 function getBaseUrl(fallbackPort = 4000): string {
@@ -198,6 +198,10 @@ export interface PublicWebinar {
   premiereRecordingId: string | null;
   /** ISO timestamp of when the premiere clock started, or null. */
   premiereStartedAt: string | null;
+  whatsappGroupUrl?: string | null;
+  collectPhone?: boolean;
+  requirePhone?: boolean;
+  registrationFields?: RegistrationFieldsConfig;
 }
 
 /**
@@ -230,6 +234,10 @@ function normalizePublicWebinar(raw: Record<string, unknown>): PublicWebinar {
     requireSignIn: Boolean(settings.requireSignIn),
     premiereRecordingId: (settings.premiereRecordingId as string | null) ?? null,
     premiereStartedAt: (settings.premiereStartedAt as string | null) ?? null,
+    whatsappGroupUrl: (settings.whatsappGroupUrl as string | null) ?? null,
+    collectPhone: settings.collectPhone !== false,
+    requirePhone: settings.requirePhone !== false,
+    registrationFields: (settings.registrationFields as RegistrationFieldsConfig) ?? DEFAULT_REGISTRATION_FIELDS,
   };
 }
 
@@ -263,9 +271,9 @@ export const endpoints = {
   register: (
     slug: string,
     data: {
-      name: string;
-      email: string;
-      phone: string;
+      name?: string;
+      email?: string;
+      phone?: string;
       passcode?: string;
       /** Answers to the host's custom questions, keyed by field id. */
       customResponses?: Record<string, unknown>;

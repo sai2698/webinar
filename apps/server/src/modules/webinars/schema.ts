@@ -1,3 +1,16 @@
+export const standardRegistrationFieldSchema = z.object({
+  enabled: z.boolean().default(true),
+  label: z.string().min(1).max(100),
+  placeholder: z.string().max(200).optional().default(''),
+  required: z.boolean().default(true),
+});
+
+export const registrationFieldsSchema = z.object({
+  name: standardRegistrationFieldSchema.optional(),
+  email: standardRegistrationFieldSchema.optional(),
+  phone: standardRegistrationFieldSchema.optional(),
+});
+
 import { z } from 'zod';
 import { CTA_FORM_FIELD_TYPES } from '@webinar/shared';
 
@@ -46,6 +59,10 @@ export const webinarSettingsSchema = z.object({
    * normal live session.
    */
   premiereRecordingId: z.string().nullable().default(null),
+  whatsappGroupUrl: z.string().trim().url().or(z.literal('')).nullable().optional(),
+  collectPhone: z.boolean().default(true),
+  requirePhone: z.boolean().default(true),
+  registrationFields: registrationFieldsSchema.optional(),
 });
 
 export const createWebinarSchema = z.object({
@@ -90,14 +107,16 @@ export const updateWebinarSchema = createWebinarSchema.partial().extend({
  * accepting an odd one.
  */
 export const registerSchema = z.object({
-  name: z.string().min(2).max(80),
-  email: z.string().email(),
+  name: z.string().max(80).optional().or(z.literal('')),
+  email: z.string().email().optional().or(z.literal('')),
   phone: z
     .string()
     .trim()
     .min(6, 'Enter a valid mobile number')
     .max(20, 'Enter a valid mobile number')
-    .regex(/^[+]?[\d\s()-]{6,20}$/, 'Enter a valid mobile number'),
+    .regex(/^[+]?[\d\s()-]{6,20}$/, 'Enter a valid mobile number')
+    .optional()
+    .or(z.literal('')),
   /** Only required when the webinar has one set. */
   passcode: z.string().max(64).optional(),
 });

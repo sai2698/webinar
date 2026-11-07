@@ -1,3 +1,37 @@
+export interface StandardRegistrationField {
+  enabled: boolean;
+  label: string;
+  placeholder?: string;
+  required: boolean;
+}
+
+export interface RegistrationFieldsConfig {
+  name: StandardRegistrationField;
+  email: StandardRegistrationField;
+  phone: StandardRegistrationField;
+}
+
+export const DEFAULT_REGISTRATION_FIELDS: RegistrationFieldsConfig = {
+  name: {
+    enabled: true,
+    label: 'Full Name',
+    placeholder: 'e.g. Ada Lovelace',
+    required: true,
+  },
+  email: {
+    enabled: true,
+    label: 'Email Address',
+    placeholder: 'you@company.com',
+    required: true,
+  },
+  phone: {
+    enabled: true,
+    label: 'Mobile Number',
+    placeholder: '+91 98765 43210',
+    required: true,
+  },
+};
+
 /**
  * Shared domain types used by both the API server and the Next.js client.
  * Keeping these in one place guarantees the socket event names and payload
@@ -75,6 +109,14 @@ export interface WebinarSettings {
   showLiveUsersCount: boolean;
   /** Whether a co-host may start the session before the owner joins. */
   cohostStartWithoutHost: boolean;
+  /** WhatsApp Community or group invite URL shown to attendees */
+  whatsappGroupUrl?: string | null;
+  /** Whether to show mobile number input on the registration form */
+  collectPhone?: boolean;
+  /** Whether the mobile number input is mandatory */
+  requirePhone?: boolean;
+  /** Fully customizable registration fields configuration */
+  registrationFields?: RegistrationFieldsConfig;
 }
 
 /* ── webinar.gg parity ─────────────────────────────────────── */

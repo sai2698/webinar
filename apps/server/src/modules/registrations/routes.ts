@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { nanoid } from 'nanoid';
 import { prisma } from '../../db/prisma.js';
 import { asyncHandler, badRequest, forbidden, notFound } from '../../middleware/error.js';
-import { findWebinarBySlug } from '../webinars/service.js';
+import { findWebinarBySlug, parseRegistrationFields } from '../webinars/service.js';
 import { registerSchema, claimSchema } from '../webinars/schema.js';
 import { signToken, requireAuth } from '../../middleware/auth.js';
 import { sendMail, registrationEmail } from '../../utils/mail.js';
@@ -72,7 +72,36 @@ registrationRouter.post(
       signedIn: hasBearer(req),
     });
 
-    const email = body.email.toLowerCase();
+    const regConfig = parseRegistrationFields(webinar.registrationFieldsJson);
+
+    // Dynamic field validation based on host's configuration
+    if (webinar.requireRegistration) {
+      if (regConfig.name.enabled && regConfig.name.required) {
+        if (!body.name || body.name.trim().length < 2) {
+          throw badRequest(`${regConfig.name.label || 'Full Name'} is required (at least 2 characters)`);
+        }
+      }
+      if (regConfig.email.enabled && regConfig.email.required) {
+        if (!body.email || !body.email.trim()) {
+          throw badRequest(`${regConfig.email.label || 'Email Address'} is required`);
+        }
+      }
+      if (regConfig.phone.enabled && regConfig.phone.required) {
+        if (!body.phone || !body.phone.trim()) {
+          throw badRequest(`${regConfig.phone.label || 'Mobile Number'} is required`);
+        }
+      }
+    }
+
+    const email = body.email && body.email.trim()
+      ? body.email.trim().toLowerCase()
+      : `attendee-${nanoid(16)}@guest.local`;
+
+    const name = body.name && body.name.trim()
+      ? body.name.trim().slice(0, 80)
+      : 'Attendee';
+
+    const phone = body.phone && body.phone.trim() ? body.phone.trim() : null;
 
     // An invite-only webinar must refuse a self-serve sign-up. `assertAccess`
     // only covers the guest path, so without this check anyone who knows the
@@ -98,16 +127,16 @@ registrationRouter.post(
     if (!user) {
       user = await prisma.user.create({
         data: {
-          name: body.name,
+          name,
           email,
-          phone: body.phone || null,
+          phone,
           role: 'PARTICIPANT',
         },
       });
-    } else if (body.name && user.name !== body.name) {
+    } else if ((name !== 'Attendee' && user.name !== name) || (phone && user.phone !== phone)) {
       user = await prisma.user.update({
         where: { id: user.id },
-        data: { name: body.name, phone: body.phone || user.phone },
+        data: { name: name !== 'Attendee' ? name : user.name, phone: phone || user.phone },
       });
     }
 

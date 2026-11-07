@@ -337,6 +337,10 @@ export default function AdminPage() {
           watermarkEnabled: values.watermarkEnabled,
           showLiveUsersCount: values.showLiveUsersCount,
           cohostStartWithoutHost: values.cohostStartWithoutHost,
+          whatsappGroupUrl: values.whatsappGroupUrl.trim() || null,
+          collectPhone: values.collectPhone,
+          requirePhone: values.requirePhone,
+          registrationFields: values.registrationFields,
           ...(values.passcode.trim() ? { passcode: values.passcode.trim() } : {}),
         },
       };
@@ -621,6 +625,7 @@ function WebinarComposeView({
         <Card className="p-5 sm:p-6">
           <WebinarForm
             initial={initial}
+            webinarId={editing?.id}
             submitLabel={editing ? 'Save changes' : 'Create webinar'}
             busy={busy}
             error={error}
