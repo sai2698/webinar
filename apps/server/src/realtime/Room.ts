@@ -1214,6 +1214,23 @@ export class Room {
     } as never);
   }
 
+  setPresentationUrl(url: string): void {
+    if (!this.presentation) throw new Error('Nothing is being presented');
+    this.presentation.url = url;
+    if (!url) {
+      this.presentation.name = 'New Tab';
+    } else {
+      try {
+        const parsed = new URL(url);
+        this.presentation.name = parsed.hostname + (parsed.pathname !== '/' ? parsed.pathname : '');
+      } catch {
+        this.presentation.name = url.replace(/^https?:\/\//, '').replace(/\/$/, '') || url;
+      }
+    }
+    this.io.to(this.roomName()).emit('presentationChanged', { presentation: this.presentation });
+    this.recorder?.record({ type: 'presentationChanged', presentation: this.presentation });
+  }
+
   setPresentationPage(page: number): number {
     if (!this.presentation) throw new Error('Nothing is being presented');
     const max = this.presentation.pageCount;

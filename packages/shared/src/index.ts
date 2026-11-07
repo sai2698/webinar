@@ -633,7 +633,7 @@ export type MediaSource = 'camera' | 'microphone' | 'screen';
  * ──────────────────────────────────────────────────────────── */
 
 /** Which viewer the client mounts for an uploaded file. */
-export type AttachmentKind = 'pdf' | 'pptx' | 'image' | 'video';
+export type AttachmentKind = 'pdf' | 'pptx' | 'image' | 'video' | 'browser';
 
 /** A file the host uploaded to present from inside the room. */
 export interface AttachmentInfo {
@@ -997,6 +997,8 @@ export interface ClientToServerEvents {
     },
     ack?: (res: Ack) => void
   ) => void;
+  /** Staff only — navigates to a new URL during a browser/website presentation. */
+  presentationUrl: (payload: { url: string }, ack?: (res: Ack) => void) => void;
   /** Staff only — mutes every non-staff microphone at once. */
   muteAll: (ack: (res: Ack<{ muted: number }>) => void) => void;
 

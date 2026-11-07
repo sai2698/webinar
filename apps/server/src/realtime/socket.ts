@@ -881,14 +881,35 @@ export function registerSocketHandlers(io: Server) {
       if (!c) return ackErr(ack, 'Not in a room');
       const no = denied(c.peer, 'screenshare');
       if (no) return ackErr(ack, no);
-      if (!payload?.attachmentId || !payload?.url) {
+      if (payload.kind !== 'browser' && !payload?.url) {
         return ackErr(ack, 'A file is required');
+      }
+      let finalUrl = String(payload?.url || '').trim();
+      if (payload.kind === 'browser') {
+        if (!finalUrl || finalUrl === 'about:blank' || finalUrl === 'https://') {
+          finalUrl = '';
+        } else if (!/^https?:\/\//i.test(finalUrl)) {
+          finalUrl = 'https://' + finalUrl;
+        }
+      }
+      let finalName = payload.name;
+      if (payload.kind === 'browser') {
+        if (!finalUrl) {
+          finalName = 'New Tab';
+        } else if (!finalName) {
+          try {
+            const parsed = new URL(finalUrl);
+            finalName = parsed.hostname + (parsed.pathname !== '/' ? parsed.pathname : '');
+          } catch {
+            finalName = finalUrl.replace(/^https?:\/\//, '').replace(/\/$/, '') || finalUrl;
+          }
+        }
       }
       try {
         c.room.setPresentation({
-          attachmentId: payload.attachmentId,
-          name: payload.name,
-          url: payload.url,
+          attachmentId: payload.attachmentId || ('browser-' + Date.now()),
+          name: finalName || 'Website',
+          url: finalUrl,
           kind: payload.kind,
           pageCount: payload.pageCount,
           startedBy: c.peer.name,
@@ -937,6 +958,25 @@ export function registerSocketHandlers(io: Server) {
         ackOk(ack);
       } catch (err) {
         ackErr(ack, err instanceof Error ? err.message : 'Could not control video');
+      }
+    });
+
+    socket.on('presentationUrl', (payload, ack) => {
+      const c = requirePeer();
+      if (!c) return ackErr(ack, 'Not in a room');
+      const no = denied(c.peer, 'screenshare');
+      if (no) return ackErr(ack, no);
+      try {
+        let u = String(payload?.url || '').trim();
+        if (u === 'about:blank' || u === 'https://' || u === 'chrome://newtab') {
+          u = '';
+        } else if (u && !/^https?:\/\//i.test(u)) {
+          u = 'https://' + u;
+        }
+        c.room.setPresentationUrl(u);
+        ackOk(ack);
+      } catch (err) {
+        ackErr(ack, err instanceof Error ? err.message : 'Could not change URL');
       }
     });
 

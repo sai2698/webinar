@@ -278,6 +278,59 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
     );
   };
 
+  const [presentWebsiteUrl, setPresentWebsiteUrl] = useState('');
+
+  useEffect(() => {
+    if (presentation?.kind === 'browser') {
+      setPresentWebsiteUrl(presentation.url || '');
+    }
+  }, [presentation?.kind, presentation?.url]);
+
+  const handlePresentWebsite = (e?: React.FormEvent) => {
+    e?.preventDefault();
+    let target = presentWebsiteUrl.trim();
+    const cleanLower = target.toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/$/, '');
+    if (
+      !target ||
+      target === 'https://' ||
+      target === 'http://' ||
+      target === 'about:blank' ||
+      cleanLower === 'google' ||
+      cleanLower === 'google.com' ||
+      cleanLower === 'chrome://newtab'
+    ) {
+      target = '';
+    } else if (!/^https?:\/\//i.test(target)) {
+      if (!target.includes(' ') && /^[a-zA-Z0-9-]+\.[a-zA-Z]{2,}/.test(target)) {
+        target = 'https://' + target;
+      }
+    }
+    const sock = socket.current;
+    if (!sock) return;
+
+    if (presentation?.kind === 'browser') {
+      sock.emit('presentationUrl', { url: target });
+      return;
+    }
+
+    let name = target ? 'Website' : 'Chrome New Tab';
+    if (target) {
+      try {
+        const parsed = new URL(target);
+        name = parsed.hostname + (parsed.pathname !== '/' ? parsed.pathname : '');
+      } catch {
+        name = target.replace(/^https?:\/\//, '').replace(/\/$/, '') || target;
+      }
+    }
+    sock.emit('presentationStart', {
+      attachmentId: 'browser-' + Date.now(),
+      name,
+      url: target,
+      kind: 'browser',
+      pageCount: 1,
+    });
+  };
+
   const handleStopPresenting = () => {
     socket.current?.emit('presentationStop', () => {});
   };
@@ -1884,11 +1937,11 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
                       </span>
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-[11px] font-semibold tracking-tight text-slate-900 dark:text-slate-100">
-                          {presentation.name}
+                          {presentation.kind === 'browser' ? `🌐 ${presentation.name}` : presentation.name}
                         </p>
                         <p className="text-[10px] text-slate-500 dark:text-slate-400">
-                          On stage
-                          {presentation.pageCount > 0
+                          {presentation.kind === 'browser' ? 'Website on stage' : 'On stage'}
+                          {presentation.kind !== 'browser' && presentation.pageCount > 0
                             ? ` · page ${presentation.page} of ${presentation.pageCount}`
                             : ''}
                         </p>
@@ -1902,6 +1955,40 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
                       </button>
                     </div>
                   )}
+
+                  {/* ── present website / browser ── */}
+                  <div className="rounded-lg border border-slate-200/80 bg-slate-50/50 p-2.5 dark:border-white/10 dark:bg-white/[0.02]">
+                    <div className="mb-2 flex items-center justify-between">
+                      <span className="flex items-center gap-1.5 text-[11px] font-semibold tracking-tight text-slate-900 dark:text-slate-100">
+                        <span className="text-sm">🌐</span> Present Website / Browser
+                      </span>
+                      {presentation?.kind === 'browser' && (
+                        <span className="rounded bg-mint-500/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-mint-600 dark:text-mint-400">
+                          Active
+                        </span>
+                      )}
+                    </div>
+                    <form onSubmit={handlePresentWebsite} className="flex gap-1.5">
+                      <input
+                        type="text"
+                        value={presentWebsiteUrl}
+                        onChange={(e) => setPresentWebsiteUrl(e.target.value)}
+                        placeholder="https://... or leave empty for Chrome Search"
+                        className="h-8 min-w-0 flex-1 rounded-md border border-slate-200 bg-white px-2.5 text-xs text-slate-900 outline-none transition focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-white/10 dark:bg-white/[0.05] dark:text-slate-100"
+                      />
+                      <button
+                        type="submit"
+                        className="h-8 shrink-0 rounded-md bg-brand-600 px-3 text-xs font-semibold text-white transition hover:bg-brand-500 active:scale-95"
+                      >
+                        {presentation?.kind === 'browser'
+                          ? (presentWebsiteUrl.trim() ? 'Navigate' : 'New Tab')
+                          : (presentWebsiteUrl.trim() ? 'Present URL' : 'Open Browser')}
+                      </button>
+                    </form>
+                    <p className="mt-1.5 text-[10px] text-slate-500 dark:text-slate-400">
+                      Leave blank to open Chrome New Tab with Google Search and bookmarks, or enter any web URL.
+                    </p>
+                  </div>
 
                   <label
                     className={`flex cursor-pointer flex-col items-center justify-center gap-1.5 rounded-lg border border-dashed px-3 py-5 text-center transition ${

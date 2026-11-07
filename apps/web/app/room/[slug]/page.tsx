@@ -412,6 +412,7 @@ export default function RoomPage() {
                 socket={socket}
                 isStaff={isStaff}
                 onToggleFullscreen={toggleFullscreen}
+                onShareScreen={toggleScreenShare}
               />
             ) : (
               <VideoGrid onToggleFullscreen={toggleFullscreen} />

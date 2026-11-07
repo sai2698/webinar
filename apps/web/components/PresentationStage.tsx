@@ -6,6 +6,7 @@ import type { AnnotationStroke, PresentationState } from '@webinar/shared';
 import { useRoomStore } from '@/store/roomStore';
 import { useIsFullscreen } from '@/lib/useRoomUi';
 import { VideoFilmstrip } from './VideoGrid';
+import { getApiUrl } from '@/lib/api';
 
 /**
  * The presentation stage.
@@ -34,6 +35,7 @@ interface PresentationStageProps {
   socket: React.RefObject<Socket | null>;
   isStaff: boolean;
   onToggleFullscreen?: () => void;
+  onShareScreen?: () => void;
 }
 
 /* ── PDF rendering ─────────────────────────────────────────── */
@@ -640,6 +642,797 @@ function VideoView({
   );
 }
 
+/* ── Browser / Website presentation ────────────────────────── */
+
+const KNOWN_FRAME_BLOCKED = [
+  'dribbble.com',
+  'github.com',
+  'facebook.com',
+  'twitter.com',
+  'x.com',
+  'instagram.com',
+  'netflix.com',
+  'amazon.com',
+];
+
+interface BookmarkItem {
+  id: string;
+  title: string;
+  url: string;
+  icon: string;
+}
+
+const DEFAULT_BOOKMARKS: BookmarkItem[] = [
+  { id: 'google', title: 'Google', url: '', icon: '🔍' },
+  { id: 'dribbble', title: 'Dribbble', url: 'https://dribbble.com', icon: '🎨' },
+  { id: 'wikipedia', title: 'Wikipedia', url: 'https://en.wikipedia.org', icon: '📖' },
+  { id: 'github', title: 'GitHub', url: 'https://github.com', icon: '💻' },
+  { id: 'hackernews', title: 'Hacker News', url: 'https://news.ycombinator.com', icon: '📰' },
+  { id: 'youtube', title: 'YouTube', url: 'https://www.youtube.com', icon: '🎬' },
+];
+
+
+function getSearchQuery(u: string): string | null {
+  if (!u) return null;
+  if (u.startsWith('google-search://')) {
+    return decodeURIComponent(u.slice('google-search://'.length));
+  }
+  try {
+    const parsed = new URL(u);
+    const host = parsed.hostname.toLowerCase().replace(/^www\./, '');
+    if (host.startsWith('google.') || host.includes('.google.')) {
+      const q = parsed.searchParams.get('q');
+      if (q) return q;
+    }
+  } catch {}
+  return null;
+}
+
+function isGoogleHomeOrBlank(u: string): boolean {
+  if (!u || u === 'about:blank' || u === 'chrome://newtab') return true;
+  if (getSearchQuery(u)) return false;
+  try {
+    const parsed = new URL(u);
+    const host = parsed.hostname.toLowerCase().replace(/^www\./, '');
+    if ((host.startsWith('google.') || host.includes('.google.')) && (!parsed.pathname || parsed.pathname === '/')) {
+      return true;
+    }
+  } catch {
+    const clean = u.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/$/, '');
+    if (clean === 'google.com' || clean === 'google') return true;
+  }
+  return false;
+}
+
+function BrowserView({
+  url,
+  name,
+  isStaff,
+  emit,
+  onShareScreen,
+}: {
+  url: string;
+  name: string;
+  isStaff: boolean;
+  emit: (event: string, payload?: unknown) => void;
+  onShareScreen?: () => void;
+}) {
+  const [inputUrl, setInputUrl] = useState(url || '');
+  const [centerSearch, setCenterSearch] = useState('');
+  const [iframeKey, setIframeKey] = useState(0);
+  const [mode, setMode] = useState<'direct' | 'proxy'>('proxy');
+  const [dismissNotice, setDismissNotice] = useState(false);
+  const [bookmarks, setBookmarks] = useState<BookmarkItem[]>(DEFAULT_BOOKMARKS);
+  const [zoom, setZoom] = useState(100);
+
+  const ZOOM_STEPS = [50, 67, 75, 80, 90, 100, 110, 125, 150, 175, 200];
+  const handleZoomIn = () => {
+    setZoom((prev) => {
+      const next = ZOOM_STEPS.find((s) => s > prev);
+      return next ?? Math.min(250, prev + 25);
+    });
+  };
+  const handleZoomOut = () => {
+    setZoom((prev) => {
+      const next = [...ZOOM_STEPS].reverse().find((s) => s < prev);
+      return next ?? Math.max(50, prev - 25);
+    });
+  };
+  const handleZoomReset = () => {
+    setZoom(100);
+  };
+  const [showAddBookmark, setShowAddBookmark] = useState(false);
+  const [newBmTitle, setNewBmTitle] = useState('');
+  const [newBmUrl, setNewBmUrl] = useState('');
+
+  // Load custom bookmarks from localStorage
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('webinar_browser_bookmarks');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const sanitized = parsed.map((b: BookmarkItem) => {
+            if (b.id === 'google' || b.url === 'https://www.google.com' || b.url === 'https://google.com') {
+              return { ...b, url: '' };
+            }
+            return b;
+          });
+          setBookmarks(sanitized);
+          return;
+        }
+      }
+    } catch {}
+  }, []);
+
+  const saveBookmarks = (items: BookmarkItem[]) => {
+    setBookmarks(items);
+    try {
+      localStorage.setItem('webinar_browser_bookmarks', JSON.stringify(items));
+    } catch {}
+  };
+
+  const handleAddBookmarkSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    let u = newBmUrl.trim();
+    if (!u) return;
+    if (!/^https?:\/\//i.test(u)) u = 'https://' + u;
+    const t = newBmTitle.trim() || u.replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+    const updated = [...bookmarks, { id: 'bm-' + Date.now(), title: t, url: u, icon: '⭐' }];
+    saveBookmarks(updated);
+    setShowAddBookmark(false);
+    setNewBmTitle('');
+    setNewBmUrl('');
+  };
+
+  const handleDeleteBookmark = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const updated = bookmarks.filter((b) => b.id !== id);
+    saveBookmarks(updated);
+  };
+
+  useEffect(() => {
+    setInputUrl(isGoogleHomeOrBlank(url) ? '' : url);
+    setDismissNotice(false);
+  }, [url]);
+
+  const isKnownBlocked = useMemo(() => {
+    if (!url) return false;
+    try {
+      const host = new URL(url).hostname.toLowerCase();
+      return KNOWN_FRAME_BLOCKED.some((d) => host.includes(d));
+    } catch {
+      return false;
+    }
+  }, [url]);
+
+  const navigateTo = (raw: string) => {
+    const q = raw.trim();
+    if (!q || isGoogleHomeOrBlank(q)) {
+      emit('presentationUrl', { url: '' });
+      return;
+    }
+    let target = q;
+    if (/^https?:\/\//i.test(q)) {
+      target = q;
+    } else if (!q.includes(' ') && /^[a-zA-Z0-9-]+\.[a-zA-Z]{2,}/.test(q)) {
+      target = 'https://' + q;
+    } else {
+      // Search query on Google — present search results right on stage!
+      target = `https://www.google.com/search?q=${encodeURIComponent(q)}`;
+    }
+    emit('presentationUrl', { url: target });
+  };
+
+  const handleAddressSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    navigateTo(inputUrl);
+  };
+
+  const handleCenterSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!centerSearch.trim()) return;
+    navigateTo(centerSearch);
+    setCenterSearch('');
+  };
+
+  const handleReload = () => {
+    setIframeKey((k) => k + 1);
+  };
+
+  const handleGoHome = () => {
+    emit('presentationUrl', { url: '' });
+  };
+
+  const searchQuery = getSearchQuery(url);
+  const isSearch = Boolean(searchQuery);
+  const isNewTab = !isSearch && isGoogleHomeOrBlank(url);
+
+  const [searchResults, setSearchResults] = useState<
+    Array<{ title: string; url: string; snippet: string; displayUrl: string }>
+  >([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!searchQuery) {
+      setSearchResults([]);
+      setSearchLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setSearchLoading(true);
+    setSearchError(null);
+    fetch(`${getApiUrl()}/api/proxy-site/search?q=${encodeURIComponent(searchQuery)}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (cancelled) return;
+        setSearchResults(data.results || []);
+        setSearchLoading(false);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setSearchError(err instanceof Error ? err.message : 'Search failed');
+        setSearchLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [searchQuery]);
+
+  useEffect(() => {
+    const handleMsg = (e: MessageEvent) => {
+      if (e.data && e.data.type === 'webinar_browser_navigate' && e.data.url) {
+        if (isStaff) {
+          navigateTo(e.data.url);
+        }
+      }
+    };
+    window.addEventListener('message', handleMsg);
+    return () => window.removeEventListener('message', handleMsg);
+  }, [isStaff]);
+
+  const iframeSrc = mode === 'proxy' && url
+    ? `${getApiUrl()}/api/proxy-site?url=${encodeURIComponent(url)}`
+    : url;
+
+  return (
+    <div className="flex h-full w-full flex-col overflow-hidden rounded-md border border-slate-200 bg-white shadow-lg dark:border-white/10 dark:bg-ink-950">
+      {/* ── Top Chrome Omnibox / Address bar ── */}
+      <div className="flex shrink-0 items-center gap-1.5 border-b border-slate-200 bg-slate-100/90 px-2.5 py-1.5 backdrop-blur dark:border-white/10 dark:bg-ink-900/90">
+        {/* Home / New Tab button */}
+        <button
+          type="button"
+          onClick={handleGoHome}
+          title="New Tab / Google Search"
+          className={`grid h-7 w-7 place-items-center rounded-md transition active:scale-95 ${
+            isNewTab
+              ? 'bg-slate-200 text-slate-900 dark:bg-white/15 dark:text-white'
+              : 'text-slate-600 hover:bg-slate-200 dark:text-slate-300 dark:hover:bg-white/10'
+          }`}
+          aria-label="New Tab"
+        >
+          <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2.2">
+            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" strokeLinecap="round" strokeLinejoin="round" />
+            <polyline points="9 22 9 12 15 12 15 22" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
+
+        {/* Reload button */}
+        {!isNewTab && (
+          <button
+            type="button"
+            onClick={handleReload}
+            title="Reload website"
+            className="grid h-7 w-7 place-items-center rounded-md text-slate-600 transition hover:bg-slate-200 active:scale-95 dark:text-slate-300 dark:hover:bg-white/10"
+            aria-label="Reload website"
+          >
+            <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2.2">
+              <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+        )}
+
+        {/* Mode toggle (Direct vs Unblock Proxy) */}
+        {!isNewTab && (
+          <button
+            type="button"
+            onClick={() => setMode((m) => (m === 'direct' ? 'proxy' : 'direct'))}
+            title={mode === 'proxy' ? 'Using Unblock Proxy (strips X-Frame-Options)' : 'Direct mode (click to try proxy)'}
+            className={`flex h-7 shrink-0 items-center gap-1 rounded-md border px-2 text-[10px] font-semibold transition active:scale-95 ${
+              mode === 'proxy'
+                ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:border-emerald-400/40 dark:text-emerald-300'
+                : 'border-slate-300 bg-white text-slate-600 hover:bg-slate-50 dark:border-white/15 dark:bg-white/[0.06] dark:text-slate-300'
+            }`}
+          >
+            <span>{mode === 'proxy' ? '🛡️ Proxy' : '⚡ Direct'}</span>
+          </button>
+        )}
+
+        {/* Address bar input */}
+        {isStaff ? (
+          <form onSubmit={handleAddressSubmit} className="flex min-w-0 flex-1 items-center gap-1.5">
+            <div className="relative flex min-w-0 flex-1 items-center">
+              <span className="pointer-events-none absolute left-2.5 text-xs text-slate-400">
+                {isNewTab ? '🔍' : '🌐'}
+              </span>
+              <input
+                type="text"
+                value={inputUrl}
+                onChange={(e) => setInputUrl(e.target.value)}
+                placeholder="Search Google or type a URL"
+                className="h-7 w-full rounded-md border border-slate-300 bg-white pl-7 pr-2 text-xs text-slate-900 outline-none transition focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-white/15 dark:bg-white/[0.06] dark:text-slate-100"
+              />
+            </div>
+            <button
+              type="submit"
+              className="h-7 shrink-0 rounded-md bg-brand-600 px-2.5 text-xs font-semibold text-white transition hover:bg-brand-500 active:scale-95"
+            >
+              Go
+            </button>
+          </form>
+        ) : (
+          <div className="flex min-w-0 flex-1 items-center gap-1.5 rounded-md border border-slate-200 bg-white/70 px-2.5 py-1 text-xs text-slate-700 dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-200">
+            <span className="text-xs">{isNewTab ? '🔍' : '🌐'}</span>
+            <span className="truncate font-mono text-[11px]">{url || 'Chrome New Tab'}</span>
+          </div>
+        )}
+
+        {/* Open tab button */}
+        {!isNewTab && (
+          <a
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            title="Open in new window"
+            className="flex h-7 shrink-0 items-center gap-1 rounded-md border border-slate-300 bg-white px-2 text-[11px] font-medium text-slate-700 transition hover:bg-slate-50 active:scale-95 dark:border-white/15 dark:bg-white/[0.06] dark:text-slate-200 dark:hover:bg-white/10"
+          >
+            <span>Open tab</span>
+            <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2.2">
+              <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M15 3h6v6" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M10 14L21 3" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </a>
+        )}
+
+        {/* Zoom controls */}
+        <div className="flex h-7 items-center gap-0.5 rounded-md border border-slate-300 bg-white px-1 dark:border-white/15 dark:bg-white/[0.06]">
+          <button
+            type="button"
+            onClick={handleZoomOut}
+            disabled={zoom <= 50}
+            title="Zoom out"
+            className="grid h-5 w-5 place-items-center rounded text-xs font-bold text-slate-600 transition hover:bg-slate-100 disabled:opacity-30 dark:text-slate-300 dark:hover:bg-white/10"
+            aria-label="Zoom out"
+          >
+            −
+          </button>
+          <button
+            type="button"
+            onClick={handleZoomReset}
+            title="Click to reset zoom to 100%"
+            className="min-w-[36px] px-1 text-center font-mono text-[10px] font-semibold text-slate-700 transition hover:text-brand-600 dark:text-slate-200 dark:hover:text-brand-300"
+          >
+            {zoom}%
+          </button>
+          <button
+            type="button"
+            onClick={handleZoomIn}
+            disabled={zoom >= 250}
+            title="Zoom in"
+            className="grid h-5 w-5 place-items-center rounded text-xs font-bold text-slate-600 transition hover:bg-slate-100 disabled:opacity-30 dark:text-slate-300 dark:hover:bg-white/10"
+            aria-label="Zoom in"
+          >
+            +
+          </button>
+        </div>
+      </div>
+
+      {/* ── Chrome Bookmarks Bar ── */}
+      <div className="flex shrink-0 items-center gap-1 overflow-x-auto border-b border-slate-200/80 bg-slate-50/90 px-2 py-1 text-xs backdrop-blur scrollbar-none dark:border-white/10 dark:bg-ink-900/50">
+        <span className="mr-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 select-none">
+          ⭐ Bookmarks:
+        </span>
+        {bookmarks.map((bm) => (
+          <div
+            key={bm.id}
+            className="group relative flex items-center rounded-md border border-transparent px-2 py-0.5 transition hover:border-slate-300 hover:bg-white dark:hover:border-white/10 dark:hover:bg-white/[0.06]"
+          >
+            <button
+              type="button"
+              onClick={() => {
+                const target = (bm.id === 'google' || bm.url === 'https://www.google.com' || bm.url === 'https://google.com') ? '' : bm.url;
+                if (isStaff) emit('presentationUrl', { url: target });
+                else if (target) window.open(target, '_blank');
+              }}
+              className="flex items-center gap-1 text-[11px] font-medium text-slate-700 dark:text-slate-200"
+              title={bm.url || 'Google / New Tab'}
+            >
+              <span>{bm.icon}</span>
+              <span className="truncate max-w-[100px]">{bm.title}</span>
+            </button>
+            {isStaff && bm.id.startsWith('bm-') && (
+              <button
+                type="button"
+                onClick={(e) => handleDeleteBookmark(bm.id, e)}
+                title="Remove bookmark"
+                className="ml-1 hidden text-slate-400 hover:text-red-500 group-hover:inline-block"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+        ))}
+
+        {isStaff && (
+          <button
+            type="button"
+            onClick={() => {
+              setNewBmUrl(url && !isNewTab ? url : '');
+              setNewBmTitle(name && !isNewTab ? name : '');
+              setShowAddBookmark(true);
+            }}
+            title="Add bookmark"
+            className="flex h-5 items-center gap-0.5 rounded px-1.5 text-[10px] font-semibold text-brand-600 hover:bg-brand-500/10 dark:text-brand-300"
+          >
+            <span>+</span> Add
+          </button>
+        )}
+      </div>
+
+      {/* Add bookmark modal / inline card */}
+      {showAddBookmark && isStaff && (
+        <div className="border-b border-slate-200 bg-white p-2.5 dark:border-white/10 dark:bg-ink-900">
+          <form onSubmit={handleAddBookmarkSubmit} className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-semibold text-slate-700 dark:text-slate-200">New Bookmark:</span>
+            <input
+              type="text"
+              placeholder="Title (e.g. Dribbble)"
+              value={newBmTitle}
+              onChange={(e) => setNewBmTitle(e.target.value)}
+              className="h-7 rounded border border-slate-300 px-2 text-xs outline-none focus:border-brand-500 dark:border-white/15 dark:bg-white/[0.05]"
+            />
+            <input
+              type="text"
+              placeholder="https://..."
+              value={newBmUrl}
+              onChange={(e) => setNewBmUrl(e.target.value)}
+              required
+              className="h-7 min-w-[200px] flex-1 rounded border border-slate-300 px-2 text-xs outline-none focus:border-brand-500 dark:border-white/15 dark:bg-white/[0.05]"
+            />
+            <button
+              type="submit"
+              className="h-7 rounded bg-brand-600 px-2.5 text-xs font-semibold text-white hover:bg-brand-500"
+            >
+              Save
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowAddBookmark(false)}
+              className="h-7 rounded border border-slate-300 px-2 text-xs text-slate-600 hover:bg-slate-100 dark:border-white/15 dark:text-slate-300"
+            >
+              Cancel
+            </button>
+          </form>
+        </div>
+      )}
+
+      {/* Frame Restriction / X-Frame-Options notice */}
+      {!isNewTab && isKnownBlocked && !dismissNotice && (
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-500/25 bg-amber-500/[0.08] px-3 py-2 text-xs text-amber-900 dark:border-amber-500/20 dark:bg-amber-500/15 dark:text-amber-200">
+          <div className="flex items-center gap-2">
+            <span className="text-base shrink-0">⚠️</span>
+            <div>
+              <span className="font-semibold">{name || 'This website'} restricts iframe embedding (X-Frame-Options: sameorigin).</span>
+              <p className="text-[11px] text-amber-700 dark:text-amber-300">
+                Major sites like Dribbble, Google, and GitHub block embedding for security. Open in a new tab or share your screen.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-1.5 ml-auto">
+            <a
+              href={url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 rounded-md bg-amber-600 px-2.5 py-1 text-xs font-semibold text-white shadow-sm transition hover:bg-amber-700 active:scale-95"
+            >
+              <span>Open in Tab</span>
+              <span>↗</span>
+            </a>
+
+            <button
+              type="button"
+              onClick={() => setDismissNotice(true)}
+              className="grid h-5 w-5 place-items-center rounded text-amber-800 opacity-60 hover:opacity-100 dark:text-amber-200"
+              title="Dismiss warning"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Main Content Area: Chrome Google Search or Embedded Website ── */}
+      <div className="relative flex-1 bg-white overflow-hidden">
+        {isNewTab ? (
+          /* Chrome New Tab Page with Google Search & Bookmarks */
+          <div className="flex h-full w-full flex-col items-center justify-center p-6 bg-slate-50 dark:bg-ink-950 overflow-y-auto">
+            {/* Google Wordmark Logo */}
+            <div className="mb-6 flex items-center select-none text-4xl sm:text-5xl font-bold tracking-tight">
+              <span className="text-blue-500">G</span>
+              <span className="text-red-500">o</span>
+              <span className="text-amber-500">o</span>
+              <span className="text-blue-500">g</span>
+              <span className="text-green-500">l</span>
+              <span className="text-red-500">e</span>
+            </div>
+
+            {/* Google Search Box */}
+            <div className="w-full max-w-xl mb-7">
+              {isStaff ? (
+                <form onSubmit={handleCenterSearchSubmit} className="relative flex items-center">
+                  <span className="pointer-events-none absolute left-4 text-slate-400 text-sm">🔍</span>
+                  <input
+                    type="text"
+                    value={centerSearch}
+                    onChange={(e) => setCenterSearch(e.target.value)}
+                    placeholder="Search Google or type a URL"
+                    className="h-12 w-full rounded-full border border-slate-200 bg-white pl-11 pr-24 text-sm text-slate-900 shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 dark:border-white/10 dark:bg-ink-900 dark:text-slate-100"
+                    autoFocus
+                  />
+                  <button
+                    type="submit"
+                    className="absolute right-2 rounded-full bg-brand-600 px-4 py-1.5 text-xs font-semibold text-white shadow transition hover:bg-brand-500 active:scale-95"
+                  >
+                    Search
+                  </button>
+                </form>
+              ) : (
+                <div className="flex h-12 w-full items-center rounded-full border border-slate-200 bg-white/80 px-4 text-sm text-slate-500 shadow-sm dark:border-white/10 dark:bg-ink-900/80 dark:text-slate-400">
+                  <span className="mr-2.5">🔍</span>
+                  <span>Host will search Google or open a bookmark</span>
+                </div>
+              )}
+            </div>
+
+            {/* Quick Shortcuts / Bookmarks Grid */}
+            <div className="w-full max-w-xl">
+              <div className="mb-3 text-center text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                Bookmarks & Shortcuts
+              </div>
+              <div className="grid grid-cols-3 sm:grid-cols-6 gap-2.5">
+                {bookmarks.map((bm) => (
+                  <button
+                    key={bm.id}
+                    type="button"
+                    onClick={() => {
+                      const target = (bm.id === 'google' || bm.url === 'https://www.google.com' || bm.url === 'https://google.com') ? '' : bm.url;
+                      if (isStaff) emit('presentationUrl', { url: target });
+                      else if (target) window.open(target, '_blank');
+                    }}
+                    className="group flex flex-col items-center justify-center p-3 rounded-xl border border-slate-200/80 bg-white shadow-sm transition hover:border-brand-500/40 hover:shadow-md hover:-translate-y-0.5 active:scale-95 dark:border-white/10 dark:bg-ink-900"
+                    title={bm.url || 'Google / New Tab'}
+                  >
+                    <span className="grid h-10 w-10 place-items-center rounded-full bg-slate-100 text-xl group-hover:bg-brand-500/10 transition dark:bg-white/[0.05]">
+                      {bm.icon}
+                    </span>
+                    <span className="mt-2 text-xs font-medium text-slate-700 truncate max-w-[80px] dark:text-slate-300">
+                      {bm.title}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        ) : isSearch ? (
+          /* Chrome Google Search Results Page right on stage */
+          <div className="flex h-full w-full flex-col bg-white dark:bg-ink-950 overflow-y-auto">
+            {/* Google Search sub-header */}
+            <div className="border-b border-slate-200/80 bg-slate-50/70 px-4 sm:px-8 py-3 dark:border-white/10 dark:bg-ink-900/50">
+              <div className="flex flex-wrap items-center gap-3">
+                {/* Google Mini Logo */}
+                <button
+                  type="button"
+                  onClick={handleGoHome}
+                  className="flex items-center text-xl font-bold tracking-tight select-none"
+                  title="Google Home"
+                >
+                  <span className="text-blue-500">G</span>
+                  <span className="text-red-500">o</span>
+                  <span className="text-amber-500">o</span>
+                  <span className="text-blue-500">g</span>
+                  <span className="text-green-500">l</span>
+                  <span className="text-red-500">e</span>
+                </button>
+
+                {/* Search Bar */}
+                {isStaff ? (
+                  <form onSubmit={handleCenterSearchSubmit} className="relative flex flex-1 max-w-xl items-center">
+                    <input
+                      type="text"
+                      value={centerSearch}
+                      onChange={(e) => setCenterSearch(e.target.value)}
+                      placeholder="Search Google or type a URL"
+                      className="h-9 w-full rounded-full border border-slate-300 bg-white pl-4 pr-20 text-xs text-slate-900 shadow-sm outline-none transition focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-white/15 dark:bg-ink-900 dark:text-slate-100"
+                    />
+                    <button
+                      type="submit"
+                      className="absolute right-1.5 h-6 rounded-full bg-brand-600 px-3 text-[11px] font-semibold text-white shadow-sm hover:bg-brand-500"
+                    >
+                      Search
+                    </button>
+                  </form>
+                ) : (
+                  <div className="flex h-9 flex-1 max-w-xl items-center rounded-full border border-slate-200 bg-white/70 px-4 text-xs text-slate-600 dark:border-white/10 dark:bg-ink-900/70 dark:text-slate-300">
+                    <span className="mr-2">🔍</span>
+                    <span className="truncate">{searchQuery}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Search Category Tabs */}
+              <div className="mt-2.5 flex items-center gap-4 text-xs font-medium text-slate-500 dark:text-slate-400">
+                <span className="border-b-2 border-brand-600 pb-1 font-semibold text-brand-600 dark:border-brand-400 dark:text-brand-400">
+                  All
+                </span>
+                <span className="pb-1 text-slate-400 hover:text-slate-600 cursor-pointer">Images</span>
+                <span className="pb-1 text-slate-400 hover:text-slate-600 cursor-pointer">News</span>
+                <span className="pb-1 text-slate-400 hover:text-slate-600 cursor-pointer">Videos</span>
+              </div>
+            </div>
+
+            {/* Results container */}
+            <div className="flex-1 p-4 sm:p-8 max-w-3xl">
+              <div className="mb-4 text-[11px] text-slate-400 dark:text-slate-500">
+                {searchLoading
+                  ? 'Searching Google...'
+                  : `About ${searchResults.length} results for "${searchQuery}"`}
+              </div>
+
+              {searchLoading && (
+                <div className="space-y-5">
+                  {[1, 2, 3, 4].map((i) => (
+                    <div key={i} className="animate-pulse space-y-2">
+                      <div className="h-3 w-40 rounded bg-slate-200 dark:bg-white/10" />
+                      <div className="h-5 w-72 rounded bg-slate-200 dark:bg-white/10" />
+                      <div className="h-3 w-full rounded bg-slate-200 dark:bg-white/10" />
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {!searchLoading && searchError && (
+                <div className="rounded-lg border border-red-500/20 bg-red-500/10 p-4 text-xs text-red-600 dark:text-red-400">
+                  <p className="font-semibold">Search could not be completed</p>
+                  <p className="mt-1">{searchError}</p>
+                </div>
+              )}
+
+              {!searchLoading && !searchError && searchResults.length === 0 && (
+                <div className="py-8 text-center text-xs text-slate-500">
+                  No results found for <span className="font-semibold text-slate-700 dark:text-slate-200">"{searchQuery}"</span>. Try typing a direct website URL (e.g. dribbble.com).
+                </div>
+              )}
+
+              {!searchLoading && searchResults.length > 0 && (
+                <div className="space-y-6">
+                  {searchResults.map((res, idx) => (
+                    <div key={idx} className="group">
+                      {/* URL line */}
+                      <div className="flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                        <span className="text-xs">🌐</span>
+                        <span className="font-mono truncate">{res.displayUrl}</span>
+                      </div>
+
+                      {/* Title Link */}
+                      <div className="mt-0.5">
+                        {isStaff ? (
+                          <button
+                            type="button"
+                            onClick={() => navigateTo(res.url)}
+                            className="text-left text-base sm:text-lg font-medium text-blue-600 hover:underline dark:text-blue-400"
+                          >
+                            {res.title}
+                          </button>
+                        ) : (
+                          <span className="text-base sm:text-lg font-medium text-blue-600 dark:text-blue-400">
+                            {res.title}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Snippet */}
+                      <p className="mt-1 text-xs leading-relaxed text-slate-600 dark:text-slate-300">
+                        {res.snippet}
+                      </p>
+
+                      {/* Action buttons */}
+                      <div className="mt-2 flex items-center gap-2">
+                        {isStaff && (
+                          <button
+                            type="button"
+                            onClick={() => navigateTo(res.url)}
+                            className="inline-flex items-center gap-1 rounded bg-brand-50 px-2 py-0.5 text-[11px] font-semibold text-brand-600 hover:bg-brand-100 dark:bg-brand-500/15 dark:text-brand-300"
+                          >
+                            <span>Present this website</span>
+                            <span>➔</span>
+                          </button>
+                        )}
+                        <a
+                          href={res.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-[11px] text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                        >
+                          <span>Open in Tab</span>
+                          <span>↗</span>
+                        </a>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          /* Live Embedded Website or Fallback Card */
+          <>
+            {/* Background fallback card visible if iframe refuses to display */}
+            {isKnownBlocked && mode === 'direct' && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center bg-slate-50 dark:bg-ink-950 pointer-events-none">
+                <span className="text-4xl mb-3">🌐</span>
+                <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+                  {name || 'Website'} set X-Frame-Options to SAMEORIGIN
+                </h3>
+                <p className="mt-1 max-w-md text-xs text-slate-500 dark:text-slate-400">
+                  The browser prevented displaying {url} inside a frame because of the website’s security policy.
+                </p>
+                <div className="mt-4 flex flex-wrap gap-2 pointer-events-auto">
+                  <a
+                    href={url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 rounded-md bg-brand-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-brand-500"
+                  >
+                    Open {name || 'Website'} in New Window ↗
+                  </a>
+                  {isStaff && onShareScreen && (
+                    <button
+                      type="button"
+                      onClick={onShareScreen}
+                      className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 dark:border-white/10 dark:bg-white/[0.06] dark:text-slate-200"
+                    >
+                      Share Window via Screen Share 🖥️
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
+            <div className="relative h-full w-full overflow-hidden">
+              <iframe
+                key={`${iframeKey}-${mode}`}
+                src={iframeSrc}
+                title={name || 'Website'}
+                className="relative z-10 border-0"
+                style={{
+                  width: `${100 * (100 / zoom)}%`,
+                  height: `${100 * (100 / zoom)}%`,
+                  transform: `scale(${zoom / 100})`,
+                  transformOrigin: '0 0',
+                }}
+                sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-presentation allow-downloads"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              />
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /* ── Annotation canvas ─────────────────────────────────────── */
 
 function AnnotationLayer({
@@ -818,7 +1611,7 @@ function AnnotationLayer({
 
 /* ── Stage ─────────────────────────────────────────────────── */
 
-export function PresentationStage({ socket, isStaff, onToggleFullscreen }: PresentationStageProps) {
+export function PresentationStage({ socket, isStaff, onToggleFullscreen, onShareScreen }: PresentationStageProps) {
   const presentation = useRoomStore((s) => s.presentation);
   const allowParticipantFullscreen = useRoomStore((s) => s.allowParticipantFullscreen);
   const isFullscreen = useIsFullscreen();
@@ -941,6 +1734,15 @@ export function PresentationStage({ socket, isStaff, onToggleFullscreen }: Prese
                   emit={emit}
                 />
               )}
+              {kind === 'browser' && (
+                <BrowserView
+                  url={url}
+                  name={name}
+                  isStaff={isStaff}
+                  emit={emit}
+                  onShareScreen={onShareScreen}
+                />
+              )}
 
               <AnnotationLayer
                 strokes={presentation.annotations}
@@ -963,7 +1765,7 @@ export function PresentationStage({ socket, isStaff, onToggleFullscreen }: Prese
             </span>
 
             {/* page navigation (for multi-page decks / PDFs) */}
-            {kind !== 'video' && kind !== 'image' && (
+            {kind !== 'video' && kind !== 'image' && kind !== 'browser' && (
               <div className="flex items-center gap-0.5 rounded-md border border-slate-200 bg-slate-50 p-0.5 dark:border-white/10 dark:bg-white/[0.04]">
                 <button
                   type="button"
@@ -1001,6 +1803,11 @@ export function PresentationStage({ socket, isStaff, onToggleFullscreen }: Prese
             {kind === 'image' && (
               <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-slate-600 dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-300">
                 🖼️ Image
+              </span>
+            )}
+            {kind === 'browser' && (
+              <span className="rounded-md border border-sky-500/30 bg-sky-500/10 px-2 py-0.5 text-[10px] font-semibold text-sky-600 dark:text-sky-300">
+                🌐 Browser
               </span>
             )}
 
@@ -1122,7 +1929,7 @@ export function PresentationStage({ socket, isStaff, onToggleFullscreen }: Prese
         )}
 
         {/* Floating participant overlays (no control bar) */}
-        {!isStaff && pageCount > 1 && kind !== 'video' && kind !== 'image' && (
+        {!isStaff && pageCount > 1 && kind !== 'video' && kind !== 'image' && kind !== 'browser' && (
           <div className="pointer-events-none absolute bottom-3 left-3 z-20 rounded-md bg-black/60 px-2.5 py-1 text-[11px] font-semibold text-white/90 shadow-md backdrop-blur">
             {page} / {pageCount}
           </div>

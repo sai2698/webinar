@@ -50,11 +50,12 @@ import { adminAnalyticsRouter, publicAnalyticsRouter } from './modules/analytics
 import { adminAutomationRouter } from './modules/automation/routes.js';
 import { uploadRouter, getUploadsDir } from './modules/uploads/routes.js';
 import { adminAttachmentRouter } from './modules/attachments/routes.js';
+import { proxyRouter } from './modules/proxy/routes.js';
 
 const app = express();
 
 app.set('trust proxy', 1);
-app.use(helmet({ crossOriginResourcePolicy: false }));
+app.use(helmet({ crossOriginResourcePolicy: false, crossOriginOpenerPolicy: false }));
 app.use(
   cors({
     origin: (origin, callback) =>
@@ -112,6 +113,7 @@ app.get('/api/rtc-config', (_req, res) => {
 });
 
 /* ── routes ────────────────────────────────────────────────── */
+app.use('/api/proxy-site', proxyRouter);
 app.use('/api/auth', authRouter);
 app.use('/api/webinars', publicWebinarRouter);
 app.use('/api/webinars', registrationRouter);
