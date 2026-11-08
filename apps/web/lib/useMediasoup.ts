@@ -691,6 +691,17 @@ export function useMediasoup({ slug, token, onJoined, onError }: UseMediasoupOpt
       store.getState().set({ presentation: { ...current, annotations } });
     });
 
+    socket.on('whiteboardViewportChanged', ({ viewport }) => {
+      const current = store.getState().presentation;
+      if (!current) return;
+      store.getState().set({
+        presentation: {
+          ...current,
+          whiteboardViewport: viewport,
+        },
+      });
+    });
+
     socket.on('presentationVideoAction', ({ action, currentTime, timestamp }) => {
       const current = store.getState().presentation;
       if (!current) return;

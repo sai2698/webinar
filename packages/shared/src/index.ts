@@ -633,7 +633,7 @@ export type MediaSource = 'camera' | 'microphone' | 'screen';
  * ──────────────────────────────────────────────────────────── */
 
 /** Which viewer the client mounts for an uploaded file. */
-export type AttachmentKind = 'pdf' | 'pptx' | 'image' | 'video' | 'browser';
+export type AttachmentKind = 'pdf' | 'pptx' | 'image' | 'video' | 'browser' | 'whiteboard';
 
 /** A file the host uploaded to present from inside the room. */
 export interface AttachmentInfo {
@@ -658,17 +658,33 @@ export interface AttachmentInfo {
  * would land in the wrong place for everyone but the person who drew them.
  * Normalised points scale with whatever box the viewer renders into.
  */
+export type AnnotationTool =
+  | 'pen'
+  | 'highlighter'
+  | 'eraser'
+  | 'rectangle'
+  | 'circle'
+  | 'arrow'
+  | 'line'
+  | 'text';
+
 export interface AnnotationStroke {
   id: string;
-  tool: 'pen' | 'highlighter';
+  tool: AnnotationTool;
   /** CSS colour, e.g. `#f43f5e`. */
   color: string;
-  /** Stroke width as a fraction of the page's shorter side. */
+  /** Stroke width as a fraction of the page's shorter side, or world units for whiteboard. */
   width: number;
-  /** Flat [x0, y0, x1, y1, ...] in 0..1 space. */
+  /** Flat [x0, y0, x1, y1, ...] in 0..1 space (or world space for whiteboard). */
   points: number[];
   /** Page/slide this stroke belongs to, so strokes do not bleed across pages. */
   page: number;
+  /** Text content for 'text' tool */
+  text?: string;
+  /** Fill color for closed shapes like rectangle/circle */
+  fillColor?: string;
+  /** Font size in pixels for text tool */
+  fontSize?: number;
 }
 
 /**
@@ -698,6 +714,8 @@ export interface PresentationState {
   videoCurrentTime?: number;
   /** For video presentations: timestamp (epoch ms) when current time was updated */
   videoUpdatedAt?: number;
+  /** For whiteboard presentations: pan and zoom viewport */
+  whiteboardViewport?: { panX: number; panY: number; zoom: number };
 }
 
 export interface PeerInfo {
@@ -999,6 +1017,8 @@ export interface ClientToServerEvents {
   ) => void;
   /** Staff only — navigates to a new URL during a browser/website presentation. */
   presentationUrl: (payload: { url: string }, ack?: (res: Ack) => void) => void;
+  /** Staff only — syncs infinite canvas whiteboard viewport (pan & zoom) to room. */
+  whiteboardViewport: (payload: { panX: number; panY: number; zoom: number }, ack?: (res: Ack) => void) => void;
   /** Staff only — mutes every non-staff microphone at once. */
   muteAll: (ack: (res: Ack<{ muted: number }>) => void) => void;
 
@@ -1139,6 +1159,8 @@ export interface ServerToClientEvents {
     currentTime: number;
     timestamp: number;
   }) => void;
+  /** Infinite canvas whiteboard viewport was updated by presenter. */
+  whiteboardViewportChanged: (payload: { viewport: { panX: number; panY: number; zoom: number } }) => void;
 
   /** Sent to a speaker when the host mutes the room — the client pauses its mic. */
   forceMute: () => void;

@@ -331,6 +331,19 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
     });
   };
 
+  const handlePresentWhiteboard = () => {
+    const sock = socket.current;
+    if (!sock) return;
+    if (presentation?.kind === 'whiteboard') return;
+    sock.emit('presentationStart', {
+      attachmentId: 'whiteboard-' + Date.now(),
+      name: 'Infinite Whiteboard',
+      url: '',
+      kind: 'whiteboard',
+      pageCount: 1,
+    });
+  };
+
   const handleStopPresenting = () => {
     socket.current?.emit('presentationStop', () => {});
   };
@@ -1937,10 +1950,10 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
                       </span>
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-[11px] font-semibold tracking-tight text-slate-900 dark:text-slate-100">
-                          {presentation.kind === 'browser' ? `🌐 ${presentation.name}` : presentation.name}
+                          {presentation.kind === 'browser' ? `🌐 ${presentation.name}` : presentation.kind === 'whiteboard' ? '📝 Infinite Whiteboard' : presentation.name}
                         </p>
                         <p className="text-[10px] text-slate-500 dark:text-slate-400">
-                          {presentation.kind === 'browser' ? 'Website on stage' : 'On stage'}
+                          {presentation.kind === 'browser' ? 'Website on stage' : presentation.kind === 'whiteboard' ? 'Interactive canvas on stage' : 'On stage'}
                           {presentation.kind !== 'browser' && presentation.pageCount > 0
                             ? ` · page ${presentation.page} of ${presentation.pageCount}`
                             : ''}
@@ -1988,6 +2001,33 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
                     <p className="mt-1.5 text-[10px] text-slate-500 dark:text-slate-400">
                       Leave blank to open Chrome New Tab with Google Search and bookmarks, or enter any web URL.
                     </p>
+                  </div>
+
+                  {/* ── present whiteboard / infinite canvas ── */}
+                  <div className="rounded-lg border border-slate-200/80 bg-slate-50/50 p-2.5 dark:border-white/10 dark:bg-white/[0.02]">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className="flex items-center gap-1.5 text-[11px] font-semibold tracking-tight text-slate-900 dark:text-slate-100">
+                          <span className="text-sm">📝</span> Infinite Whiteboard
+                        </span>
+                        <p className="mt-0.5 text-[10px] text-slate-500 dark:text-slate-400">
+                          Explain ideas on a shared live canvas with pen, shapes, arrows & text.
+                        </p>
+                      </div>
+                      {presentation?.kind === 'whiteboard' ? (
+                        <span className="rounded bg-mint-500/15 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-mint-600 dark:text-mint-400">
+                          Active
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={handlePresentWhiteboard}
+                          className="h-8 shrink-0 rounded-md bg-brand-600 px-3 text-xs font-semibold text-white transition hover:bg-brand-500 active:scale-95 shadow-sm"
+                        >
+                          Open Whiteboard
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   <label

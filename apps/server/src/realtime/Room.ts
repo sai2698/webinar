@@ -1214,6 +1214,12 @@ export class Room {
     } as never);
   }
 
+  setWhiteboardViewport(viewport: { panX: number; panY: number; zoom: number }): void {
+    if (!this.presentation || this.presentation.kind !== 'whiteboard') return;
+    this.presentation.whiteboardViewport = viewport;
+    this.io.to(this.roomName()).emit('whiteboardViewportChanged', { viewport });
+  }
+
   setPresentationUrl(url: string): void {
     if (!this.presentation) throw new Error('Nothing is being presented');
     this.presentation.url = url;

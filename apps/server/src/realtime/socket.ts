@@ -980,6 +980,30 @@ export function registerSocketHandlers(io: Server) {
       }
     });
 
+    socket.on('whiteboardViewport', (payload, ack) => {
+      const c = requirePeer();
+      if (!c) return ackErr(ack, 'Not in a room');
+      const no = denied(c.peer, 'screenshare');
+      if (no) return ackErr(ack, no);
+      try {
+        if (
+          payload &&
+          typeof payload.panX === 'number' &&
+          typeof payload.panY === 'number' &&
+          typeof payload.zoom === 'number'
+        ) {
+          c.room.setWhiteboardViewport({
+            panX: payload.panX,
+            panY: payload.panY,
+            zoom: payload.zoom,
+          });
+        }
+        ackOk(ack);
+      } catch (err) {
+        ackErr(ack, err instanceof Error ? err.message : 'Could not sync viewport');
+      }
+    });
+
     socket.on('presentationAnnotate', (payload, ack) => {
       const c = requirePeer();
       if (!c) return ackErr(ack, 'Not in a room');

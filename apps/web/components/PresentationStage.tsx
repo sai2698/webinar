@@ -7,6 +7,7 @@ import { useRoomStore } from '@/store/roomStore';
 import { useIsFullscreen } from '@/lib/useRoomUi';
 import { VideoFilmstrip } from './VideoGrid';
 import { getApiUrl } from '@/lib/api';
+import { WhiteboardView } from './WhiteboardView';
 
 /**
  * The presentation stage.
@@ -1699,7 +1700,17 @@ export function PresentationStage({ socket, isStaff, onToggleFullscreen, onShare
        * off-screen. min-h-0 lets flex actually shrink it.
        */}
       <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg bg-slate-100 ring-1 ring-inset ring-slate-200 dark:bg-ink-950 dark:ring-white/10">
-        {/* ── page surface ── */}
+        {kind === 'whiteboard' ? (
+          <WhiteboardView
+            presentation={presentation}
+            isStaff={isStaff}
+            emit={emit}
+            onToggleFullscreen={onToggleFullscreen}
+            canFullscreen={canFullscreen}
+          />
+        ) : (
+          <>
+            {/* ── page surface ── */}
         <div className="relative min-h-0 flex-1 overflow-hidden bg-white dark:bg-ink-900">
           <div className="absolute inset-0 grid place-items-center p-2 sm:p-3">
             {/*
@@ -1951,6 +1962,8 @@ export function PresentationStage({ socket, isStaff, onToggleFullscreen, onShare
               )}
             </svg>
           </button>
+        )}
+          </>
         )}
       </div>
 
