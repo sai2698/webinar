@@ -5,7 +5,7 @@ import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
 import { Server as SocketServer } from 'socket.io';
 import { env, allowedOrigins, isAllowedOrigin } from './config/env.js';
-import { iceServers } from './config/mediasoup.js';
+import { iceServers, announcedIp } from './config/mediasoup.js';
 import { logger } from './utils/logger.js';
 import { errorHandler, notFoundHandler } from './middleware/error.js';
 import { authRouter } from './modules/auth/routes.js';
@@ -55,7 +55,13 @@ import { proxyRouter } from './modules/proxy/routes.js';
 const app = express();
 
 app.set('trust proxy', 1);
-app.use(helmet({ crossOriginResourcePolicy: false, crossOriginOpenerPolicy: false }));
+// Bypass helmet for proxy-site so framed websites are not blocked by SAMEORIGIN or CSP frame-ancestors
+app.use((req, res, next) => {
+  if (req.path.startsWith('/api/proxy-site')) {
+    return next();
+  }
+  return helmet({ crossOriginResourcePolicy: false, crossOriginOpenerPolicy: false })(req, res, next);
+});
 app.use(
   cors({
     origin: (origin, callback) =>
@@ -110,6 +116,100 @@ app.get('/api/time', (_req, res) => {
 /** ICE server config for the browser. */
 app.get('/api/rtc-config', (_req, res) => {
   res.json({ iceServers: iceServers() });
+});
+
+/** WebRTC Production Diagnostics & Traces */
+app.get('/api/health/webrtc', async (_req, res) => {
+  try {
+    const rooms = roomManager.all;
+    const roomsData = [];
+
+    for (const r of rooms) {
+      const peersData = [];
+      for (const p of r.peers.values()) {
+        const sendStats: any[] = p.sendTransport ? await p.sendTransport.getStats().catch(() => []) : [];
+        const recvStats: any[] = p.recvTransport ? await p.recvTransport.getStats().catch(() => []) : [];
+
+        // Check protocol from transport stats
+        const sendWebrtc = sendStats.find((st: any) => st.type === 'webrtc-transport');
+        const recvWebrtc = recvStats.find((st: any) => st.type === 'webrtc-transport');
+        const sendProto = sendWebrtc?.protocol || 'unknown';
+        const recvProto = recvWebrtc?.protocol || 'unknown';
+
+        const producersData = [];
+        for (const [id, prod] of p.producers) {
+          const stats = await prod.getStats().catch(() => []);
+          producersData.push({
+            id,
+            kind: prod.kind,
+            type: prod.type,
+            paused: prod.paused,
+            stats,
+          });
+        }
+
+        const consumersData = [];
+        for (const [id, cons] of p.consumers) {
+          const stats = await cons.getStats().catch(() => []);
+          consumersData.push({
+            id,
+            kind: cons.kind,
+            type: cons.type,
+            paused: cons.paused,
+            producerPaused: cons.producerPaused,
+            score: cons.score,
+            stats,
+          });
+        }
+
+        peersData.push({
+          peerId: p.peerId,
+          name: p.name,
+          role: p.role,
+          sendTransport: {
+            id: p.sendTransport?.id,
+            protocol: sendProto,
+            isTcpWarning: sendProto === 'tcp',
+            bytesSent: sendWebrtc?.bytesSent,
+            bytesReceived: sendWebrtc?.bytesReceived,
+            stats: sendStats,
+          },
+          recvTransport: {
+            id: p.recvTransport?.id,
+            protocol: recvProto,
+            isTcpWarning: recvProto === 'tcp',
+            bytesSent: recvWebrtc?.bytesSent,
+            bytesReceived: recvWebrtc?.bytesReceived,
+            stats: recvStats,
+          },
+          producers: producersData,
+          consumers: consumersData,
+        });
+      }
+
+      roomsData.push({
+        roomName: r.roomName(),
+        peersCount: r.peers.size,
+        peers: peersData,
+      });
+    }
+
+    res.json({
+      ok: true,
+      timestamp: new Date().toISOString(),
+      announcedIp,
+      isLoopbackWarning: announcedIp === '127.0.0.1',
+      warning:
+        announcedIp === '127.0.0.1'
+          ? 'MEDIASOUP_ANNOUNCED_IP is 127.0.0.1. Remote clients outside localhost will fail to exchange media!'
+          : null,
+      workers: workerPool.size,
+      rtcPorts: { min: env.RTC_MIN_PORT, max: env.RTC_MAX_PORT },
+      rooms: roomsData,
+    });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: String(err) });
+  }
 });
 
 /* ── routes ────────────────────────────────────────────────── */

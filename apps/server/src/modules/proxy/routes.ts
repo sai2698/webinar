@@ -117,10 +117,20 @@ proxyRouter.get('/', async (req, res) => {
     if (contentType.includes('text/html')) {
       let html = await response.text();
 
-      // Inject <base href="..."> and link-syncing script
+      // Strip meta tags that enforce CSP or X-Frame-Options within the document itself
+      html = html.replace(/<meta[^>]*http-equiv=["']?(content-security-policy|x-frame-options)["']?[^>]*>/gi, '');
+
+      // Inject <base href="...">, frame-busting protection, and link-syncing script
       const baseTag = `<base href="${response.url}">`;
-      const syncScript = `<script>
+      const antiBustAndSyncScript = `<script>
 (function() {
+  // Prevent frame-busting scripts from hijacking or breaking the stage
+  try {
+    Object.defineProperty(window, 'top', { get: function() { return window.self; }, configurable: true });
+    Object.defineProperty(window, 'parent', { get: function() { return window.self; }, configurable: true });
+  } catch (err) {}
+
+  // Intercept link clicks to sync across all webinar attendees
   document.addEventListener('click', function(e) {
     var a = e.target.closest('a');
     if (a && a.href && !a.href.startsWith('javascript:') && !a.href.startsWith('#')) {
@@ -134,9 +144,9 @@ proxyRouter.get('/', async (req, res) => {
 </script>`;
 
       if (/<head[^>]*>/i.test(html)) {
-        html = html.replace(/<head[^>]*>/i, `$&${baseTag}${syncScript}`);
+        html = html.replace(/<head[^>]*>/i, `$&${baseTag}${antiBustAndSyncScript}`);
       } else {
-        html = `${baseTag}${syncScript}${html}`;
+        html = `${baseTag}${antiBustAndSyncScript}${html}`;
       }
 
       return res.send(html);

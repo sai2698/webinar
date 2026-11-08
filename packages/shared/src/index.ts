@@ -911,6 +911,12 @@ export interface ClientToServerEvents {
     ack: (res: Ack) => void
   ) => void;
 
+  /** Requests an immediate I-frame (keyframe) to unfreeze a stalled video stream. */
+  requestKeyFrame: (
+    payload: { consumerId: string },
+    ack?: (res: Ack) => void
+  ) => void;
+
   /**
    * Pins a consumer to one simulcast layer, or restores automatic selection
    * when `spatialLayer` is null. Layer choice is server-side in mediasoup 3.25+.

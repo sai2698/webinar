@@ -28,6 +28,7 @@ import { endpoints } from '@/lib/api';
 import { roomToken } from '@/lib/session';
 import { useFullscreen } from '@/lib/useRoomUi';
 import { PremiereStage } from '@/components/PremiereStage';
+import { WebRtcDiagnosticsModal, WebRtcHealthBadge } from '@/components/WebRtcDiagnosticsModal';
 
 type Tab = 'chat' | 'people' | 'qa' | 'polls';
 
@@ -43,6 +44,7 @@ export default function RoomPage() {
   const [toast, setToast] = useState<string | null>(null);
   const [localPremiereRecordingId, setLocalPremiereRecordingId] = useState<string | null>(null);
   const [localPremiereStartedAt, setLocalPremiereStartedAt] = useState<string | null>(null);
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
   const stageRef = useRef<HTMLDivElement | null>(null);
   const { isFullscreen, toggle: toggleFullscreen } = useFullscreen(stageRef);
 
@@ -252,7 +254,12 @@ export default function RoomPage() {
           </div>
           <p className="text-sm text-slate-400">Connecting to the live room…</p>
         </div>
-      </main>
+        <WebRtcDiagnosticsModal
+        socket={socket}
+        isOpen={showDiagnostics}
+        onClose={() => setShowDiagnostics(false)}
+      />
+    </main>
     );
   }
 
@@ -360,6 +367,9 @@ export default function RoomPage() {
               </svg>
               {viewerCount}
             </span>
+          )}
+          {isStaff && (
+            <WebRtcHealthBadge socket={socket} onClick={() => setShowDiagnostics(true)} />
           )}
           {isStaff && <HostPanel socket={socket} />}
           <ThemeToggle />

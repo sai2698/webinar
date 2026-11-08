@@ -291,7 +291,15 @@ export function useMediasoup({ slug, token, onJoined, onError }: UseMediasoupOpt
          * by scaling one stream instead of switching between three.
          */
         ...(kind === 'video'
-          ? { codecOptions: { videoGoogleStartBitrate: 1000 } }
+          ? {
+              encodings: [
+                {
+                  maxBitrate: source === 'screen' ? 1_800_000 : 750_000,
+                  maxFramerate: source === 'screen' ? 30 : 25,
+                },
+              ],
+              codecOptions: { videoGoogleStartBitrate: 600 },
+            }
           : {}),
       });
       producersRef.current.set(producer.id, producer);
@@ -1695,6 +1703,11 @@ export function useMediasoup({ slug, token, onJoined, onError }: UseMediasoupOpt
     setFrameRate,
     setVideoFit,
     setMirror,
+    requestKeyFrame: (consumerId: string) => {
+      socketRef.current?.emit('requestKeyFrame', { consumerId }, () => {});
+    },
+    sendTransport: sendTransportRef,
+    recvTransport: recvTransportRef,
     socket: socketRef,
     producers: producersRef,
   };

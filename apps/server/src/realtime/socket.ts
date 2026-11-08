@@ -569,9 +569,28 @@ export function registerSocketHandlers(io: Server) {
       if (!consumer) return ackErr(ack, 'Consumer not found');
       try {
         await consumer.resume();
+        if (consumer.kind === 'video') {
+          consumer.requestKeyFrame().catch(() => {});
+        }
         ackOk(ack);
       } catch (err) {
         ackErr(ack, err instanceof Error ? err.message : 'Resume failed');
+      }
+    });
+
+    socket.on('requestKeyFrame', async (payload, ack) => {
+      const c = requirePeer();
+      if (!c) return ackErr(ack, 'Not in a room');
+      const consumer = c.peer.consumers.get(payload?.consumerId);
+      if (consumer && consumer.kind === 'video') {
+        try {
+          await consumer.requestKeyFrame();
+          ackOk(ack);
+        } catch {
+          ackErr(ack, 'Could not request keyframe');
+        }
+      } else {
+        ackErr(ack, 'Consumer not found');
       }
     });
 
