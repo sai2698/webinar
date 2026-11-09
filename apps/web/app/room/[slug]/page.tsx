@@ -254,12 +254,7 @@ export default function RoomPage() {
           </div>
           <p className="text-sm text-slate-400">Connecting to the live room…</p>
         </div>
-        <WebRtcDiagnosticsModal
-        socket={socket}
-        isOpen={showDiagnostics}
-        onClose={() => setShowDiagnostics(false)}
-      />
-    </main>
+      </main>
     );
   }
 
@@ -516,6 +511,17 @@ export default function RoomPage() {
       <QuizModal socket={socket} />
       <PollModal socket={socket} />
       <AudioRenderer />
+
+      {/*
+       * The diagnostics modal lives here, in the mounted room, not in the
+       * "connecting" branch — it used to be rendered only while the room was
+       * still loading, so clicking the health badge after joining did nothing.
+       */}
+      <WebRtcDiagnosticsModal
+        socket={socket}
+        isOpen={showDiagnostics}
+        onClose={() => setShowDiagnostics(false)}
+      />
 
       <MediaRequestPrompt
         onAccept={(kind) => {

@@ -29,6 +29,10 @@ dev.db-wal
 *.db-journal
 *.db-shm
 *.db-wal
+*db.bak
+*db.bak-*
+*.db.bak
+*.db.bak-*
 
 # Recorded media & captures (explicit so src/modules/recordings is NOT ignored)
 /recordings/

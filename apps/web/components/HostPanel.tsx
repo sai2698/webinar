@@ -335,13 +335,26 @@ export function HostPanel({ socket }: { socket: React.RefObject<Socket | null> }
     const sock = socket.current;
     if (!sock) return;
     if (presentation?.kind === 'whiteboard') return;
-    sock.emit('presentationStart', {
-      attachmentId: 'whiteboard-' + Date.now(),
-      name: 'Infinite Whiteboard',
-      url: '',
-      kind: 'whiteboard',
-      pageCount: 1,
-    });
+    /*
+     * The whiteboard has no file behind it, so `url` is intentionally empty.
+     * The ack callback is not optional: without it a server-side rejection
+     * (permissions, room state) would fail completely silently.
+     */
+    sock.emit(
+      'presentationStart',
+      {
+        attachmentId: 'whiteboard-' + Date.now(),
+        name: 'Infinite Whiteboard',
+        url: '',
+        kind: 'whiteboard',
+        pageCount: 1,
+      },
+      (res: { ok: boolean; error?: string }) => {
+        if (!res?.ok) {
+          setAttachmentError(res?.error ?? 'Could not start the whiteboard');
+        }
+      }
+    );
   };
 
   const handleStopPresenting = () => {

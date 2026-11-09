@@ -35,6 +35,17 @@ export function WhiteboardView({
 }: WhiteboardViewProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const toolbarRef = useRef<HTMLDivElement | null>(null);
+
+  /*
+   * The toolbar is a single row that can be wider than the stage. When it
+   * overflows we need to tell the user there is more to the right, otherwise
+   * the trailing controls (undo / clear / zoom) look like they do not exist.
+   */
+  const [toolbarOverflow, setToolbarOverflow] = useState({
+    left: false,
+    right: false,
+  });
 
   // Canvas Viewport State (pan & zoom)
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -302,6 +313,52 @@ export function WhiteboardView({
   useEffect(() => {
     redrawCanvas();
   }, [redrawCanvas]);
+
+  /*
+   * Toolbar overflow tracking + wheel-to-horizontal scrolling.
+   *
+   * A horizontal-only scroll container ignores a plain mouse wheel, so on a
+   * narrow stage the controls past the right edge were effectively
+   * unreachable. Translating vertical wheel deltas into `scrollLeft` makes the
+   * whole bar reachable with the wheel, and the edge flags drive the fade
+   * affordances so it is obvious the row continues.
+   */
+  useEffect(() => {
+    const bar = toolbarRef.current;
+    if (!bar) return;
+
+    const update = () => {
+      const max = bar.scrollWidth - bar.clientWidth;
+      setToolbarOverflow({
+        left: bar.scrollLeft > 1,
+        right: max > 1 && bar.scrollLeft < max - 1,
+      });
+    };
+
+    const onWheel = (e: WheelEvent) => {
+      if (bar.scrollWidth <= bar.clientWidth) return;
+      // Trackpads already send horizontal deltas; only remap vertical ones.
+      const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+      if (!delta) return;
+      const max = bar.scrollWidth - bar.clientWidth;
+      const next = Math.max(0, Math.min(max, bar.scrollLeft + delta));
+      if (next === bar.scrollLeft) return;
+      e.preventDefault();
+      bar.scrollLeft = next;
+    };
+
+    update();
+    bar.addEventListener('scroll', update, { passive: true });
+    bar.addEventListener('wheel', onWheel, { passive: false });
+    const ro = new ResizeObserver(update);
+    ro.observe(bar);
+
+    return () => {
+      bar.removeEventListener('scroll', update);
+      bar.removeEventListener('wheel', onWheel);
+      ro.disconnect();
+    };
+  }, []);
 
   // Handle Zoom
   const handleZoom = useCallback(
@@ -770,91 +827,108 @@ export function WhiteboardView({
   };
 
   return (
-    <div
-      ref={containerRef}
-      className="relative flex h-full w-full select-none overflow-hidden bg-slate-50 dark:bg-ink-950"
-      style={{
-        backgroundImage: `radial-gradient(circle, rgba(148, 163, 184, 0.25) 1.2px, transparent 1.2px)`,
-        backgroundSize: `${28 * zoom}px ${28 * zoom}px`,
-        backgroundPosition: `${pan.x}px ${pan.y}px`,
-        cursor: tool === 'hand' ? 'grab' : 'crosshair',
-      }}
-    >
-      {/* ── Main Interactive Canvas ── */}
-      <canvas
-        ref={canvasRef}
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        onPointerCancel={handlePointerUp}
-        className="absolute inset-0 h-full w-full touch-none"
-      />
+    <div className="relative flex h-full w-full select-none flex-col overflow-hidden bg-slate-50 dark:bg-ink-950">
+      {/*
+       * The canvas viewport is its own box so the toolbar below can be a
+       * normal flex row instead of a floating overlay. `containerRef` stays
+       * on this element — every measurement (resize, zoom-to-cursor, fit)
+       * is relative to the drawable area, not the whole panel.
+       */}
+      <div
+        ref={containerRef}
+        className="relative min-h-0 flex-1 overflow-hidden"
+        style={{
+          backgroundImage: `radial-gradient(circle, rgba(148, 163, 184, 0.25) 1.2px, transparent 1.2px)`,
+          backgroundSize: `${28 * zoom}px ${28 * zoom}px`,
+          backgroundPosition: `${pan.x}px ${pan.y}px`,
+          cursor: tool === 'hand' ? 'grab' : 'crosshair',
+        }}
+      >
+        {/* ── Main Interactive Canvas ── */}
+        <canvas
+          ref={canvasRef}
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onPointerCancel={handlePointerUp}
+          className="absolute inset-0 h-full w-full touch-none"
+        />
 
-      {/* ── Inline Text Input Box ── */}
-      {textInput && (
-        <div
-          className="absolute z-30"
-          style={{
-            left: `${textInput.worldX * zoom + pan.x}px`,
-            top: `${textInput.worldY * zoom + pan.y}px`,
-            transform: 'translate(0, 0)',
-          }}
-        >
-          <textarea
-            autoFocus
-            rows={2}
-            value={textInput.text}
-            onChange={(e) => setTextInput({ ...textInput, text: e.target.value })}
-            onBlur={handleCommitText}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                handleCommitText();
-              }
-            }}
-            placeholder="Type note... (Enter to save)"
-            className="rounded-lg border-2 border-brand-500 bg-white/95 p-2 text-sm font-semibold shadow-2xl outline-none backdrop-blur dark:bg-ink-900/95"
+        {/* ── Inline Text Input Box ── */}
+        {textInput && (
+          <div
+            className="absolute z-30"
             style={{
-              color,
-              fontSize: `${Math.max(16, strokeWidth * 5) * zoom}px`,
-              minWidth: `${180 * zoom}px`,
+              left: `${textInput.worldX * zoom + pan.x}px`,
+              top: `${textInput.worldY * zoom + pan.y}px`,
+              transform: 'translate(0, 0)',
             }}
-          />
-        </div>
-      )}
+          >
+            <textarea
+              autoFocus
+              rows={2}
+              value={textInput.text}
+              onChange={(e) => setTextInput({ ...textInput, text: e.target.value })}
+              onBlur={handleCommitText}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  handleCommitText();
+                }
+              }}
+              placeholder="Type note... (Enter to save)"
+              className="rounded-lg border-2 border-brand-500 bg-white/95 p-2 text-sm font-semibold shadow-2xl outline-none backdrop-blur dark:bg-ink-900/95"
+              style={{
+                color,
+                fontSize: `${Math.max(16, strokeWidth * 5) * zoom}px`,
+                minWidth: `${180 * zoom}px`,
+              }}
+            />
+          </div>
+        )}
+      </div>
 
-      {/* ── Top Floating Toolbar (Tools, Colors, Shapes, Actions) ── */}
-      <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 flex max-w-[95vw] flex-wrap items-center gap-1.5 rounded-2xl border border-slate-200/90 bg-white/90 p-1.5 shadow-xl backdrop-blur-md dark:border-white/10 dark:bg-ink-900/90">
-        {/* Navigation / Hand tool */}
-        <button
-          type="button"
-          onClick={() => setTool('hand')}
-          title="Hand / Pan tool (V or Space+Drag)"
-          className={`grid h-8 w-8 place-items-center rounded-xl text-sm transition active:scale-95 ${
-            tool === 'hand'
-              ? 'bg-brand-600 text-white shadow-sm'
-              : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-white/10'
+      {/* ── Bottom Toolbar: single row, mirrors the file-presentation bar ── */}
+
+      <div className="relative shrink-0">
+        <div
+          ref={toolbarRef}
+          className="flex items-center gap-1 overflow-x-auto overflow-y-hidden border-t border-slate-200 bg-white/95 px-2 py-1.5 backdrop-blur dark:border-white/10 dark:bg-ink-900/95 [&::-webkit-scrollbar]:h-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-slate-300 dark:[&::-webkit-scrollbar-thumb]:bg-white/20"
+        >
+          {/* Navigation / Hand tool */}
+          <button
+            type="button"
+            onClick={() => setTool('hand')}
+            title="Hand / Pan tool (V or Space+Drag)"
+            className={`grid h-6 w-6 shrink-0 place-items-center rounded-md text-sm transition active:scale-95 ${
+              tool === 'hand'
+                ? 'bg-brand-600 text-white shadow-sm'
+                : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-white/10'
           }`}
         >
-          ✋
+          <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.9">
+            <path d="M18 11V6a2 2 0 0 0-4 0v5M14 10V4a2 2 0 0 0-4 0v6M10 10.5V6a2 2 0 0 0-4 0v8M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
         </button>
 
         {isStaff && (
           <>
-            <div className="h-5 w-px bg-slate-200 dark:bg-white/15 mx-0.5" />
+            <div className="mx-0.5 h-4 w-px shrink-0 bg-slate-200 dark:bg-white/10" />
 
             {/* Pen Tool */}
             <button
               type="button"
               onClick={() => setTool('pen')}
               title="Pen tool (P)"
-              className={`grid h-8 w-8 place-items-center rounded-xl text-sm transition active:scale-95 ${
+              className={`grid h-6 w-6 shrink-0 place-items-center rounded-md text-sm transition active:scale-95 ${
                 tool === 'pen'
                   ? 'bg-brand-600 text-white shadow-sm'
                   : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-white/10'
               }`}
             >
-              ✏️
+              <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.9">
+                <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
             </button>
 
             {/* Highlighter Tool */}
@@ -862,13 +936,15 @@ export function WhiteboardView({
               type="button"
               onClick={() => setTool('highlighter')}
               title="Highlighter tool"
-              className={`grid h-8 w-8 place-items-center rounded-xl text-sm transition active:scale-95 ${
+              className={`grid h-6 w-6 shrink-0 place-items-center rounded-md text-sm transition active:scale-95 ${
                 tool === 'highlighter'
                   ? 'bg-brand-600 text-white shadow-sm'
                   : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-white/10'
               }`}
             >
-              🖍️
+              <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.9">
+                <path d="M9 11l-6 6v3h3l6-6M22 12l-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
             </button>
 
             {/* Arrow Tool */}
@@ -876,13 +952,15 @@ export function WhiteboardView({
               type="button"
               onClick={() => setTool('arrow')}
               title="Arrow tool (A)"
-              className={`grid h-8 w-8 place-items-center rounded-xl text-sm transition active:scale-95 ${
+              className={`grid h-6 w-6 shrink-0 place-items-center rounded-md text-sm transition active:scale-95 ${
                 tool === 'arrow'
                   ? 'bg-brand-600 text-white shadow-sm'
                   : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-white/10'
               }`}
             >
-              ➔
+              <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.9">
+                <path d="M7 17L17 7M17 7H8M17 7v9" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
             </button>
 
             {/* Line Tool */}
@@ -890,13 +968,15 @@ export function WhiteboardView({
               type="button"
               onClick={() => setTool('line')}
               title="Line tool (L)"
-              className={`grid h-8 w-8 place-items-center rounded-xl text-sm transition active:scale-95 ${
+              className={`grid h-6 w-6 shrink-0 place-items-center rounded-md text-sm transition active:scale-95 ${
                 tool === 'line'
                   ? 'bg-brand-600 text-white shadow-sm'
                   : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-white/10'
               }`}
             >
-              ╱
+              <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.9">
+                <path d="M5 19L19 5" strokeLinecap="round" />
+              </svg>
             </button>
 
             {/* Rectangle Tool */}
@@ -904,13 +984,15 @@ export function WhiteboardView({
               type="button"
               onClick={() => setTool('rectangle')}
               title="Rectangle tool (R)"
-              className={`grid h-8 w-8 place-items-center rounded-xl text-sm transition active:scale-95 ${
+              className={`grid h-6 w-6 shrink-0 place-items-center rounded-md text-sm transition active:scale-95 ${
                 tool === 'rectangle'
                   ? 'bg-brand-600 text-white shadow-sm'
                   : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-white/10'
               }`}
             >
-              ▭
+              <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.9">
+                <rect x="3" y="5" width="18" height="14" rx="2" />
+              </svg>
             </button>
 
             {/* Circle Tool */}
@@ -918,13 +1000,15 @@ export function WhiteboardView({
               type="button"
               onClick={() => setTool('circle')}
               title="Circle / Ellipse tool (O)"
-              className={`grid h-8 w-8 place-items-center rounded-xl text-sm transition active:scale-95 ${
+              className={`grid h-6 w-6 shrink-0 place-items-center rounded-md text-sm transition active:scale-95 ${
                 tool === 'circle'
                   ? 'bg-brand-600 text-white shadow-sm'
                   : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-white/10'
               }`}
             >
-              ◯
+              <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.9">
+                <circle cx="12" cy="12" r="9" />
+              </svg>
             </button>
 
             {/* Text Tool */}
@@ -932,13 +1016,15 @@ export function WhiteboardView({
               type="button"
               onClick={() => setTool('text')}
               title="Text tool (T) - click on canvas to add note"
-              className={`grid h-8 w-8 place-items-center rounded-xl text-sm font-bold transition active:scale-95 ${
+              className={`grid h-6 w-6 shrink-0 place-items-center rounded-md text-sm font-bold transition active:scale-95 ${
                 tool === 'text'
                   ? 'bg-brand-600 text-white shadow-sm'
                   : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-white/10'
               }`}
             >
-              T
+              <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.9">
+                <path d="M4 7V5h16v2M12 5v14M9 19h6" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
             </button>
 
             {/* Eraser Tool */}
@@ -946,26 +1032,28 @@ export function WhiteboardView({
               type="button"
               onClick={() => setTool('eraser')}
               title="Eraser tool (E)"
-              className={`grid h-8 w-8 place-items-center rounded-xl text-sm transition active:scale-95 ${
+              className={`grid h-6 w-6 shrink-0 place-items-center rounded-md text-sm transition active:scale-95 ${
                 tool === 'eraser'
                   ? 'bg-brand-600 text-white shadow-sm'
                   : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-white/10'
               }`}
             >
-              🧹
+              <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.9">
+                <path d="M20 20H7L3 16a2 2 0 0 1 0-2.8l9-9a2 2 0 0 1 2.8 0l5 5a2 2 0 0 1 0 2.8L11 20" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
             </button>
 
-            <div className="h-5 w-px bg-slate-200 dark:bg-white/15 mx-0.5" />
+            <div className="mx-0.5 h-4 w-px shrink-0 bg-slate-200 dark:bg-white/10" />
 
             {/* Color Palette */}
-            <div className="flex items-center gap-1 px-1">
+            <div className="flex shrink-0 items-center gap-1 px-0.5">
               {COLORS.map((c) => (
                 <button
                   key={c.value}
                   type="button"
                   onClick={() => setColor(c.value)}
                   title={c.label}
-                  className={`h-5 w-5 rounded-full border border-black/10 transition active:scale-90 ${
+                  className={`h-4 w-4 shrink-0 rounded-full border border-black/10 transition active:scale-90 dark:border-white/20 ${
                     color === c.value ? 'ring-2 ring-brand-500 ring-offset-1 scale-110' : 'hover:scale-105'
                   }`}
                   style={{ backgroundColor: c.value }}
@@ -974,16 +1062,16 @@ export function WhiteboardView({
             </div>
 
             {/* Stroke Width Picker */}
-            <div className="flex items-center gap-0.5 rounded-lg border border-slate-200 bg-slate-100/80 p-0.5 dark:border-white/10 dark:bg-white/5">
+            <div className="flex shrink-0 items-center gap-0.5 rounded-md border border-slate-200 bg-slate-50 p-0.5 dark:border-white/10 dark:bg-white/[0.04]">
               {STROKE_WIDTHS.map((sw) => (
                 <button
                   key={sw.value}
                   type="button"
                   onClick={() => setStrokeWidth(sw.value)}
                   title={`${sw.label} stroke`}
-                  className={`h-6 px-1.5 rounded text-[10px] font-semibold transition ${
+                  className={`h-6 rounded px-1.5 text-[10px] font-semibold transition ${
                     strokeWidth === sw.value
-                      ? 'bg-white shadow-xs text-brand-600 dark:bg-ink-800 dark:text-brand-300'
+                      ? 'bg-white text-brand-600 shadow-xs dark:bg-ink-800 dark:text-brand-300'
                       : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
                   }`}
                 >
@@ -998,17 +1086,17 @@ export function WhiteboardView({
                 type="button"
                 onClick={() => setFillShape(!fillShape)}
                 title="Toggle shape fill"
-                className={`h-7 px-2 rounded-lg text-[10px] font-semibold border transition ${
+                className={`h-6 shrink-0 rounded-md border px-2 text-[10px] font-semibold transition ${
                   fillShape
-                    ? 'border-brand-500/40 bg-brand-500/10 text-brand-600 dark:text-brand-300'
-                    : 'border-slate-200 text-slate-500 hover:bg-slate-50 dark:border-white/10 dark:text-slate-400'
+                    ? 'border-brand-500/40 bg-brand-500/10 text-brand-600 dark:border-brand-400/40 dark:bg-brand-400/10 dark:text-brand-300'
+                    : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900 dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-300 dark:hover:text-white'
                 }`}
               >
                 Fill
               </button>
             )}
 
-            <div className="h-5 w-px bg-slate-200 dark:bg-white/15 mx-0.5" />
+            <div className="mx-0.5 h-4 w-px shrink-0 bg-slate-200 dark:bg-white/10" />
 
             {/* Undo */}
             <button
@@ -1016,9 +1104,11 @@ export function WhiteboardView({
               onClick={handleUndo}
               disabled={historyIds.length === 0}
               title="Undo (Ctrl+Z)"
-              className="grid h-8 w-8 place-items-center rounded-xl text-xs font-bold text-slate-600 transition hover:bg-slate-100 disabled:opacity-30 dark:text-slate-300 dark:hover:bg-white/10"
+              className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-slate-600 transition hover:bg-slate-100 disabled:opacity-30 dark:text-slate-300 dark:hover:bg-white/10"
             >
-              ↩
+              <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.9">
+                <path d="M9 14L4 9l5-5M4 9h11a5 5 0 0 1 0 10h-4" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
             </button>
 
             {/* Clear All */}
@@ -1027,44 +1117,49 @@ export function WhiteboardView({
               onClick={handleClearAll}
               disabled={annotations.length === 0}
               title="Clear all drawings"
-              className="grid h-8 w-8 place-items-center rounded-xl text-xs font-bold text-red-500 transition hover:bg-red-50 disabled:opacity-30 dark:hover:bg-red-500/10"
+              className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-rose-500 transition hover:bg-rose-50 disabled:opacity-30 dark:hover:bg-rose-500/10"
             >
-              🗑️
+              <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.9">
+                <path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
             </button>
           </>
         )}
 
-        <div className="h-5 w-px bg-slate-200 dark:bg-white/15 mx-0.5" />
+        <div className="mx-0.5 h-4 w-px shrink-0 bg-slate-200 dark:bg-white/10" />
 
         {/* Export image */}
         <button
           type="button"
           onClick={handleExportPNG}
           title="Download snapshot as PNG"
-          className="grid h-8 w-8 place-items-center rounded-xl text-sm text-slate-600 transition hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-white/10"
+          className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-slate-600 transition hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-white/10"
         >
-          📥
+          <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.9">
+            <path d="M12 3v12M7 10l5 5 5-5M4 21h16" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
         </button>
-      </div>
 
-      {/* ── Bottom Floating Controls: Zoom, Fit & Participant Sync Status ── */}
-      <div className="absolute bottom-4 left-4 z-20 flex items-center gap-2">
-        {/* Zoom controls pill */}
-        <div className="flex h-8 items-center gap-1 rounded-xl border border-slate-200/90 bg-white/90 px-1.5 shadow-lg backdrop-blur dark:border-white/10 dark:bg-ink-900/90">
+        <div className="mx-0.5 h-4 w-px shrink-0 bg-slate-200 dark:bg-white/10" />
+
+        {/* Zoom controls */}
+        <div className="flex shrink-0 items-center gap-0.5 rounded-md border border-slate-200 bg-slate-50 p-0.5 dark:border-white/10 dark:bg-white/[0.04]">
           <button
             type="button"
             onClick={() => handleZoom(0.85)}
             disabled={zoom <= 0.2}
             title="Zoom out"
-            className="grid h-6 w-6 place-items-center rounded text-xs font-bold text-slate-600 hover:bg-slate-100 disabled:opacity-30 dark:text-slate-300 dark:hover:bg-white/10"
+            className="grid h-6 w-6 place-items-center rounded text-slate-600 transition hover:bg-white disabled:opacity-30 dark:text-slate-300 dark:hover:bg-white/10"
           >
-            −
+            <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2.2">
+              <path d="M5 12h14" strokeLinecap="round" />
+            </svg>
           </button>
           <button
             type="button"
             onClick={handleZoomReset}
             title="Reset zoom to 100%"
-            className="min-w-[40px] text-center font-mono text-[11px] font-semibold text-slate-700 hover:text-brand-600 dark:text-slate-200"
+            className="min-w-[38px] text-center font-mono text-[10px] font-semibold tabular-nums text-slate-600 hover:text-brand-600 dark:text-slate-300 dark:hover:text-brand-300"
           >
             {Math.round(zoom * 100)}%
           </button>
@@ -1073,15 +1168,17 @@ export function WhiteboardView({
             onClick={() => handleZoom(1.15)}
             disabled={zoom >= 4}
             title="Zoom in"
-            className="grid h-6 w-6 place-items-center rounded text-xs font-bold text-slate-600 hover:bg-slate-100 disabled:opacity-30 dark:text-slate-300 dark:hover:bg-white/10"
+            className="grid h-6 w-6 place-items-center rounded text-slate-600 transition hover:bg-white disabled:opacity-30 dark:text-slate-300 dark:hover:bg-white/10"
           >
-            +
+            <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2.2">
+              <path d="M12 5v14M5 12h14" strokeLinecap="round" />
+            </svg>
           </button>
           <button
             type="button"
             onClick={handleCenterContent}
             title="Center and fit content"
-            className="ml-0.5 rounded px-1.5 py-0.5 text-[10px] font-semibold text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-white/10"
+            className="h-6 rounded px-1.5 text-[10px] font-semibold text-slate-600 transition hover:bg-white dark:text-slate-300 dark:hover:bg-white/10"
           >
             Fit
           </button>
@@ -1101,25 +1198,21 @@ export function WhiteboardView({
                 setZoom(presentation.whiteboardViewport.zoom);
               }
             }}
-            className={`flex h-8 items-center gap-1.5 rounded-xl border px-2.5 text-xs font-semibold shadow-lg backdrop-blur transition active:scale-95 ${
+            className={`flex h-6 shrink-0 items-center gap-1.5 rounded-md border px-2 text-[10px] font-semibold transition active:scale-95 ${
               followHost
                 ? 'border-mint-500/30 bg-mint-500/10 text-mint-700 dark:border-mint-400/30 dark:text-mint-300'
                 : 'border-amber-500/30 bg-amber-500/10 text-amber-800 dark:border-amber-400/30 dark:text-amber-200 animate-pulse'
             }`}
           >
-            <span className="relative flex h-2 w-2">
-              <span className={`inline-flex h-full w-full rounded-full ${followHost ? 'bg-mint-500' : 'bg-amber-500'}`} />
-            </span>
+            <span className={`h-1.5 w-1.5 rounded-full ${followHost ? 'bg-mint-500' : 'bg-amber-500'}`} />
             <span>{followHost ? 'Following Host' : 'Snap to Host'}</span>
           </button>
         )}
-      </div>
 
-      {/* ── Bottom Right: Fullscreen and Canvas Shortcuts helper ── */}
-      <div className="absolute bottom-4 right-4 z-20 flex items-center gap-2">
-        <div className="hidden sm:flex items-center gap-1.5 rounded-xl border border-slate-200/80 bg-white/80 px-2 py-1 text-[10px] font-medium text-slate-500 shadow-sm backdrop-blur dark:border-white/10 dark:bg-ink-900/80 dark:text-slate-400">
+        {/* Shortcut hint */}
+        <div className="ml-auto hidden shrink-0 items-center gap-1.5 pl-2 text-[10px] font-medium text-slate-500 lg:flex dark:text-slate-400">
           <span>Space + Drag to pan</span>
-          <span>·</span>
+          <span className="text-slate-300 dark:text-white/20">·</span>
           <span>Scroll to zoom</span>
         </div>
 
@@ -1128,12 +1221,25 @@ export function WhiteboardView({
             type="button"
             onClick={onToggleFullscreen}
             title="Toggle fullscreen"
-            className="flex h-8 w-8 items-center justify-center rounded-xl border border-slate-200/90 bg-white/90 text-slate-600 shadow-lg backdrop-blur transition hover:bg-slate-100 active:scale-95 dark:border-white/10 dark:bg-ink-900/90 dark:text-slate-300"
+            className="ml-auto grid h-6 w-6 shrink-0 place-items-center rounded-md border border-slate-200 bg-white text-slate-600 transition hover:text-slate-900 lg:ml-1 dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-300 dark:hover:text-white"
           >
-            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2.2">
               <path d="M8 3H5a2 2 0 00-2 2v3m18 0V5a2 2 0 00-2-2h-3m0 18h3a2 2 0 002-2v-3M3 16v3a2 2 0 002 2h3" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </button>
+        )}
+        </div>
+
+        {/*
+         * Edge fades. They are pointer-events-none overlays so they never
+         * steal a click from the controls underneath, and they only appear
+         * while there is actually more toolbar to scroll to.
+         */}
+        {toolbarOverflow.left && (
+          <div className="pointer-events-none absolute inset-y-0 left-0 w-6 bg-gradient-to-r from-white to-transparent dark:from-ink-900" />
+        )}
+        {toolbarOverflow.right && (
+          <div className="pointer-events-none absolute inset-y-0 right-0 w-6 bg-gradient-to-l from-white to-transparent dark:from-ink-900" />
         )}
       </div>
     </div>

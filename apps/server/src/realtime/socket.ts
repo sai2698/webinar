@@ -900,7 +900,14 @@ export function registerSocketHandlers(io: Server) {
       if (!c) return ackErr(ack, 'Not in a room');
       const no = denied(c.peer, 'screenshare');
       if (no) return ackErr(ack, no);
-      if (payload.kind !== 'browser' && !payload?.url) {
+      /*
+       * `browser` and `whiteboard` are both URL-less surfaces: the browser
+       * panel may legitimately open a blank tab, and the whiteboard is a
+       * canvas with no file behind it at all. Only the file-backed kinds
+       * (pdf / pptx / image / video) must carry a URL.
+       */
+      const urlLess = payload.kind === 'browser' || payload.kind === 'whiteboard';
+      if (!urlLess && !payload?.url) {
         return ackErr(ack, 'A file is required');
       }
       let finalUrl = String(payload?.url || '').trim();
