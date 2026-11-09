@@ -947,9 +947,29 @@ export interface ClientToServerEvents {
   /**
    * Pins a consumer to one simulcast layer, or restores automatic selection
    * when `spatialLayer` is null. Layer choice is server-side in mediasoup 3.25+.
+   *
+   * @deprecated Never implemented. Pinning stops the SFU adapting and can leave
+   * a tile waiting forever for a layer that is not encoding. Use
+   * `setConsumerPriority` instead — it steers the bandwidth estimator without
+   * taking control away from it.
    */
   setPreferredLayers: (
     payload: { consumerId: string; spatialLayer: number | null },
+    ack: (res: Ack) => void
+  ) => void;
+
+  /**
+   * Re-ranks a consumer so the SFU spends scarce downlink on it first.
+   *
+   * Priority is advisory, not a pin: every consumer still adapts up and down,
+   * but when the link tightens the estimator degrades the low-priority ones
+   * first. Without this a 160px filmstrip thumbnail competes on equal terms
+   * with the 1080p stage tile.
+   *
+   * Audio and screen shares are ranked server-side regardless of `tier`.
+   */
+  setConsumerPriority: (
+    payload: { consumerId: string; tier: 'stage' | 'grid' | 'thumbnail' },
     ack: (res: Ack) => void
   ) => void;
 

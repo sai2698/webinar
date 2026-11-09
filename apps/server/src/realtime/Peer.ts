@@ -14,6 +14,46 @@ import { createLogger } from '../utils/logger.js';
 
 const log = createLogger('peer');
 
+/**
+ * mediasoup consumer priorities.
+ *
+ * The SFU's bandwidth estimator divides a peer's available downlink between its
+ * consumers. With every consumer left at the default (1) the split is even, so
+ * a 160px thumbnail in the filmstrip competes on equal terms with the 1080p
+ * tile the participant is actually watching. When the link tightens, the stage
+ * tile degrades at the same rate as the thumbnails — which is exactly the
+ * "main video goes soft / stutters while the tiny ones stay fine" complaint.
+ *
+ * Priority is *advisory*, not a pin: the estimator still adapts every consumer
+ * up and down, it just spends scarce bitrate on the higher-priority ones first.
+ * That is why this is safe where `setPreferredLayers` was not — a pinned
+ * consumer stops adapting entirely and can end up waiting forever for a layer
+ * that is not encoding.
+ *
+ * Range is 0–255; higher wins. mediasoup's own default is 1.
+ */
+const PRIORITY = {
+  /** Screen shares are text-heavy and unreadable when scaled down. */
+  screen: 255,
+  /** The tile on stage / spotlight — the one everyone is looking at. */
+  stage: 200,
+  /** Audio must never be starved; it is a rounding error in bitrate terms. */
+  audio: 150,
+  /** Normal grid tiles. */
+  grid: 100,
+  /** Filmstrip thumbnails and off-screen tiles. */
+  thumbnail: 20,
+} as const;
+
+function defaultPriorityFor(kind: 'audio' | 'video', source: MediaSource): number {
+  if (kind === 'audio') return PRIORITY.audio;
+  if (source === 'screen') return PRIORITY.screen;
+  return PRIORITY.grid;
+}
+
+/** The coarse tiers a client may ask for. `screen` and `audio` are implied. */
+export type ConsumerPriorityTier = 'stage' | 'grid' | 'thumbnail';
+
 export interface PeerInit {
   peerId: string;
   userId: string;
@@ -265,7 +305,39 @@ export class Peer implements VisibilitySubject {
     consumer.on('transportclose', () => this.consumers.delete(consumer.id));
     consumer.on('producerclose', () => this.consumers.delete(consumer.id));
 
+    // Give the consumer a sensible starting priority. The client refines this
+    // once it knows which tile is on stage — see `setConsumerPriority`.
+    await consumer.setPriority(defaultPriorityFor(kind, source)).catch(() => {});
+
     return consumer;
+  }
+
+  /**
+   * Re-ranks one consumer so the SFU spends scarce downlink on it first.
+   *
+   * `tier` is a coarse label rather than a raw number so the client cannot
+   * invent priorities that starve audio. Unknown tiers fall back to `grid`.
+   *
+   * Returns `false` when the consumer is gone, so the caller can skip the ack
+   * work rather than throwing at a client that is already tearing down.
+   */
+  async setConsumerPriority(consumerId: string, tier: ConsumerPriorityTier): Promise<boolean> {
+    const consumer = this.consumers.get(consumerId);
+    if (!consumer || consumer.closed) return false;
+
+    // Audio outranks everything: it is ~40 kbps and a dropped syllable is far
+    // more noticeable than a soft frame.
+    const priority =
+      consumer.kind === 'audio'
+        ? PRIORITY.audio
+        : consumer.appData?.source === 'screen'
+          ? PRIORITY.screen
+          : (PRIORITY[tier] ?? PRIORITY.grid);
+
+    if (consumer.priority === priority) return true;
+
+    await consumer.setPriority(priority).catch(() => {});
+    return true;
   }
 
   /**

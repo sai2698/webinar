@@ -643,26 +643,51 @@ export function registerSocketHandlers(io: Server) {
       }
     });
 
-    /* ── simulcast layer preference ───────────────────────── */
+    /* ── consumer priority ────────────────────────────────── */
     // Camera producers are simulcast again (see `publishTrack` in
-    // `useMediasoup.ts`), but this handler stays a no-op on purpose.
+    // `useMediasoup.ts`), but we still never call `setPreferredLayers`.
     //
-    // It used to forward to `Consumer.setPreferredLayers`, which *pins* a
-    // consumer to one spatial layer: the SFU stops adapting and will not fall
-    // back if that layer stops encoding. A camera producer advertised three
-    // simulcast layers, but the top one (`r2`) only ramps up when the encoder
-    // has spare bitrate — so pinning a consumer to layer 2 left it waiting for
-    // a keyframe that never arrived. The tile was in the DOM, the consumer
-    // reported `paused: false`, and yet the `<video>` had `videoWidth: 0` and
-    // a muted track. It showed up most when a host shared their screen: the
-    // layout switch re-mounted the camera tile, the unmount cleanup pinned the
-    // top layer, and the camera went black for every participant.
+    // Pinning a consumer to one spatial layer makes the SFU stop adapting: it
+    // will not fall back if that layer stops encoding. A camera producer
+    // advertises three simulcast layers, but the top one (`r2`) only ramps up
+    // when the encoder has spare bitrate — so pinning a consumer to layer 2
+    // left it waiting for a keyframe that never arrived. The tile was in the
+    // DOM, the consumer reported `paused: false`, and yet the `<video>` had
+    // `videoWidth: 0` and a muted track. It showed up most when a host shared
+    // their screen: the layout switch re-mounted the camera tile, the unmount
+    // cleanup pinned the top layer, and the camera went black for every
+    // participant. mediasoup exposes no "clear preference" call, so the only
+    // safe way to keep the bandwidth estimator in charge is to never take
+    // control away from it.
     //
-    // mediasoup exposes no "clear preference" call, so the only safe way to
-    // keep the SFU's bandwidth estimator in charge is to never take control
-    // away from it. Left alone it always forwards the highest layer that is
-    // actually encoding, which is exactly what we want — and it is what makes
-    // simulcast a win rather than a hazard.
+    // Priority is the safe half of the same idea. It does not pin anything —
+    // every consumer still adapts up and down — it only tells the estimator
+    // which consumers to spend scarce downlink on first. Without it a 160px
+    // filmstrip thumbnail competes on equal terms with the 1080p stage tile,
+    // so when the link tightens the tile people are watching degrades at the
+    // same rate as the ones they are not.
+    socket.on('setConsumerPriority', async (payload, ack) => {
+      const c = requirePeer();
+      if (!c) return ackErr(ack, 'Not in a room');
+      const consumerId = String(payload?.consumerId ?? '');
+      const tier = payload?.tier;
+      if (!consumerId) return ackErr(ack, 'consumerId is required');
+      if (tier !== 'stage' && tier !== 'grid' && tier !== 'thumbnail') {
+        return ackErr(ack, 'Unknown priority tier');
+      }
+      try {
+        const ok = await c.peer.setConsumerPriority(consumerId, tier);
+        if (!ok) return ackErr(ack, 'Consumer not found');
+        ackOk(ack);
+      } catch (err) {
+        ackErr(ack, err instanceof Error ? err.message : 'Priority update failed');
+      }
+    });
+
+    /**
+     * Retained so an older client build does not get an unhandled ack. Layer
+     * pinning is deliberately not implemented — see the comment above.
+     */
     socket.on('setPreferredLayers', async (_payload, ack) => {
       const c = requirePeer();
       if (!c) return ackErr(ack, 'Not in a room');

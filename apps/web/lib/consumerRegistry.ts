@@ -11,10 +11,30 @@ type Consumer = MediasoupTypes.Consumer;
  * `useMediasoup` owns the consumers; tiles look them up here by producer id.
  *
  * mediasoup-client 3.25 removed `Consumer.setPreferredLayers()`: layer choice
- * is a server-side decision now. We deliberately never make that decision —
- * see `preferLayer` for why pinning a simulcast layer is unsafe.
+ * is a server-side decision now. We deliberately never make that decision — see
+ * `preferLayer` for why pinning a simulcast layer is unsafe, and for what we do
+ * instead (consumer priority, which steers the estimator without pinning).
  */
 const consumers = new Map<string, Consumer>();
+
+/**
+ * Outstanding priority claims per producer, as `tier -> number of tiles`.
+ *
+ * A producer can legitimately be rendered by more than one tile at once — the
+ * fullscreen layout puts the host camera on the stage and the same peer in the
+ * side filmstrip, and a layout switch can briefly mount both. Counting claims
+ * rather than storing a single tier means one tile unmounting cannot demote a
+ * producer that another tile still has on stage.
+ */
+const priorityClaims = new Map<string, Map<PriorityTier, number>>();
+
+/** The tier last sent to the server, so we can skip redundant round-trips. */
+const prioritySent = new Map<string, PriorityTier>();
+
+type PriorityTier = 'stage' | 'grid' | 'thumbnail';
+
+const TIER_RANK: Record<PriorityTier, number> = { thumbnail: 0, grid: 1, stage: 2 };
+
 let socket: AppSocket | null = null;
 
 export function setLayerSocket(next: AppSocket | null) {
@@ -23,55 +43,109 @@ export function setLayerSocket(next: AppSocket | null) {
 
 export function registerConsumer(producerId: string, consumer: Consumer) {
   consumers.set(producerId, consumer);
+  // A fresh consumer starts at the server's default (grid for camera, screen
+  // for a share). Forget what we sent for a previous consumer of the same
+  // producer so the next claim is not skipped as redundant.
+  prioritySent.delete(producerId);
 }
 
 export function unregisterConsumer(producerId: string) {
   consumers.delete(producerId);
+  priorityClaims.delete(producerId);
+  prioritySent.delete(producerId);
 }
 
 export function clearConsumers() {
   consumers.clear();
+  priorityClaims.clear();
+  prioritySent.clear();
+}
+
+/** Sends `tier` for this producer unless the server already has it. */
+function pushTier(producerId: string, tier: PriorityTier) {
+  const consumer = consumers.get(producerId);
+  if (!consumer || consumer.closed) return;
+  if (prioritySent.get(producerId) === tier) return;
+  prioritySent.set(producerId, tier);
+  socket?.emit('setConsumerPriority', { consumerId: consumer.id, tier }, () => {});
+}
+
+/** The highest tier any live tile is currently claiming for this producer. */
+function effectiveTier(producerId: string): PriorityTier {
+  const claims = priorityClaims.get(producerId);
+  if (!claims) return 'grid';
+  let best: PriorityTier = 'grid';
+  for (const [tier, count] of claims) {
+    if (count > 0 && TIER_RANK[tier] > TIER_RANK[best]) best = tier;
+  }
+  return best;
 }
 
 /**
- * Asks the SFU for a specific simulcast layer.
+ * Tells the SFU how much this consumer matters relative to the others.
  *
  * `spatialLayer` is 0-based: 0 is the lowest resolution, 2 the highest.
  *
- * **This is intentionally a no-op.** Video producers are single-layer now (see
- * `publishTrack` in `useMediasoup.ts`), so there is no layer to choose between.
+ * **This does not pin a simulcast layer.** It used to forward to the server's
+ * `setPreferredLayers`, which *pins* a consumer to one spatial layer: the SFU
+ * stops adapting and will not fall back if that layer stops encoding. A camera
+ * producer advertises three simulcast layers, but the top one (`r2`) only ramps
+ * up when the encoder has spare bitrate — so pinning a consumer to layer 2 left
+ * it waiting for a keyframe that never arrived. The symptom was a tile present
+ * in the DOM, whose consumer reported `paused: false`, but whose `<video>` had
+ * `videoWidth: 0` and a muted track. It was especially visible when a host
+ * shared their screen: the layout switch re-mounted the camera tile, the
+ * unmount cleanup pinned the top layer, and the camera went black for every
+ * participant. mediasoup exposes no "clear preference" call, so the only safe
+ * way to keep the SFU's bandwidth estimator in charge is to never take control
+ * away from it.
  *
- * It used to forward to the server's `setPreferredLayers`, which *pins* a
- * consumer to one spatial layer: the SFU stops adapting and will not fall back
- * if that layer stops encoding. A camera producer advertised three simulcast
- * layers, but the top one (`r2`) only ramps up when the encoder has spare
- * bitrate — so pinning a consumer to layer 2 left it waiting for a keyframe
- * that never arrived. The symptom was a tile present in the DOM, whose consumer
- * reported `paused: false`, but whose `<video>` had `videoWidth: 0` and a muted
- * track. It was especially visible when a host shared their screen: the layout
- * switch re-mounted the camera tile, the unmount cleanup pinned the top layer,
- * and the camera went black for every participant.
+ * What we do instead is set the consumer's *priority*. Priority is advisory:
+ * every consumer still adapts up and down, but when a peer's downlink tightens
+ * the estimator degrades the low-priority consumers first. That is the whole
+ * point of the `layer` prop — a 160px filmstrip thumbnail should not compete on
+ * equal terms with the 1080p tile everyone is watching — and it gets us the
+ * bandwidth saving without the black-camera hazard.
  *
- * mediasoup exposes no "clear preference" call, so the only safe way to keep
- * the SFU's bandwidth estimator in charge is to never take control away from
- * it. Left alone it always forwards the highest layer that is actually
- * encoding, which is exactly what we want.
- *
- * The filmstrip's "don't download 720p for a 160px tile" optimisation is
- * therefore dropped. It was never worth a black camera.
+ * The mapping is deliberately coarse. `layer` 2 means "this is the tile on
+ * stage", 1 means "a normal grid tile", 0 means "a thumbnail".
  */
-export function preferLayer(_producerId: string, _spatialLayer: 0 | 1 | 2) {
-  /* intentionally empty — see the doc comment above */
+export function preferLayer(producerId: string, spatialLayer: 0 | 1 | 2) {
+  const tier: PriorityTier = spatialLayer >= 2 ? 'stage' : spatialLayer === 1 ? 'grid' : 'thumbnail';
+  let claims = priorityClaims.get(producerId);
+  if (!claims) {
+    claims = new Map();
+    priorityClaims.set(producerId, claims);
+  }
+  claims.set(tier, (claims.get(tier) ?? 0) + 1);
+  pushTier(producerId, effectiveTier(producerId));
 }
 
 /**
- * Restores automatic layer selection.
+ * Releases one priority claim for this producer.
  *
- * Also a no-op, for the same reason: a consumer that was never pinned is
- * already adapting automatically.
+ * Called from the tile's effect cleanup, so it must be paired one-for-one with
+ * a `preferLayer` call. The producer drops back to whatever tier its remaining
+ * tiles still claim — or to the default grid tier when none are left, so a tile
+ * that was once on stage does not keep hogging downlink after a layout change.
  */
-export function preferAutoLayer(_producerId: string) {
-  /* intentionally empty — see `preferLayer` */
+export function preferAutoLayer(producerId: string) {
+  const claims = priorityClaims.get(producerId);
+  if (claims) {
+    // Release the highest outstanding claim: the effect that is cleaning up is
+    // the one that made the most recent claim, and effects unwind in order.
+    let highest: PriorityTier | null = null;
+    for (const [tier, count] of claims) {
+      if (count > 0 && (highest === null || TIER_RANK[tier] > TIER_RANK[highest])) highest = tier;
+    }
+    if (highest) {
+      const next = (claims.get(highest) ?? 1) - 1;
+      if (next <= 0) claims.delete(highest);
+      else claims.set(highest, next);
+    }
+    if (claims.size === 0) priorityClaims.delete(producerId);
+  }
+  pushTier(producerId, effectiveTier(producerId));
 }
 
 /**

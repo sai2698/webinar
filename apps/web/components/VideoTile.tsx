@@ -83,21 +83,20 @@ export function VideoTile({
     }
   }, [stream, inView, hasVideo]);
 
-  /* ── simulcast layer selection ─────────────────────────── */
+  /* ── consumer priority ─────────────────────────────────── */
   useEffect(() => {
     if (!producerId || isLocal || isScreen) return;
-    // A tile that is not on screen should not be pulling any layer at all.
-    if (!inView) {
-      preferAutoLayer(producerId);
-      return;
-    }
-    if (layer === undefined) {
-      preferAutoLayer(producerId);
-      return;
-    }
-    preferLayer(producerId, layer);
-    // Restore automatic selection when this tile unmounts so the SFU can
-    // adapt to bandwidth again for whoever renders it next.
+    // A tile that is not on screen should not be competing for downlink at all.
+    // Its consumer is paused anyway (see the effect below), but ranking it last
+    // means the estimator has already forgotten about it by the time it
+    // scrolls back into view.
+    //
+    // Every branch must return a cleanup: `preferLayer` takes a claim and
+    // `preferAutoLayer` releases one, so an unbalanced pair would leave a
+    // producer permanently ranked as if it were still on stage.
+    const spatialLayer = !inView ? 0 : layer;
+    if (spatialLayer === undefined) return;
+    preferLayer(producerId, spatialLayer);
     return () => preferAutoLayer(producerId);
   }, [producerId, layer, isLocal, isScreen, inView]);
 

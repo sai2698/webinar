@@ -160,6 +160,10 @@ app.get('/api/health/webrtc', async (_req, res) => {
             type: cons.type,
             paused: cons.paused,
             producerPaused: cons.producerPaused,
+            // Priority is advisory: the estimator still adapts every consumer,
+            // it just spends scarce downlink on the higher numbers first.
+            priority: cons.priority,
+            currentLayers: cons.currentLayers,
             score: cons.score,
             stats,
           });
