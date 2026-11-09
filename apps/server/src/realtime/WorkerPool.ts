@@ -49,6 +49,29 @@ class WorkerPool {
                 announcedAddress: announcedIp,
                 port,
               },
+              /*
+               * Loopback candidate, development only.
+               *
+               * A browser running on the same machine as the server otherwise
+               * has no locally-resolvable candidate: it must hairpin out to the
+               * LAN address and back through the host's own NIC. That measured
+               * 700 ms RTT on localhost — enough to stutter a 720p stream and
+               * to push ICE into `disconnected`. Advertising 127.0.0.1 lets ICE
+               * select the direct loopback pair instead.
+               *
+               * Never in production: a public deployment must not advertise a
+               * loopback address, and no remote client could use it.
+               */
+              ...(env.NODE_ENV !== 'production'
+                ? [
+                    {
+                      protocol: 'udp' as const,
+                      ip: '127.0.0.1',
+                      announcedAddress: '127.0.0.1',
+                      port,
+                    },
+                  ]
+                : []),
             ],
           });
           this.webRtcServers.set(worker, webRtcServer);

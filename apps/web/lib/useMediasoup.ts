@@ -12,6 +12,7 @@ import {
   unregisterConsumer,
   clearConsumers,
   setLayerSocket,
+  setRejoinHandler,
 } from './consumerRegistry';
 import { BackgroundEffects, type BackgroundImage, type BackgroundMode } from './backgroundEffects';
 import { AudioProcessor, audioConstraints, type AudioProcessingOptions } from './audioProcessor';
@@ -106,6 +107,8 @@ export function useMediasoup({ slug, token, onJoined, onError }: UseMediasoupOpt
   const consumeProducerRef = useRef<((producerId: string) => Promise<void>) | null>(null);
   /** Timestamp of the last `syncProducers` request, so the sweep cannot chatter. */
   const lastSyncRef = useRef(0);
+  /** Pending grace-period timer for a `disconnected` receive transport. */
+  const iceRecoveryTimerRef = useRef<number | null>(null);
   const joinedRef = useRef(false);
   /**
    * The screen-share producer and the stream it came from.
@@ -559,6 +562,40 @@ export function useMediasoup({ slug, token, onJoined, onError }: UseMediasoupOpt
 
                   transport.on('connectionstatechange', (state) => {
                     console.log(`[mediasoup] recvTransport state: ${state}`);
+                    /*
+                     * A frozen tile is not always a missing keyframe. When the
+                     * ICE path dies the consumer stays `paused: false` and the
+                     * `<video>` keeps its last frame forever, which looks
+                     * exactly like a decoder stall but cannot be fixed by
+                     * requesting a keyframe — there is no path to carry it.
+                     *
+                     * `failed` is terminal: the transport will never recover on
+                     * its own, so the only cure is a full rejoin. `disconnected`
+                     * is usually transient (ICE restart / network blip) and is
+                     * given a grace period before we escalate.
+                     */
+                    if (state === 'failed') {
+                      void rejoinRef.current?.();
+                      return;
+                    }
+                    if (state === 'disconnected') {
+                      if (iceRecoveryTimerRef.current) return;
+                      iceRecoveryTimerRef.current = window.setTimeout(() => {
+                        iceRecoveryTimerRef.current = null;
+                        const current = recvTransportRef.current;
+                        if (!current || current.closed) return;
+                        if (current.connectionState === 'connected') return;
+                        console.warn(
+                          `[mediasoup] recvTransport stuck in ${current.connectionState} — rejoining`
+                        );
+                        void rejoinRef.current?.();
+                      }, 8000);
+                      return;
+                    }
+                    if (state === 'connected' && iceRecoveryTimerRef.current) {
+                      window.clearTimeout(iceRecoveryTimerRef.current);
+                      iceRecoveryTimerRef.current = null;
+                    }
                   });
 
                   transport.on('connect', ({ dtlsParameters }, callback, errback) => {
@@ -713,6 +750,12 @@ export function useMediasoup({ slug, token, onJoined, onError }: UseMediasoupOpt
 
   useEffect(() => {
     rejoinRef.current = rejoin;
+    // Tiles escalate to a full transport rebuild through the registry when
+    // keyframe requests fail to unfreeze them — see `requestRejoin`.
+    setRejoinHandler(() => {
+      void rejoin();
+    });
+    return () => setRejoinHandler(null);
   }, [rejoin]);
 
   /**

@@ -6,6 +6,7 @@ import {
   preferAutoLayer,
   setConsumerPaused,
   requestKeyFrameFor,
+  requestRejoin,
 } from '@/lib/consumerRegistry';
 import { useInView } from '@/lib/useRoomUi';
 import { useRoomStore } from '@/store/roomStore';
@@ -127,8 +128,13 @@ export function VideoTile({
    *
    * This watches `currentTime`. If it has not advanced for two consecutive
    * checks while the tile is visible and should be playing, it asks the SFU
-   * for a keyframe and re-issues `play()`. The backoff stops a genuinely dead
-   * stream from spamming the SFU.
+   * for a keyframe and re-issues `play()`.
+   *
+   * Escalation matters as much as detection. A keyframe request only helps if
+   * the media path is alive; when ICE has died the request goes nowhere and the
+   * tile stays frozen forever. So after three failed recoveries (~15 s of
+   * confirmed stall) the tile asks for a full transport rebuild instead of
+   * politely asking again.
    */
   useEffect(() => {
     if (!hasVideo || !inView) return;
@@ -138,6 +144,7 @@ export function VideoTile({
     let lastTime = el.currentTime;
     let stalledChecks = 0;
     let lastRecovery = 0;
+    let failedRecoveries = 0;
 
     const id = window.setInterval(() => {
       const video = videoRef.current;
@@ -146,6 +153,7 @@ export function VideoTile({
       if (video.currentTime > lastTime + 0.01) {
         lastTime = video.currentTime;
         stalledChecks = 0;
+        failedRecoveries = 0;
         return;
       }
 
@@ -158,6 +166,19 @@ export function VideoTile({
       if (now - lastRecovery < 5000) return;
       lastRecovery = now;
       stalledChecks = 0;
+      failedRecoveries += 1;
+
+      /*
+       * Three keyframe requests that changed nothing means the problem is not
+       * a missing keyframe — the path itself is dead. Rebuilding the
+       * transports is the only thing that can fix that, and it is far better
+       * than leaving the viewer with a frozen frame until they rejoin by hand.
+       */
+      if (failedRecoveries >= 3) {
+        failedRecoveries = 0;
+        if (!isLocal) requestRejoin();
+        return;
+      }
 
       if (producerId && !isLocal) requestKeyFrameFor(producerId);
       video.play().catch(() => {

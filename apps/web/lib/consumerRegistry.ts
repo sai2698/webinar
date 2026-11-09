@@ -117,3 +117,29 @@ export function requestKeyFrameFor(producerId: string) {
   if (!consumer || consumer.closed) return;
   socket?.emit('requestKeyFrame', { consumerId: consumer.id }, () => {});
 }
+
+/**
+ * The rejoin hook, installed by `useMediasoup`.
+ *
+ * A tile can be frozen for reasons a keyframe request cannot fix — the ICE
+ * path is dead, or the consumer is bound to a transport that will never
+ * recover. In those cases the only cure is to rebuild the transports, which
+ * only `useMediasoup` can do. Tiles reach it through this indirection so they
+ * do not need a reference to the hook.
+ */
+let rejoinHandler: (() => void) | null = null;
+
+export function setRejoinHandler(fn: (() => void) | null) {
+  rejoinHandler = fn;
+}
+
+/**
+ * Rebuilds this peer's transports and re-consumes everything.
+ *
+ * Called by the stall detector once keyframe requests have demonstrably failed
+ * to unfreeze a tile. Safe to call repeatedly: `rejoin` is guarded against
+ * overlapping runs.
+ */
+export function requestRejoin() {
+  rejoinHandler?.();
+}

@@ -2,20 +2,93 @@ import os from 'node:os';
 import type { RouterRtpCodecCapability, WorkerSettings } from 'mediasoup/types';
 import { env } from './env.js';
 
+/**
+ * Adapter names that must never be advertised as the media address.
+ *
+ * These are all virtual switches or NAT gateways. They are perfectly valid
+ * IPv4 interfaces, so a naive "first non-internal address" scan picks them up
+ * — and that is catastrophic for WebRTC, because every ICE candidate then
+ * points at a NAT gateway instead of the machine's real NIC. Media gets
+ * hairpinned through a virtual switch, which shows up as multi-second RTT and
+ * intermittent `ice: disconnected` even when client and server are on the same
+ * host.
+ *
+ * On this machine the enumeration order put `vEthernet (Default Switch)` at
+ * `172.18.0.1` ahead of the real `Ethernet` adapter at `10.52.150.124`, and
+ * every peer reported `rtt=4639ms` on localhost as a result.
+ */
+const VIRTUAL_ADAPTER_PATTERNS = [
+  /vEthernet/i, // Hyper-V virtual switch (incl. "Default Switch")
+  /Hyper-V/i,
+  /WSL/i, // WSL2 host-side vNIC
+  /Docker/i, // Docker Desktop bridge
+  /veth/i, // Linux container veth pair
+  /br-/i, // Linux bridge
+  /VirtualBox/i,
+  /VMware/i,
+  /VMnet/i,
+  /Loopback/i,
+  /TAP-|TUN/i,
+  /Tailscale|ZeroTier|Hamachi|Radmin/i, // overlay VPNs
+  /Bluetooth/i,
+];
+
+/** Link-local (169.254/16) and CGNAT (100.64/10) addresses are never routable peers. */
+function isUnusableAddress(address: string): boolean {
+  if (address.startsWith('169.254.')) return true;
+  const [a, b] = address.split('.').map(Number);
+  if (a === 100 && b >= 64 && b <= 127) return true;
+  return false;
+}
+
+function isVirtualAdapter(name: string): boolean {
+  return VIRTUAL_ADAPTER_PATTERNS.some((re) => re.test(name));
+}
+
+/**
+ * Picks the address to advertise in ICE candidates.
+ *
+ * Order of preference:
+ *  1. `MEDIASOUP_ANNOUNCED_IP`, if set — always wins, because a deployment
+ *     behind NAT or a load balancer knows its public address better than we do.
+ *  2. In development, the first *physical* IPv4 adapter. Virtual switches are
+ *     skipped so media does not hairpin through Hyper-V/WSL/Docker.
+ *  3. Any non-internal IPv4, if every adapter looked virtual.
+ *  4. Loopback, as a last resort.
+ */
 function getAnnouncedIp(): string {
   if (env.MEDIASOUP_ANNOUNCED_IP && env.MEDIASOUP_ANNOUNCED_IP !== '127.0.0.1') {
     return env.MEDIASOUP_ANNOUNCED_IP;
   }
+
   if (env.NODE_ENV !== 'production') {
     const interfaces = os.networkInterfaces();
+    const physical: string[] = [];
+    const fallback: string[] = [];
+
     for (const name of Object.keys(interfaces)) {
       for (const iface of interfaces[name] || []) {
-        if (!iface.internal && iface.family === 'IPv4') {
-          return iface.address;
+        if (iface.internal || iface.family !== 'IPv4') continue;
+        if (isUnusableAddress(iface.address)) continue;
+        if (isVirtualAdapter(name)) {
+          fallback.push(iface.address);
+        } else {
+          physical.push(iface.address);
         }
       }
     }
+
+    if (physical.length > 0) return physical[0];
+    if (fallback.length > 0) {
+      console.warn(
+        `[mediasoup] only virtual network adapters found (${fallback.join(', ')}). ` +
+          'Media will hairpin through a virtual switch and RTT will be poor. ' +
+          'Set MEDIASOUP_ANNOUNCED_IP to the real LAN or public address.'
+      );
+      return fallback[0];
+    }
   }
+
   return env.MEDIASOUP_ANNOUNCED_IP || '127.0.0.1';
 }
 
@@ -80,6 +153,28 @@ export const webRtcTransportOptions = {
       ip: '0.0.0.0',
       announcedAddress: announcedIp,
     },
+    /*
+     * A loopback candidate, offered only in development.
+     *
+     * Without it, a browser on the same machine as the server has no candidate
+     * that resolves locally: it must hairpin out to the LAN address and back
+     * through the host's own NIC. That path is measurably slow — it produced
+     * 700 ms RTT on localhost, which is enough to make a 720p stream stutter
+     * and to trip ICE into `disconnected`. Advertising 127.0.0.1 as well lets
+     * ICE pick the direct loopback pair, which is effectively free.
+     *
+     * Never enabled in production: a public deployment must not advertise a
+     * loopback address, and no remote client could use it anyway.
+     */
+    ...(env.NODE_ENV !== 'production'
+      ? [
+          {
+            protocol: 'udp' as const,
+            ip: '127.0.0.1',
+            announcedAddress: '127.0.0.1',
+          },
+        ]
+      : []),
   ],
   enableUdp: true,
   enableTcp: true,
