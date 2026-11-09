@@ -31,6 +31,30 @@ const priorityClaims = new Map<string, Map<PriorityTier, number>>();
 /** The tier last sent to the server, so we can skip redundant round-trips. */
 const prioritySent = new Map<string, PriorityTier>();
 
+/**
+ * Outstanding pause claims per producer, as a plain count of tiles.
+ *
+ * Pausing has to be reference-counted for the same reason priority does: a
+ * producer can be rendered by two tiles at once (stage + filmstrip), and a
+ * layout switch mounts the new tree before the old one has finished unwinding.
+ * Without counting, the tile that unmounts last wins, and a consumer that one
+ * tile still needs paused gets resumed — or, worse, the reverse.
+ */
+const pauseClaims = new Map<string, number>();
+
+/**
+ * The pause state last sent to the server.
+ *
+ * Deliberately *not* `consumer.paused`. The client-side flag only reflects what
+ * this browser did locally; the server consumer is a separate object with its
+ * own state. Reading the local flag to decide whether to emit meant that any
+ * drift between the two — a dropped emit, a consumer recreated under the same
+ * producer id — became permanent: the client believed the consumer was already
+ * resumed and never told the server, so the SFU kept it paused and the tile
+ * held its last decoded frame forever.
+ */
+const pauseSent = new Map<string, boolean>();
+
 type PriorityTier = 'stage' | 'grid' | 'thumbnail';
 
 const TIER_RANK: Record<PriorityTier, number> = { thumbnail: 0, grid: 1, stage: 2 };
@@ -47,27 +71,55 @@ export function registerConsumer(producerId: string, consumer: Consumer) {
   // for a share). Forget what we sent for a previous consumer of the same
   // producer so the next claim is not skipped as redundant.
   prioritySent.delete(producerId);
+  // `consumeProducer` resumes the consumer explicitly right after wiring the
+  // track, so a brand-new consumer is known to be flowing.
+  pauseClaims.delete(producerId);
+  pauseSent.set(producerId, false);
 }
 
 export function unregisterConsumer(producerId: string) {
   consumers.delete(producerId);
   priorityClaims.delete(producerId);
   prioritySent.delete(producerId);
+  pauseClaims.delete(producerId);
+  pauseSent.delete(producerId);
 }
 
 export function clearConsumers() {
   consumers.clear();
   priorityClaims.clear();
   prioritySent.clear();
+  pauseClaims.clear();
+  pauseSent.clear();
 }
 
 /** Sends `tier` for this producer unless the server already has it. */
 function pushTier(producerId: string, tier: PriorityTier) {
   const consumer = consumers.get(producerId);
   if (!consumer || consumer.closed) return;
-  if (prioritySent.get(producerId) === tier) return;
+  const previous = prioritySent.get(producerId);
+  if (previous === tier) return;
   prioritySent.set(producerId, tier);
   socket?.emit('setConsumerPriority', { consumerId: consumer.id, tier }, () => {});
+
+  /*
+   * A consumer that has just been promoted to a bigger tile needs a fresh
+   * keyframe.
+   *
+   * This is the "host camera stays frozen after the presentation ends" bug.
+   * While a file or a screen share owns the stage the host's camera tile is
+   * demoted to a filmstrip thumbnail, so the SFU forwards the low simulcast
+   * layer. When the presentation stops the tile is promoted back to the stage,
+   * but the decoder cannot paint the higher layer until an IDR arrives — and
+   * the encoder only emits one on its own schedule. The tile therefore keeps
+   * showing the last frame it decoded, which looks exactly like a frozen
+   * video, until the participant leaves and rejoins.
+   *
+   * Asking for the keyframe at the moment of promotion closes that window.
+   */
+  if (previous !== undefined && TIER_RANK[tier] > TIER_RANK[previous]) {
+    socket?.emit('requestKeyFrame', { consumerId: consumer.id }, () => {});
+  }
 }
 
 /** The highest tier any live tile is currently claiming for this producer. */
@@ -162,21 +214,74 @@ export function preferAutoLayer(producerId: string) {
  * immediately afterwards, so the tile repaints instead of staying frozen.
  *
  * Audio is never paused — a participant who scrolls away must still be heard.
+ *
+ * Claims are counted, so two tiles rendering the same producer cannot fight:
+ * the consumer stays paused until the last tile that wants it paused releases.
+ * Every transition is driven by what we last *told the server*, never by the
+ * local `consumer.paused` flag, so a lost emit cannot wedge the consumer in a
+ * paused state that no later call will ever undo.
  */
-export function setConsumerPaused(producerId: string, paused: boolean) {
+function applyPause(producerId: string) {
   const consumer = consumers.get(producerId);
   if (!consumer || consumer.closed) return;
   if (consumer.kind !== 'video') return;
-  if (consumer.paused === paused) return;
 
-  if (paused) {
+  const shouldPause = (pauseClaims.get(producerId) ?? 0) > 0;
+  if (pauseSent.get(producerId) === shouldPause) return;
+  pauseSent.set(producerId, shouldPause);
+
+  if (shouldPause) {
     consumer.pause();
     socket?.emit('pauseConsumer', { consumerId: consumer.id }, () => {});
   } else {
     // mediasoup-client 3.25 `resume()` is synchronous and returns void.
     consumer.resume();
+    // The server resumes and requests a keyframe, so the tile repaints rather
+    // than resuming onto a stale frame.
     socket?.emit('resumeConsumer', { consumerId: consumer.id }, () => {});
   }
+}
+
+/** Registers one tile's wish to keep this consumer paused. */
+export function claimConsumerPause(producerId: string) {
+  pauseClaims.set(producerId, (pauseClaims.get(producerId) ?? 0) + 1);
+  applyPause(producerId);
+}
+
+/** Releases one tile's pause claim. Must be paired with `claimConsumerPause`. */
+export function releaseConsumerPause(producerId: string) {
+  const count = pauseClaims.get(producerId) ?? 0;
+  if (count <= 1) pauseClaims.delete(producerId);
+  else pauseClaims.set(producerId, count - 1);
+  applyPause(producerId);
+}
+
+/**
+ * Forces a consumer back into the flowing state, whatever the bookkeeping says.
+ *
+ * This is the last line of defence against a frozen tile. `applyPause` only
+ * emits on a *transition*, which is what keeps a 40-tile grid from chattering —
+ * but it also means that if one `resumeConsumer` emit is ever lost (a socket
+ * blip, a consumer recreated under the same producer id, a layout switch that
+ * raced the ack) the client and the SFU disagree permanently: the client thinks
+ * the consumer is flowing, so it never sends another resume, while the SFU has
+ * it paused and forwards nothing. The tile then holds its last decoded frame
+ * until the participant leaves and rejoins.
+ *
+ * Called by the stall detector, which is the only place that can observe the
+ * symptom. It clears every pause claim for the producer and re-sends the resume
+ * unconditionally, so the two sides are forced back into agreement.
+ */
+export function ensureConsumerFlowing(producerId: string) {
+  const consumer = consumers.get(producerId);
+  if (!consumer || consumer.closed) return;
+  if (consumer.kind !== 'video') return;
+
+  pauseClaims.delete(producerId);
+  pauseSent.set(producerId, false);
+
+  if (consumer.paused) consumer.resume();
+  socket?.emit('resumeConsumer', { consumerId: consumer.id }, () => {});
 }
 
 /**

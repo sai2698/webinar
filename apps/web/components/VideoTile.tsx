@@ -4,7 +4,9 @@ import { useEffect, useRef } from 'react';
 import {
   preferLayer,
   preferAutoLayer,
-  setConsumerPaused,
+  claimConsumerPause,
+  releaseConsumerPause,
+  ensureConsumerFlowing,
   requestKeyFrameFor,
   requestRejoin,
 } from '@/lib/consumerRegistry';
@@ -100,6 +102,30 @@ export function VideoTile({
     return () => preferAutoLayer(producerId);
   }, [producerId, layer, isLocal, isScreen, inView]);
 
+  /* ── paint a freshly mounted tile ──────────────────────── */
+  /**
+   * A `<video>` element that is handed a live `MediaStream` still cannot paint
+   * anything until it decodes a keyframe. The SFU only emits one on its own
+   * schedule, so a tile that mounts between two keyframes sits blank — or, if
+   * the element is reused across a layout switch, keeps showing the last frame
+   * it decoded.
+   *
+   * That is the "host camera freezes when a file goes on stage, and stays
+   * frozen after the file comes off" bug: presenting a file unmounts the video
+   * grid and mounts the presentation stage, which builds a brand-new `<video>`
+   * for the same camera consumer. Nothing asked for a keyframe, so the new
+   * element had nothing to paint and the old frame stayed on screen until the
+   * participant left and rejoined.
+   *
+   * Asking once per mount is cheap — the SFU coalesces keyframe requests — and
+   * it makes every layout switch repaint immediately.
+   */
+  useEffect(() => {
+    if (!producerId || isLocal) return;
+    if (!stream) return;
+    requestKeyFrameFor(producerId);
+  }, [producerId, stream, isLocal]);
+
   /* ── stop paying for off-screen video ──────────────────── */
   /**
    * Hiding the `<video>` element stops *decoding*, but the mediasoup consumer
@@ -110,12 +136,19 @@ export function VideoTile({
    * keyframe immediately afterwards (server-side, in `resumeConsumer`), so the
    * tile repaints instead of showing a frozen frame.
    *
+   * Claims are counted rather than set, because the same producer can be on
+   * screen twice at once — the stage and the filmstrip — and a layout switch
+   * mounts the new tree before the old one unwinds. A plain setter let the
+   * last tile to unmount decide the state for both, which is how a camera
+   * consumer ended up paused with a visible tile still pointing at it.
+   *
    * Audio is never paused — a participant who scrolls away must still be heard.
    */
   useEffect(() => {
     if (!producerId || isLocal || isScreen) return;
-    setConsumerPaused(producerId, !inView);
-    return () => setConsumerPaused(producerId, false);
+    if (inView) return;
+    claimConsumerPause(producerId);
+    return () => releaseConsumerPause(producerId);
   }, [producerId, isLocal, isScreen, inView]);
 
   /* ── stall detector ────────────────────────────────────── */
@@ -179,7 +212,17 @@ export function VideoTile({
         return;
       }
 
-      if (producerId && !isLocal) requestKeyFrameFor(producerId);
+      /*
+       * A keyframe request is useless if the SFU has the consumer paused: it
+       * will not forward the keyframe either. Force the consumer back into the
+       * flowing state first, then ask for the keyframe. This is what recovers a
+       * tile whose resume emit was lost during a layout switch — the case that
+       * used to require leaving and rejoining the webinar.
+       */
+      if (producerId && !isLocal) {
+        ensureConsumerFlowing(producerId);
+        requestKeyFrameFor(producerId);
+      }
       video.play().catch(() => {
         /* still blocked — the next tick will try again */
       });

@@ -423,6 +423,13 @@ export function VideoGrid({ onToggleFullscreen }: VideoGridProps) {
             camOn={screenTile.camOn}
             paused={screenTile.paused}
             isScreen
+            /*
+             * The producer id is what lets the tile ask for a keyframe when it
+             * mounts. Without it a screen share that starts while the viewer is
+             * already in the room could sit blank until the next natural
+             * keyframe — the same failure mode the camera tile had.
+             */
+            producerId={screenTile.producerId}
             handRaised={screenTile.handRaised}
             className="h-full w-full"
           />
