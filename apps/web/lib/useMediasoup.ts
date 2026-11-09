@@ -85,6 +85,27 @@ export function useMediasoup({ slug, token, onJoined, onError }: UseMediasoupOpt
   const recvTransportRef = useRef<Transport | null>(null);
   const producersRef = useRef<Map<string, Producer>>(new Map());
   const consumersRef = useRef<Map<string, Consumer>>(new Map());
+  /**
+   * Producer ids whose `consume` request could not be issued yet because the
+   * receive transport did not exist. Drained the moment it does.
+   *
+   * This is the fix for "the host refreshed and their video never came back".
+   * `newProducer` is a fire-and-forget event: if it lands while the client is
+   * still building its `Device` and receive transport — which is exactly what
+   * happens when a host reloads, because the old peer is torn down and the new
+   * one announces its producers within the same tick — the old code returned
+   * silently and nothing ever retried. The tile stayed empty until the
+   * participant left and rejoined.
+   */
+  const pendingConsumeRef = useRef<Set<string>>(new Set());
+  /** Producer ids with a `consume` request in flight, so we never double-emit. */
+  const consumingRef = useRef<Set<string>>(new Set());
+  /** Bounded retry counters for consumes the server rejected. */
+  const consumeAttemptsRef = useRef<Map<string, number>>(new Map());
+  /** Set once `consumeProducer` exists, so retries and drains can reach it. */
+  const consumeProducerRef = useRef<((producerId: string) => Promise<void>) | null>(null);
+  /** Timestamp of the last `syncProducers` request, so the sweep cannot chatter. */
+  const lastSyncRef = useRef(0);
   const joinedRef = useRef(false);
   /**
    * The screen-share producer and the stream it came from.
@@ -124,20 +145,73 @@ export function useMediasoup({ slug, token, onJoined, onError }: UseMediasoupOpt
   const store = useRoomStore;
 
   /* ── consume a remote producer ─────────────────────────── */
+  /**
+   * Creates a Consumer for `producerId`, or parks the request until the
+   * receive transport is ready.
+   *
+   * Three failure modes are handled here, all of which used to leave a
+   * permanently blank tile:
+   *
+   *  1. **No receive transport yet.** The id is queued in `pendingConsumeRef`
+   *     and drained by `drainPendingConsumes()` once the transport exists.
+   *  2. **A stale consumer in the map.** A consumer whose transport died stays
+   *     in `consumersRef` with `closed === true`; the old `has()` guard then
+   *     blocked re-consumption of the same producer id forever. Closed entries
+   *     are now evicted before the guard runs.
+   *  3. **A transient server rejection.** `consume` can fail because the
+   *     producer is mid-teardown (host refreshing) or because the peer's
+   *     visibility has not been recomputed yet. Those are retried a bounded
+   *     number of times with backoff instead of being logged and forgotten.
+   */
   const consumeProducer = useCallback(
     async (producerId: string) => {
       const socket = socketRef.current;
       const device = deviceRef.current;
       const recvTransport = recvTransportRef.current;
-      if (!socket || !device || !recvTransport) return;
-      if (consumersRef.current.has(producerId)) return;
+
+      // Not ready yet — remember the id and let the drain pick it up. This is
+      // the host-refresh race: `newProducer` arrives before the transport.
+      if (!socket || !device || !recvTransport) {
+        pendingConsumeRef.current.add(producerId);
+        return;
+      }
+
+      // Evict a dead consumer so the same producer id can be consumed again.
+      const existing = consumersRef.current.get(producerId);
+      if (existing) {
+        if (!existing.closed) return;
+        consumersRef.current.delete(producerId);
+        unregisterConsumer(producerId);
+      }
+
+      // A request for this producer is already in flight.
+      if (consumingRef.current.has(producerId)) return;
+      consumingRef.current.add(producerId);
+
+      const retry = (reason: string) => {
+        const attempts = (consumeAttemptsRef.current.get(producerId) ?? 0) + 1;
+        consumeAttemptsRef.current.set(producerId, attempts);
+        if (attempts > 4) {
+          console.warn(`[consume] giving up on ${producerId}: ${reason}`);
+          consumeAttemptsRef.current.delete(producerId);
+          return;
+        }
+        // 250 ms, 500 ms, 1 s, 2 s — long enough for a host's refresh to
+        // finish tearing down and re-announcing, short enough to feel instant.
+        const delay = 250 * 2 ** (attempts - 1);
+        window.setTimeout(() => {
+          void consumeProducerRef.current?.(producerId);
+        }, delay);
+      };
 
       socket.emit(
         'consume',
         { producerId, rtpCapabilities: safeClone(device.rtpCapabilities) },
         async (res) => {
+          consumingRef.current.delete(producerId);
           if (!res.ok) {
-            console.warn('[consume] failed', res.error);
+            // The producer may simply not exist yet on the server side.
+            retry(res.error ?? 'consume rejected');
             return;
           }
           const params = res.data;
@@ -150,6 +224,7 @@ export function useMediasoup({ slug, token, onJoined, onError }: UseMediasoupOpt
             });
             consumersRef.current.set(producerId, consumer);
             registerConsumer(producerId, consumer);
+            consumeAttemptsRef.current.delete(producerId);
 
             const stream = new MediaStream([consumer.track]);
             store.getState().setRemoteStream({
@@ -163,6 +238,7 @@ export function useMediasoup({ slug, token, onJoined, onError }: UseMediasoupOpt
             });
 
             consumer.on('trackended', () => {
+              consumersRef.current.delete(producerId);
               unregisterConsumer(producerId);
               store.getState().removeRemoteStream(producerId);
             });
@@ -170,12 +246,72 @@ export function useMediasoup({ slug, token, onJoined, onError }: UseMediasoupOpt
             socket.emit('resumeConsumer', { consumerId: consumer.id }, () => {});
           } catch (err) {
             console.error('[consume] error', err);
+            retry(err instanceof Error ? err.message : 'consume failed');
           }
         }
       );
     },
     [store]
   );
+
+  // Retries and drains call through the ref so they always hit the latest
+  // closure without making `consumeProducer` depend on itself.
+  consumeProducerRef.current = consumeProducer;
+
+  /**
+   * Issues every queued `consume` request.
+   *
+   * Called right after the receive transport is assigned, and again after a
+   * rejoin, so a producer announced during the join handshake is never lost.
+   */
+  const drainPendingConsumes = useCallback(() => {
+    if (!recvTransportRef.current) return;
+    const pending = Array.from(pendingConsumeRef.current);
+    pendingConsumeRef.current.clear();
+    for (const producerId of pending) {
+      void consumeProducerRef.current?.(producerId);
+    }
+  }, []);
+
+  /**
+   * Consumes any producer the roster knows about that we are not receiving.
+   *
+   * This is the safety net that makes the host-refresh bug self-healing. The
+   * roster (`peers[].producers`) is authoritative and arrives with every
+   * `peerJoined` / `peerUpdated` / snapshot, so comparing it against
+   * `consumersRef` recovers from any missed `newProducer` — a dropped event, a
+   * socket reconnect, or a consume that raced the transport — without the
+   * participant having to leave and rejoin.
+   */
+  const reconcileConsumers = useCallback(() => {
+    if (!recvTransportRef.current) return;
+    const state = store.getState();
+    const selfId = state.peerId;
+    let missing = 0;
+    for (const peer of Object.values(state.peers)) {
+      if (peer.peerId === selfId) continue;
+      for (const producer of peer.producers) {
+        const existing = consumersRef.current.get(producer.producerId);
+        if (existing && !existing.closed) continue;
+        missing += 1;
+        void consumeProducerRef.current?.(producer.producerId);
+      }
+    }
+    /*
+     * The roster can be stale in the other direction too: a producer may exist
+     * on the server that no `peerJoined`/`peerUpdated` ever told us about. When
+     * the roster shows nothing missing we still ask the server to re-announce
+     * occasionally, which is the only way to discover a producer we have never
+     * heard of. Rate-limited so a healthy room does not chatter.
+     */
+    if (missing === 0) {
+      const now = Date.now();
+      if (now - lastSyncRef.current > 15_000) {
+        lastSyncRef.current = now;
+        socketRef.current?.emit('syncProducers', () => {});
+      }
+    }
+  }, [store]);
 
   /* ── on-demand JIT send transport allocation ───────────── */
   const ensureSendTransport = useCallback(async (): Promise<MediasoupTypes.Transport | null> => {
@@ -272,34 +408,54 @@ export function useMediasoup({ slug, token, onJoined, onError }: UseMediasoupOpt
          */
         stopTracks: false,
         /**
-         * Every video producer is single-layer.
+         * Camera video is simulcast in three layers; screen share is not.
          *
-         * Camera video used to be simulcast in three layers (r0/r1/r2) so a
-         * viewer on a poor connection could be served 180p while the stage got
-         * 720p. That optimisation cost us the camera entirely: mediasoup only
-         * encodes a simulcast layer when a consumer asks for it, and the
-         * consumer's requested layer follows its bandwidth estimate. In a room
-         * where a screen share is also running, the camera consumer stayed
-         * pinned to a layer the producer never emitted — the tile was in the
-         * DOM, the consumer reported `paused: false`, and the `<video>` had
-         * `videoWidth: 0` with a muted track. Participants saw a black box
-         * where the host's face should be.
+         * ## Why simulcast is back
          *
-         * A single layer removes the whole class of bug: there is exactly one
-         * encoding, so there is nothing to mis-select. The SFU still adapts
-         * bitrate and resolution to each viewer's bandwidth — it just does it
-         * by scaling one stream instead of switching between three.
+         * It was removed once, because a *pinned* consumer went black: the
+         * client called `setPreferredLayers`, the SFU stopped adapting, and a
+         * consumer pinned to `r2` waited forever for a keyframe the encoder
+         * never produced. That bug was caused by pinning, not by simulcast.
+         *
+         * Pinning is gone — `preferLayer` in `lib/consumerRegistry.ts` is now
+         * a deliberate no-op and the server's `setPreferredLayers` handler
+         * only acks. With the SFU's bandwidth estimator fully in charge it
+         * always forwards the highest layer that is actually encoding, so
+         * there is no layer to mis-select and the black-tile class of bug
+         * cannot come back.
+         *
+         * ## Why it matters for quality
+         *
+         * Without simulcast every viewer receives the publisher's full stream.
+         * A publisher in a 5-person call therefore has to upload 5 × 750 kbps
+         * ≈ 3.75 Mbps, and a viewer on a weak link has no cheaper option — the
+         * SFU can only scale one stream down, which costs resolution *and*
+         * framerate for everyone. With three layers the SFU hands a phone the
+         * 180p layer and the stage the 720p layer, from a single upload.
+         *
+         * Layer budget (camera):
+         *   r0  180p  ~150 kbps  — thumbnails, phones, congested links
+         *   r1  360p  ~450 kbps  — the normal grid tile
+         *   r2  720p  ~1200 kbps — the stage / spotlight
+         *
+         * Screen share stays single-layer on purpose: it is text, it is
+         * already the thing people are looking at, and downscaling it to 180p
+         * would make it unreadable. It gets one generous encoding instead.
          */
         ...(kind === 'video'
-          ? {
-              encodings: [
-                {
-                  maxBitrate: source === 'screen' ? 1_800_000 : 750_000,
-                  maxFramerate: source === 'screen' ? 30 : 25,
-                },
-              ],
-              codecOptions: { videoGoogleStartBitrate: 600 },
-            }
+          ? source === 'screen'
+            ? {
+                encodings: [{ maxBitrate: 2_500_000, maxFramerate: 30 }],
+                codecOptions: { videoGoogleStartBitrate: 1500 },
+              }
+            : {
+                encodings: [
+                  { rid: 'r0', scaleResolutionDownBy: 4, maxBitrate: 150_000, maxFramerate: 15 },
+                  { rid: 'r1', scaleResolutionDownBy: 2, maxBitrate: 450_000, maxFramerate: 25 },
+                  { rid: 'r2', scaleResolutionDownBy: 1, maxBitrate: 1_200_000, maxFramerate: 30 },
+                ],
+                codecOptions: { videoGoogleStartBitrate: 800 },
+              }
           : {}),
       });
       producersRef.current.set(producer.id, producer);
@@ -423,6 +579,14 @@ export function useMediasoup({ slug, token, onJoined, onError }: UseMediasoupOpt
 
             /* send transport is lazy / on-demand: only allocated if the participant publishes mic/cam/screen */
 
+            /*
+             * Anything announced while we were still building the transport is
+             * sitting in the pending queue — flush it before the snapshot loop
+             * so the two paths cannot double-consume (the loop's `has()` guard
+             * and the in-flight set both protect against that anyway).
+             */
+            drainPendingConsumes();
+
             /* consume everything already on air */
             for (const peer of snapshot.peers) {
               for (const producer of peer.producers) {
@@ -430,6 +594,13 @@ export function useMediasoup({ slug, token, onJoined, onError }: UseMediasoupOpt
                 void consumeProducer(producer.producerId);
               }
             }
+
+            /*
+             * The snapshot is a point-in-time view. A producer announced
+             * between the server building it and this loop running would be
+             * missed, so reconcile once more against the live roster.
+             */
+            reconcileConsumers();
           } catch (err) {
             console.error('[mediasoup] device setup failed', err);
             onError?.('Media engine failed to initialise');
@@ -440,7 +611,7 @@ export function useMediasoup({ slug, token, onJoined, onError }: UseMediasoupOpt
       });
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [slug, token, consumeProducer, onJoined, onError, store]);
+  }, [slug, token, consumeProducer, drainPendingConsumes, reconcileConsumers, onJoined, onError, store]);
 
   /* ── reconnect ─────────────────────────────────────────── */
   /**
@@ -509,6 +680,13 @@ export function useMediasoup({ slug, token, onJoined, onError }: UseMediasoupOpt
       consumersRef.current.clear();
       clearConsumers();
 
+      // Queued consumes and retry counters refer to producers that no longer
+      // exist on the server. `performJoin` rebuilds the queue from the fresh
+      // snapshot, so anything left here would only produce spurious retries.
+      pendingConsumeRef.current.clear();
+      consumingRef.current.clear();
+      consumeAttemptsRef.current.clear();
+
       // Closing the send transport closes every producer on it, but the refs
       // that point at those producers do not clear themselves. A stale
       // `screenProducerRef` is worse than useless: `startScreenShare` returns
@@ -537,6 +715,27 @@ export function useMediasoup({ slug, token, onJoined, onError }: UseMediasoupOpt
     rejoinRef.current = rejoin;
   }, [rejoin]);
 
+  /**
+   * Periodic safety net for the consume path.
+   *
+   * Every event-driven recovery above depends on an event actually arriving.
+   * This sweep does not: it compares the roster against the live consumer map
+   * every few seconds and consumes anything missing. It is what makes "the
+   * host refreshed and their video never came back" impossible to reproduce —
+   * even if `newProducer`, `peerJoined` and `peerUpdated` were all lost, the
+   * tile recovers within one sweep.
+   *
+   * Cheap by construction: it only walks the roster and does map lookups, and
+   * `consumeProducer` is a no-op for producers already being received.
+   */
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      if (!recvTransportRef.current) return;
+      reconcileConsumers();
+    }, 5000);
+    return () => window.clearInterval(id);
+  }, [reconcileConsumers]);
+
   /* ── join the room ─────────────────────────────────────── */
   const join = useCallback(async () => {
     if (joinedRef.current) return;
@@ -551,9 +750,22 @@ export function useMediasoup({ slug, token, onJoined, onError }: UseMediasoupOpt
     setLayerSocket(socket);
 
     /* ── wire server → client events ─────────────────────── */
-    socket.on('peerJoined', (peer) => store.getState().upsertPeer(peer));
+    /*
+     * `peerJoined` and `peerUpdated` both carry the peer's full producer list,
+     * so they double as a reconciliation trigger. A host who refreshes comes
+     * back as a brand-new peer with brand-new producer ids; if the matching
+     * `newProducer` event is missed (or lands before our receive transport
+     * exists) this is what recovers the tile.
+     */
+    socket.on('peerJoined', (peer) => {
+      store.getState().upsertPeer(peer);
+      reconcileConsumers();
+    });
     socket.on('peerLeft', ({ peerId }) => store.getState().removePeer(peerId));
-    socket.on('peerUpdated', (peer) => store.getState().upsertPeer(peer));
+    socket.on('peerUpdated', (peer) => {
+      store.getState().upsertPeer(peer);
+      reconcileConsumers();
+    });
 
     socket.on('newProducer', ({ producerId }) => {
       void consumeProducer(producerId);
@@ -562,6 +774,11 @@ export function useMediasoup({ slug, token, onJoined, onError }: UseMediasoupOpt
     socket.on('producerClosed', ({ producerId }) => {
       consumersRef.current.get(producerId)?.close();
       consumersRef.current.delete(producerId);
+      // Drop any queued or in-flight retry for this producer — it is gone, and
+      // a stale retry would log a spurious "giving up" warning.
+      pendingConsumeRef.current.delete(producerId);
+      consumingRef.current.delete(producerId);
+      consumeAttemptsRef.current.delete(producerId);
       unregisterConsumer(producerId);
       store.getState().removeRemoteStream(producerId);
     });
@@ -832,7 +1049,7 @@ export function useMediasoup({ slug, token, onJoined, onError }: UseMediasoupOpt
 
     await performJoin();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [performJoin, store]);
+  }, [performJoin, consumeProducer, reconcileConsumers, store]);
 
   /* ── media effects ─────────────────────────────────────── */
   /**

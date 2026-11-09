@@ -911,11 +911,38 @@ export interface ClientToServerEvents {
     ack: (res: Ack) => void
   ) => void;
 
+  /**
+   * Stops the SFU forwarding a consumer's media.
+   *
+   * Used for video consumers whose tile has scrolled out of view: hiding the
+   * `<video>` element only stops decoding, the packets keep arriving. Audio is
+   * never paused.
+   */
+  pauseConsumer: (
+    payload: { consumerId: string },
+    ack: (res: Ack) => void
+  ) => void;
+
   /** Requests an immediate I-frame (keyframe) to unfreeze a stalled video stream. */
   requestKeyFrame: (
     payload: { consumerId: string },
     ack?: (res: Ack) => void
   ) => void;
+
+  /**
+   * Asks the server to re-announce every producer this peer is allowed to
+   * consume.
+   *
+   * `newProducer` is a one-shot event. If it is missed — the socket was
+   * reconnecting, or the client had not finished building its receive
+   * transport — nothing ever retries and the tile stays blank until the
+   * participant leaves and rejoins. This gives the client a way to ask again.
+   *
+   * The server answers with a `newProducer` per producer, so the client's
+   * normal consume path handles the result and no new client-side code is
+   * needed to interpret it.
+   */
+  syncProducers: (ack?: (res: Ack<{ announced: number }>) => void) => void;
 
   /**
    * Pins a consumer to one simulcast layer, or restores automatic selection

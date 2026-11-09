@@ -119,12 +119,26 @@ export class Peer implements VisibilitySubject {
           enableUdp: true,
           enableTcp: true,
           preferUdp: true,
-          initialAvailableOutgoingBitrate: 1_000_000,
-          maxIncomingBitrate: 3_000_000,
+          // Must stay in step with `webRtcTransportOptions` in
+          // `config/mediasoup.ts` — the WebRtcServer path is the one that
+          // actually runs in production, so a stale value here silently
+          // overrides the tuned defaults.
+          initialAvailableOutgoingBitrate: 2_500_000,
+          maxIncomingBitrate: 5_000_000,
         }
       : webRtcTransportOptions;
 
     const transport = await router.createWebRtcTransport(options as any);
+
+    /**
+     * `maxIncomingBitrate` in the constructor options is only a starting
+     * value; mediasoup does not re-apply it. Calling the setter makes the cap
+     * explicit and, more importantly, gives us a single place to raise it
+     * later without recreating the transport.
+     */
+    await transport.setMaxIncomingBitrate(5_000_000).catch(() => {
+      /* not fatal — the constructor value still applies */
+    });
 
     transport.on('dtlsstatechange', (state: string) => {
       if (state === 'closed') {

@@ -1,7 +1,12 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import { preferLayer, preferAutoLayer } from '@/lib/consumerRegistry';
+import {
+  preferLayer,
+  preferAutoLayer,
+  setConsumerPaused,
+  requestKeyFrameFor,
+} from '@/lib/consumerRegistry';
 import { useInView } from '@/lib/useRoomUi';
 import { useRoomStore } from '@/store/roomStore';
 
@@ -94,6 +99,74 @@ export function VideoTile({
     // adapt to bandwidth again for whoever renders it next.
     return () => preferAutoLayer(producerId);
   }, [producerId, layer, isLocal, isScreen, inView]);
+
+  /* ── stop paying for off-screen video ──────────────────── */
+  /**
+   * Hiding the `<video>` element stops *decoding*, but the mediasoup consumer
+   * keeps pulling packets and the SFU keeps forwarding them. In a 20-tile grid
+   * that is 20 streams arriving for 4 visible tiles.
+   *
+   * Pausing the consumer tells the SFU to stop forwarding. Resuming requests a
+   * keyframe immediately afterwards (server-side, in `resumeConsumer`), so the
+   * tile repaints instead of showing a frozen frame.
+   *
+   * Audio is never paused — a participant who scrolls away must still be heard.
+   */
+  useEffect(() => {
+    if (!producerId || isLocal || isScreen) return;
+    setConsumerPaused(producerId, !inView);
+    return () => setConsumerPaused(producerId, false);
+  }, [producerId, isLocal, isScreen, inView]);
+
+  /* ── stall detector ────────────────────────────────────── */
+  /**
+   * A tile can freeze while everything looks healthy: the consumer reports
+   * `paused: false`, the track is live, and `play()` resolved — but the
+   * `<video>` is waiting for a keyframe that was lost in transit. Nothing in
+   * the pipeline retries, so the tile stays frozen until the user reloads.
+   *
+   * This watches `currentTime`. If it has not advanced for two consecutive
+   * checks while the tile is visible and should be playing, it asks the SFU
+   * for a keyframe and re-issues `play()`. The backoff stops a genuinely dead
+   * stream from spamming the SFU.
+   */
+  useEffect(() => {
+    if (!hasVideo || !inView) return;
+    const el = videoRef.current;
+    if (!el) return;
+
+    let lastTime = el.currentTime;
+    let stalledChecks = 0;
+    let lastRecovery = 0;
+
+    const id = window.setInterval(() => {
+      const video = videoRef.current;
+      if (!video || video.paused || video.ended) return;
+
+      if (video.currentTime > lastTime + 0.01) {
+        lastTime = video.currentTime;
+        stalledChecks = 0;
+        return;
+      }
+
+      stalledChecks += 1;
+      // Two checks (~4 s) of no progress is a real stall, not a hiccup.
+      if (stalledChecks < 2) return;
+
+      const now = Date.now();
+      // Never retry more than once every 5 s.
+      if (now - lastRecovery < 5000) return;
+      lastRecovery = now;
+      stalledChecks = 0;
+
+      if (producerId && !isLocal) requestKeyFrameFor(producerId);
+      video.play().catch(() => {
+        /* still blocked — the next tick will try again */
+      });
+    }, 2000);
+
+    return () => window.clearInterval(id);
+  }, [hasVideo, inView, producerId, isLocal]);
   // A screen share is always letterboxed so nothing gets cropped away, and it
   // is never mirrored — text would read backwards.
   const fit = isScreen ? 'contain' : isLocal ? preferredFit : objectFit;

@@ -578,6 +578,31 @@ export function registerSocketHandlers(io: Server) {
       }
     });
 
+    /**
+     * Stops the SFU forwarding a consumer's media.
+     *
+     * The client pauses video consumers whose tile has scrolled out of view.
+     * Hiding the `<video>` element only stops decoding — the packets keep
+     * arriving — so in a large grid this is the difference between pulling
+     * four streams and pulling forty.
+     *
+     * Audio is deliberately never paused: a participant who scrolls away must
+     * still be heard.
+     */
+    socket.on('pauseConsumer', async (payload, ack) => {
+      const c = requirePeer();
+      if (!c) return ackErr(ack, 'Not in a room');
+      const consumer = c.peer.consumers.get(payload?.consumerId);
+      if (!consumer) return ackErr(ack, 'Consumer not found');
+      if (consumer.kind !== 'video') return ackOk(ack);
+      try {
+        await consumer.pause();
+        ackOk(ack);
+      } catch (err) {
+        ackErr(ack, err instanceof Error ? err.message : 'Pause failed');
+      }
+    });
+
     socket.on('requestKeyFrame', async (payload, ack) => {
       const c = requirePeer();
       if (!c) return ackErr(ack, 'Not in a room');
@@ -594,11 +619,33 @@ export function registerSocketHandlers(io: Server) {
       }
     });
 
+    /**
+     * Re-announces every producer this peer may consume.
+     *
+     * `newProducer` is emitted exactly once, when a producer appears. A client
+     * that was not listening at that instant — still building its receive
+     * transport, mid-reconnect, or racing a host's page refresh — never learns
+     * the producer exists. The tile then stays blank until the participant
+     * leaves and rejoins, which is precisely the bug this handler exists to
+     * kill: the client can now ask again instead of giving up.
+     *
+     * The reply is a normal `newProducer` per producer, so the client's
+     * existing consume path handles it with no special-casing.
+     */
+    socket.on('syncProducers', (ack) => {
+      const c = requirePeer();
+      if (!c) return ackErr(ack, 'Not in a room');
+      try {
+        const announced = c.room.reannounceProducersTo(c.peer);
+        ackOk(ack, { announced });
+      } catch (err) {
+        ackErr(ack, err instanceof Error ? err.message : 'Sync failed');
+      }
+    });
+
     /* ── simulcast layer preference ───────────────────────── */
-    // Video producers are single-layer now (see `publishTrack` in
-    // `useMediasoup.ts`), so there is no layer to prefer. The handler stays so
-    // an older client that still emits `setPreferredLayers` gets an ack
-    // instead of a timeout.
+    // Camera producers are simulcast again (see `publishTrack` in
+    // `useMediasoup.ts`), but this handler stays a no-op on purpose.
     //
     // It used to forward to `Consumer.setPreferredLayers`, which *pins* a
     // consumer to one spatial layer: the SFU stops adapting and will not fall
@@ -613,7 +660,9 @@ export function registerSocketHandlers(io: Server) {
     //
     // mediasoup exposes no "clear preference" call, so the only safe way to
     // keep the SFU's bandwidth estimator in charge is to never take control
-    // away from it.
+    // away from it. Left alone it always forwards the highest layer that is
+    // actually encoding, which is exactly what we want — and it is what makes
+    // simulcast a win rather than a hazard.
     socket.on('setPreferredLayers', async (_payload, ack) => {
       const c = requirePeer();
       if (!c) return ackErr(ack, 'Not in a room');

@@ -341,6 +341,63 @@ export class Room {
   }
 
   /**
+   * Re-sends `newProducer` for every producer `viewer` is allowed to consume.
+   *
+   * `newProducer` is fire-and-forget: it is emitted once, at the moment a
+   * producer appears. A client that was not listening at that instant — still
+   * building its `Device`, mid-reconnect, or simply on the losing side of a
+   * race with a host's page refresh — never learns the producer exists, and
+   * the tile stays blank until the participant leaves and rejoins.
+   *
+   * This is the server half of the fix: the client can ask for the
+   * announcements again instead of giving up. Returns how many were sent so
+   * the caller can log or assert on it.
+   */
+  reannounceProducersTo(viewer: Peer): number {
+    const policy = this.visibilityPolicy();
+    let announced = 0;
+
+    for (const owner of this.peers.values()) {
+      if (owner.peerId === viewer.peerId) continue;
+
+      for (const [producerId, producer] of owner.producers) {
+        const kind = producer.kind as 'audio' | 'video';
+        const source = owner.sourceOf(producerId, kind);
+
+        if (
+          !canConsume(
+            viewer,
+            {
+              role: owner.role,
+              isApprovedSpeaker: owner.isApprovedSpeaker,
+              canPublishAudio: owner.canPublishAudio,
+              canPublishVideo: owner.canPublishVideo,
+              canShareScreen: owner.canShareScreen,
+              hasScreenShare: owner.hasScreenShare,
+              kind,
+              source,
+            },
+            policy
+          )
+        ) {
+          continue;
+        }
+
+        this.io.to(viewer.socketId).emit('newProducer', {
+          peerId: owner.peerId,
+          userId: owner.userId,
+          producerId,
+          kind,
+          source,
+        });
+        announced += 1;
+      }
+    }
+
+    return announced;
+  }
+
+  /**
    * Re-evaluates visibility for a peer whose approval state changed.
    * Called when a hand is approved or revoked.
    */

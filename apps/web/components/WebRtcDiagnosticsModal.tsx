@@ -8,6 +8,28 @@ interface WebRtcDiagnosticsModalProps {
   onClose: () => void;
 }
 
+interface TransportHealth {
+  id?: string;
+  /** False when the peer has no transport in that direction (e.g. camera off). */
+  publishing?: boolean;
+  protocol: string;
+  isTcpWarning: boolean;
+  iceState?: string | null;
+  dtlsState?: string | null;
+  iceSelectedTuple?: {
+    localIp?: string;
+    localPort?: number;
+    remoteIp?: string;
+    remotePort?: number;
+    protocol?: string;
+  } | null;
+  roundTripTime?: number | null;
+  availableOutgoingBitrate?: number | null;
+  availableIncomingBitrate?: number | null;
+  sendBitrate?: number | null;
+  recvBitrate?: number | null;
+}
+
 interface ServerWebRtcHealth {
   ok: boolean;
   announcedIp: string;
@@ -22,12 +44,73 @@ interface ServerWebRtcHealth {
       peerId: string;
       name: string;
       role: string;
-      sendTransport?: { protocol: string; isTcpWarning: boolean };
-      recvTransport?: { protocol: string; isTcpWarning: boolean };
+      sendTransport?: TransportHealth;
+      recvTransport?: TransportHealth;
       producers: Array<{ kind: string; paused: boolean }>;
       consumers: Array<{ id: string; kind: string; paused: boolean; score?: unknown }>;
     }>;
   }>;
+}
+
+/** Formats a bitrate in bps as a compact kbps / Mbps string. */
+function fmtBitrate(bps: number | null | undefined): string {
+  if (bps === null || bps === undefined || Number.isNaN(bps)) return '—';
+  if (bps >= 1_000_000) return `${(bps / 1_000_000).toFixed(2)} Mbps`;
+  return `${Math.round(bps / 1000)} kbps`;
+}
+
+/**
+ * Formats a round-trip time.
+ *
+ * mediasoup reports `roundTripTime` in **milliseconds** (verified against a
+ * live transport: a localhost peer reports `13`). It is not seconds, so it must
+ * not be multiplied.
+ */
+function fmtRtt(ms: number | null | undefined): string {
+  if (ms === null || ms === undefined || Number.isNaN(ms)) return '—';
+  return `${Math.round(ms)} ms`;
+}
+
+/**
+ * One transport's badge row.
+ *
+ * Three distinct states have to be distinguishable, because they mean very
+ * different things to whoever is debugging:
+ *   - no transport at all  → the peer is not publishing / not subscribed
+ *   - transport, no tuple  → ICE has not nominated a candidate pair yet
+ *   - transport + tuple    → the negotiated protocol is known
+ */
+function TransportBadge({ label, t }: { label: string; t?: TransportHealth }) {
+  if (!t) {
+    return (
+      <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-mono font-semibold text-slate-400 dark:bg-white/5 dark:text-slate-500">
+        {label}: n/a
+      </span>
+    );
+  }
+
+  const connected = Boolean(t.iceSelectedTuple);
+  const proto = connected ? (t.protocol || 'unknown').toUpperCase() : 'PENDING';
+  const isUdp = proto === 'UDP';
+
+  return (
+    <span
+      className={`rounded px-1.5 py-0.5 text-[10px] font-mono font-semibold ${
+        !connected
+          ? 'bg-slate-500/10 text-slate-500 dark:text-slate-400'
+          : isUdp
+            ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+            : 'bg-amber-500/15 text-amber-700 dark:text-amber-300'
+      }`}
+      title={
+        connected
+          ? `${t.iceSelectedTuple?.localIp}:${t.iceSelectedTuple?.localPort} → ${t.iceSelectedTuple?.remoteIp}:${t.iceSelectedTuple?.remotePort}`
+          : 'No ICE candidate pair nominated yet'
+      }
+    >
+      {label}: {proto}
+    </span>
+  );
 }
 
 export function WebRtcDiagnosticsModal({
@@ -204,51 +287,99 @@ export function WebRtcDiagnosticsModal({
 
             {serverHealth?.rooms?.map((room) => (
               <div key={room.roomName} className="space-y-2">
-                {room.peers.map((peer) => (
+                {room.peers.map((peer) => {
+                  // A peer has two transports and usually only one of them is
+                  // carrying media — a viewer has no send transport, a pure
+                  // publisher has no recv transport. Reporting ICE/DTLS/RTT
+                  // from whichever transport happens to be listed first shows
+                  // "new / new" for a peer that is streaming perfectly.
+                  const active =
+                    peer.recvTransport?.iceSelectedTuple
+                      ? peer.recvTransport
+                      : peer.sendTransport?.iceSelectedTuple
+                        ? peer.sendTransport
+                        : (peer.recvTransport ?? peer.sendTransport);
+                  return (
                   <div
                     key={peer.peerId}
-                    className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white p-2.5 text-xs dark:border-white/10 dark:bg-ink-950"
+                    className="rounded-lg border border-slate-200 bg-white p-2.5 text-xs dark:border-white/10 dark:bg-ink-950"
                   >
-                    <div>
-                      <span className="font-semibold">{peer.name}</span>
-                      <span className="ml-1.5 rounded bg-slate-100 px-1 py-0.5 text-[9px] font-mono dark:bg-white/10">
-                        {peer.role}
-                      </span>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <span className="font-semibold">{peer.name}</span>
+                        <span className="ml-1.5 rounded bg-slate-100 px-1 py-0.5 text-[9px] font-mono dark:bg-white/10">
+                          {peer.role}
+                        </span>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <TransportBadge label="Send" t={peer.sendTransport} />
+                        <TransportBadge label="Recv" t={peer.recvTransport} />
+                        <span className="text-[10px] text-slate-400">
+                          {peer.producers.length} pub / {peer.consumers.length} sub
+                        </span>
+                      </div>
                     </div>
 
-                    <div className="flex items-center gap-2">
-                      {/* Send transport protocol */}
-                      {peer.sendTransport?.protocol && (
-                        <span
-                          className={`rounded px-1.5 py-0.5 text-[10px] font-mono font-semibold ${
-                            peer.sendTransport.protocol === 'udp'
-                              ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                              : 'bg-amber-500/15 text-amber-700 dark:text-amber-300'
-                          }`}
-                        >
-                          Send: {peer.sendTransport.protocol.toUpperCase()}
-                        </span>
-                      )}
+                    {/* ICE / DTLS / bandwidth detail — the numbers that actually
+                        explain a lagging or frozen tile.
 
-                      {/* Recv transport protocol */}
-                      {peer.recvTransport?.protocol && (
-                        <span
-                          className={`rounded px-1.5 py-0.5 text-[10px] font-mono font-semibold ${
-                            peer.recvTransport.protocol === 'udp'
-                              ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                              : 'bg-amber-500/15 text-amber-700 dark:text-amber-300'
-                          }`}
-                        >
-                          Recv: {peer.recvTransport.protocol.toUpperCase()}
-                        </span>
-                      )}
+                        Direction is the single most misread thing here. These
+                        transports live on the SFU, so their counters are named
+                        from the *server's* point of view:
 
-                      <span className="text-[10px] text-slate-400">
-                        {peer.producers.length} pub / {peer.consumers.length} sub
-                      </span>
+                          sendTransport.recvBitrate  = what the peer uploaded
+                          recvTransport.sendBitrate  = what the peer downloaded
+
+                        Reading `sendTransport.sendBitrate` as "up" reports the
+                        RTCP trickle (~5 kbps) instead of the actual video, which
+                        makes a perfectly healthy 1 Mbps publisher look dead. */}
+                    <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 border-t border-slate-100 pt-2 text-[10px] dark:border-white/5 sm:grid-cols-4">
+                      <div>
+                        <span className="text-slate-400">ICE</span>
+                        <p className="font-mono font-semibold">{active?.iceState ?? '—'}</p>
+                      </div>
+                      <div>
+                        <span className="text-slate-400">DTLS</span>
+                        <p className="font-mono font-semibold">{active?.dtlsState ?? '—'}</p>
+                      </div>
+                      <div>
+                        <span className="text-slate-400">RTT</span>
+                        <p className="font-mono font-semibold">{fmtRtt(active?.roundTripTime)}</p>
+                      </div>
+                      <div>
+                        <span className="text-slate-400">Up / Down</span>
+                        <p className="font-mono font-semibold">
+                          {fmtBitrate(peer.sendTransport?.recvBitrate)} /{' '}
+                          {fmtBitrate(peer.recvTransport?.sendBitrate)}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-slate-400">Up capacity</span>
+                        <p className="font-mono font-semibold">
+                          {fmtBitrate(peer.sendTransport?.availableOutgoingBitrate)}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-slate-400">Down capacity</span>
+                        <p className="font-mono font-semibold">
+                          {fmtBitrate(peer.recvTransport?.availableIncomingBitrate)}
+                        </p>
+                      </div>
+                      <div className="col-span-2">
+                        <span className="text-slate-400">Selected pair</span>
+                        <p className="truncate font-mono font-semibold">
+                          {(() => {
+                            const t = active?.iceSelectedTuple;
+                            if (!t) return 'none';
+                            return `${t.localIp}:${t.localPort} → ${t.remoteIp}:${t.remotePort}`;
+                          })()}
+                        </p>
+                      </div>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             ))}
           </div>

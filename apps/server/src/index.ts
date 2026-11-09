@@ -130,11 +130,14 @@ app.get('/api/health/webrtc', async (_req, res) => {
         const sendStats: any[] = p.sendTransport ? await p.sendTransport.getStats().catch(() => []) : [];
         const recvStats: any[] = p.recvTransport ? await p.recvTransport.getStats().catch(() => []) : [];
 
-        // Check protocol from transport stats
+        // mediasoup's WebRtcTransportStat has NO top-level `protocol` field —
+        // the negotiated transport protocol lives on the selected ICE tuple.
+        // Reading `stat.protocol` always yielded undefined, which is why the
+        // diagnostics modal showed "unknown" for every peer.
         const sendWebrtc = sendStats.find((st: any) => st.type === 'webrtc-transport');
         const recvWebrtc = recvStats.find((st: any) => st.type === 'webrtc-transport');
-        const sendProto = sendWebrtc?.protocol || 'unknown';
-        const recvProto = recvWebrtc?.protocol || 'unknown';
+        const sendProto = sendWebrtc?.iceSelectedTuple?.protocol ?? 'unknown';
+        const recvProto = recvWebrtc?.iceSelectedTuple?.protocol ?? 'unknown';
 
         const producersData = [];
         for (const [id, prod] of p.producers) {
@@ -168,16 +171,37 @@ app.get('/api/health/webrtc', async (_req, res) => {
           role: p.role,
           sendTransport: {
             id: p.sendTransport?.id,
+            // `publishing` distinguishes "no send transport allocated yet"
+            // (camera/mic off) from "transport exists but ICE has not
+            // connected". The modal used to render both as "unknown".
+            publishing: Boolean(p.sendTransport),
             protocol: sendProto,
             isTcpWarning: sendProto === 'tcp',
+            iceState: sendWebrtc?.iceState ?? null,
+            dtlsState: sendWebrtc?.dtlsState ?? null,
+            iceSelectedTuple: sendWebrtc?.iceSelectedTuple ?? null,
+            roundTripTime: sendWebrtc?.roundTripTime ?? null,
+            availableOutgoingBitrate: sendWebrtc?.availableOutgoingBitrate ?? null,
+            availableIncomingBitrate: sendWebrtc?.availableIncomingBitrate ?? null,
+            sendBitrate: sendWebrtc?.sendBitrate ?? null,
+            recvBitrate: sendWebrtc?.recvBitrate ?? null,
             bytesSent: sendWebrtc?.bytesSent,
             bytesReceived: sendWebrtc?.bytesReceived,
             stats: sendStats,
           },
           recvTransport: {
             id: p.recvTransport?.id,
+            publishing: Boolean(p.recvTransport),
             protocol: recvProto,
             isTcpWarning: recvProto === 'tcp',
+            iceState: recvWebrtc?.iceState ?? null,
+            dtlsState: recvWebrtc?.dtlsState ?? null,
+            iceSelectedTuple: recvWebrtc?.iceSelectedTuple ?? null,
+            roundTripTime: recvWebrtc?.roundTripTime ?? null,
+            availableOutgoingBitrate: recvWebrtc?.availableOutgoingBitrate ?? null,
+            availableIncomingBitrate: recvWebrtc?.availableIncomingBitrate ?? null,
+            sendBitrate: recvWebrtc?.sendBitrate ?? null,
+            recvBitrate: recvWebrtc?.recvBitrate ?? null,
             bytesSent: recvWebrtc?.bytesSent,
             bytesReceived: recvWebrtc?.bytesReceived,
             stats: recvStats,

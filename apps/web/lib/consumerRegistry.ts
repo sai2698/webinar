@@ -73,3 +73,47 @@ export function preferLayer(_producerId: string, _spatialLayer: 0 | 1 | 2) {
 export function preferAutoLayer(_producerId: string) {
   /* intentionally empty — see `preferLayer` */
 }
+
+/**
+ * Stops / restarts the SFU from sending a consumer's media.
+ *
+ * This is the one lever that actually saves bandwidth in a large grid. Hiding
+ * the `<video>` element (which `useInView` already does) stops *decoding*, but
+ * the consumer keeps pulling packets and the SFU keeps forwarding them — a
+ * 20-tile grid still downloads 20 streams. Pausing the consumer tells the SFU
+ * to stop forwarding entirely.
+ *
+ * Pausing is safe in a way that pinning a layer is not: a paused consumer is
+ * resumed explicitly, and `resumeConsumer` on the server requests a keyframe
+ * immediately afterwards, so the tile repaints instead of staying frozen.
+ *
+ * Audio is never paused — a participant who scrolls away must still be heard.
+ */
+export function setConsumerPaused(producerId: string, paused: boolean) {
+  const consumer = consumers.get(producerId);
+  if (!consumer || consumer.closed) return;
+  if (consumer.kind !== 'video') return;
+  if (consumer.paused === paused) return;
+
+  if (paused) {
+    consumer.pause();
+    socket?.emit('pauseConsumer', { consumerId: consumer.id }, () => {});
+  } else {
+    // mediasoup-client 3.25 `resume()` is synchronous and returns void.
+    consumer.resume();
+    socket?.emit('resumeConsumer', { consumerId: consumer.id }, () => {});
+  }
+}
+
+/**
+ * Asks the SFU for a fresh keyframe on one consumer.
+ *
+ * Used by the stall detector: a tile whose `currentTime` has stopped advancing
+ * is almost always waiting for a keyframe that was lost, and no amount of
+ * calling `play()` will fix that.
+ */
+export function requestKeyFrameFor(producerId: string) {
+  const consumer = consumers.get(producerId);
+  if (!consumer || consumer.closed) return;
+  socket?.emit('requestKeyFrame', { consumerId: consumer.id }, () => {});
+}
